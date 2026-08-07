@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+.env
+.env.local
+
+# FastAPI / Uvicorn
+*.log
+*.sqlite
+*.db
+data/medlenx.db
+
+# Uploads - keep sample but ignore user uploads
+uploads/prescriptions/*.jpg
+uploads/prescriptions/*.png
+uploads/prescriptions/*.jpeg
+!uploads/prescriptions/sample_bd_prescription.jpg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (if any)
+node_modules/
+
+# Large data - optional: if you want to keep medex_full.json in repo, remove this
+# data/medex_full.json  # Uncomment if you want to exclude 16MB file and use external storage
+
+# Keep only one zip if you want to version control it, otherwise ignore zips
+*.zip
+!medlenx_lab_CURRENT_FINAL.zip

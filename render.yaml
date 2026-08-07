@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: medlenx-lab
+    env: python
+    region: singapore
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: OPENROUTER_API_KEY
+        sync: false
+        # Add your OpenRouter API key in Render dashboard for real MedLenX VL, or leave empty for mock mode
