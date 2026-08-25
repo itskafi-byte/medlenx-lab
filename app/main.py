@@ -9,7 +9,7 @@ import time
 import re
 from difflib import SequenceMatcher
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -80,6 +80,62 @@ def load_medex_db():
     medex_index = MedexIndex()
 
 load_medex_db()
+
+# ---- Cascading location reference data (District -> Upazila -> Territory) ----
+_locations_cache = None
+
+
+def load_locations():
+    """Load + cache the BD administrative cascade used by the verify form."""
+    global _locations_cache
+    if _locations_cache is not None:
+        return _locations_cache
+    path = os.path.join(settings.DATA_DIR, "bd_locations.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            _locations_cache = json.load(f)
+    except Exception as e:
+        print(f"⚠️  Could not load locations from {path}: {e}")
+        _locations_cache = {"divisions": [], "districts": {}, "specialties": []}
+    return _locations_cache
+
+
+def resolve_location(district="", upazila="", territory=""):
+    """
+    Validate/normalise a location triple against the cascade.
+
+    Returns the corrected values plus a `valid` flag so bad combinations
+    (e.g. an upazila that does not belong to the district) never reach the DB.
+    """
+    data = load_locations()
+    districts = data.get("districts", {})
+    district = (district or "").strip()
+    upazila = (upazila or "").strip()
+    territory = (territory or "").strip()
+
+    # case-insensitive district resolution
+    if district and district not in districts:
+        for name in districts:
+            if name.lower() == district.lower():
+                district = name
+                break
+
+    entry = districts.get(district)
+    if not entry:
+        return {"district": district, "upazila": upazila,
+                "territory": territory, "division": "", "valid": not district}
+
+    if upazila and upazila not in entry["upazilas"]:
+        match = next((u for u in entry["upazilas"] if u.lower() == upazila.lower()), None)
+        upazila = match or ""
+    if territory and territory not in entry["territories"]:
+        match = next((t for t in entry["territories"] if t.lower() == territory.lower()), None)
+        territory = match or entry["territories"][0]
+    if not territory:
+        territory = entry["territories"][0]
+
+    return {"district": district, "upazila": upazila, "territory": territory,
+            "division": entry["division"], "valid": True}
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -470,6 +526,20 @@ async def scan_prescription(
     total_time = time.time() - start_time
     avg_conf = sum(m.get("confidence",0) for m in enriched_meds)/len(enriched_meds) if enriched_meds else 0
 
+    # Normalise the location triple against the District->Upazila->Territory
+    # cascade. The form values win; anything the model guessed is only used to
+    # fill a blank. Invalid combinations are dropped rather than stored.
+    loc = resolve_location(
+        district=district or doctor.get("district", ""),
+        upazila=upazila or doctor.get("upazila", ""),
+        territory=territory or doctor.get("territory", ""),
+    )
+    district, upazila, territory = loc["district"], loc["upazila"], loc["territory"]
+    doctor["district"] = district
+    doctor["upazila"] = upazila
+    doctor["territory"] = territory
+    doctor["division"] = loc["division"]
+
     result = {
         "doctor": doctor,
         "medicines": enriched_meds,
@@ -497,34 +567,214 @@ async def scan_prescription(
 
 @app.post("/api/prescriptions/{pid}/verify")
 async def verify_prescription(pid: int, verified_data: dict):
-    from .database import get_db
+    """
+    Persist a human-verified prescription.
+
+    Fixes:
+      * doctor specialty + district/upazila/territory are written to the
+        prescriptions row AND synced onto the doctors row (they were silently
+        dropped before, so the analytics kept the original scan's values);
+      * itemized medicines are rewritten to prescribed_medicines and appended
+        to recent_scanned_medicines;
+      * returns a real `message` (the UI printed `undefined`).
+    """
+    from .database import get_db, get_or_create_doctor, _write_medicine_rows
+
+    doctor = verified_data.get('doctor', {}) or {}
+    medicines = verified_data.get('medicines', []) or []
+
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE prescriptions SET is_verified=1, doctor_json=?, medicines_json=? WHERE id=?",
-                (json.dumps(verified_data.get('doctor',{})), json.dumps(verified_data.get('medicines',[])), pid))
+    row = cur.execute("SELECT id, mr_id FROM prescriptions WHERE id=?", (pid,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Prescription {pid} not found")
+    mr_id = row["mr_id"] or "MR001"
+
+    name = (doctor.get('name') or '').strip() or 'Unknown'
+    bmdc_no = (doctor.get('bmdc_no') or '').strip()
+    specialty = (doctor.get('specialty') or doctor.get('department') or '').strip()
+    district = (doctor.get('district') or '').strip()
+    upazila = (doctor.get('upazila') or '').strip()
+    territory = (doctor.get('territory') or '').strip()
+    division = (doctor.get('division') or '').strip()
+
+    # validate the location triple against the cascade before persisting
+    loc = resolve_location(district=district, upazila=upazila, territory=territory)
+    district, upazila, territory = loc["district"], loc["upazila"], loc["territory"]
+    division = division or loc["division"]
+    doctor["district"], doctor["upazila"] = district, upazila
+    doctor["territory"], doctor["division"] = territory, division
+
+    # keep the doctor master record in sync (no count bump on re-verify)
+    doctor_id = get_or_create_doctor(
+        name=name, bmdc_no=bmdc_no,
+        qualifications=doctor.get('qualifications', ''),
+        specialty=specialty, chamber=doctor.get('chamber', ''),
+        hospital=doctor.get('hospital', ''), upazila=upazila,
+        district=district, territory=territory, division=division,
+        increment=False,
+    )
+
+    cur.execute("""
+        UPDATE prescriptions SET
+            is_verified=1, doctor_json=?, medicines_json=?,
+            doctor_id=?, doctor_name=?, doctor_bmdc_no=?,
+            doctor_qualifications=?, doctor_hospital=?, doctor_specialty=?,
+            district=?, upazila=?, territory=?,
+            total_medicines=?
+        WHERE id=?
+    """, (
+        json.dumps(doctor), json.dumps(medicines), doctor_id, name, bmdc_no,
+        doctor.get('qualifications', ''),
+        doctor.get('hospital', '') or doctor.get('chamber', ''),
+        specialty, district, upazila, territory, len(medicines), pid,
+    ))
+
+    # rebuild analytics rows, refresh the itemized feed for this prescription
     cur.execute("DELETE FROM prescribed_medicines WHERE prescription_id=?", (pid,))
-    for med in verified_data.get('medicines',[]):
-        cur.execute("INSERT INTO prescribed_medicines (prescription_id, brand_name, generic_name, form, type, strength, dosage_frequency, raw_text, confidence, line_number, company_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (pid, med.get('brand_name'), med.get('generic_name') or med.get('generic'), med.get('form'), med.get('type'), med.get('strength'), med.get('dosage') or med.get('dosage_normalized'), med.get('raw_text'), med.get('confidence',0), med.get('line_number',0), med.get('company','')))
+    cur.execute("DELETE FROM recent_scanned_medicines WHERE prescription_id=?", (pid,))
+    _write_medicine_rows(
+        cur, pid, medicines, mr_id=mr_id, doctor_id=doctor_id, doctor_name=name,
+        specialty=specialty, district=district, upazila=upazila,
+        territory=territory, write_recent=True,
+    )
+
     conn.commit()
     conn.close()
-    return {"success": True}
+
+    return {
+        "success": True,
+        "id": pid,
+        "message": f"Verified and saved - {len(medicines)} medicine(s) recorded",
+        "medicines_saved": len(medicines),
+        "doctor_id": doctor_id,
+        "doctor": {"name": name, "specialty": specialty, "district": district,
+                   "upazila": upazila, "territory": territory},
+    }
+
+
+@app.get("/api/locations")
+async def locations():
+    """Cascading District -> Upazila -> Territory reference data + specialties."""
+    return load_locations()
+
+
+@app.get("/api/recent-medicines")
+async def recent_medicines(
+    limit: int = 25, offset: int = 0, mr_id: str = "", q: str = "",
+    company: str = "", district: str = "", territory: str = "",
+    specialty: str = "", days: Optional[int] = None,
+    order: str = "created_at", direction: str = "desc",
+):
+    """Itemized Recent Scans feed (searchable, sortable, paginated)."""
+    from .database import get_recent_scanned_medicines
+    return get_recent_scanned_medicines(
+        limit=limit, offset=offset, mr_id=mr_id, q=q, company=company,
+        district=district, territory=territory, specialty=specialty,
+        days=days, order=order, direction=direction,
+    )
+
+
+@app.get("/api/filters")
+async def filter_options():
+    """Distinct filter values present in the data, for the global filter bar."""
+    from .database import get_filter_options
+    return get_filter_options()
+
+
+@app.get("/api/dashboard/company-drilldown")
+async def company_drilldown(
+    company: str, limit: int = 10, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    from .database import get_company_drilldown
+    return get_company_drilldown(company, limit=limit, district=district,
+                                 territory=territory, specialty=specialty,
+                                 mr_id=mr_id, days=days)
+
+
+@app.get("/api/dashboard/brand-doctors")
+async def brand_doctors(
+    brand: str, limit: int = 15, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    from .database import get_brand_doctors
+    return get_brand_doctors(brand, limit=limit, district=district,
+                             territory=territory, specialty=specialty,
+                             mr_id=mr_id, days=days)
+
+
+@app.get("/api/export/recent-medicines.csv")
+async def export_recent_medicines(
+    mr_id: str = "", q: str = "", company: str = "", district: str = "",
+    territory: str = "", specialty: str = "", days: Optional[int] = None,
+    limit: int = 5000,
+):
+    """CSV export for field reporting."""
+    import csv
+    import io as _io
+    from .database import get_recent_scanned_medicines
+    data = get_recent_scanned_medicines(
+        limit=limit, offset=0, mr_id=mr_id, q=q, company=company,
+        district=district, territory=territory, specialty=specialty, days=days)
+    cols = ["created_at", "mr_id", "doctor_name", "specialty", "brand_name",
+            "generic_name", "company_name", "dosage_form", "strength", "dosage",
+            "confidence_score", "company_verified", "district", "upazila",
+            "territory", "prescription_id"]
+    buf = _io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    w.writeheader()
+    for r in data["items"]:
+        w.writerow(r)
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="recent_scanned_medicines.csv"'},
+    )
+
 
 @app.get("/api/dashboard/kpis")
-async def dashboard_kpis(own_company: Optional[str] = None):
-    return get_dashboard_kpis(own_company_name=own_company)
+async def dashboard_kpis(
+    own_company: Optional[str] = None, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    return get_dashboard_kpis(own_company_name=own_company, district=district,
+                              territory=territory, specialty=specialty,
+                              mr_id=mr_id, days=days)
+
 
 @app.get("/api/dashboard/most-prescribed")
-async def most_prescribed(limit: int = 10, generic: Optional[str] = None):
-    return {"medicines": get_most_prescribed_medicines(limit=limit, filter_generic=generic or "")}
+async def most_prescribed(
+    limit: int = 10, generic: Optional[str] = None, district: str = "",
+    territory: str = "", specialty: str = "", mr_id: str = "",
+    days: Optional[int] = None,
+):
+    return {"medicines": get_most_prescribed_medicines(
+        limit=limit, filter_generic=generic or "", district=district,
+        territory=territory, specialty=specialty, mr_id=mr_id, days=days)}
+
 
 @app.get("/api/dashboard/company-share")
-async def company_share():
-    return {"companies": get_company_share()}
+async def company_share(
+    district: str = "", territory: str = "", specialty: str = "",
+    mr_id: str = "", days: Optional[int] = None,
+):
+    return {"companies": get_company_share(
+        district=district, territory=territory, specialty=specialty,
+        mr_id=mr_id, days=days)}
+
 
 @app.get("/api/dashboard/top-doctors")
-async def top_doctors(limit: int = 10, own_company: Optional[str] = None):
-    return {"doctors": get_top_doctor_prescribers(own_company_name=own_company, limit=limit)}
+async def top_doctors(
+    limit: int = 10, offset: int = 0, own_company: Optional[str] = None,
+    q: str = "", district: str = "", territory: str = "", specialty: str = "",
+    mr_id: str = "", days: Optional[int] = None,
+):
+    return get_top_doctor_prescribers(
+        own_company_name=own_company, limit=limit, offset=offset, q=q,
+        district=district, territory=territory, specialty=specialty,
+        mr_id=mr_id, days=days)
+
 
 @app.get("/api/dashboard/generic-brand-matrix")
 async def generic_brand_matrix():

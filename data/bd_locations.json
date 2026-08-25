@@ -1,0 +1,1136 @@
+{
+ "divisions": [
+  "Barishal",
+  "Chattogram",
+  "Dhaka",
+  "Khulna",
+  "Mymensingh",
+  "Rajshahi",
+  "Rangpur",
+  "Sylhet"
+ ],
+ "districts": {
+  "Bagerhat": {
+   "division": "Khulna",
+   "upazilas": [
+    "Bagerhat Sadar",
+    "Chitalmari",
+    "Fakirhat",
+    "Kachua",
+    "Mollahat",
+    "Mongla",
+    "Morrelganj",
+    "Rampal",
+    "Sarankhola"
+   ],
+   "territories": [
+    "Bagerhat Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Bandarban": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Alikadam",
+    "Bandarban Sadar",
+    "Lama",
+    "Naikhongchhari",
+    "Rowangchhari",
+    "Ruma",
+    "Thanchi"
+   ],
+   "territories": [
+    "Bandarban Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Barguna": {
+   "division": "Barishal",
+   "upazilas": [
+    "Amtali",
+    "Bamna",
+    "Barguna Sadar",
+    "Betagi",
+    "Patharghata",
+    "Taltali"
+   ],
+   "territories": [
+    "Barguna Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Barishal": {
+   "division": "Barishal",
+   "upazilas": [
+    "Agailjhara",
+    "Babuganj",
+    "Bakerganj",
+    "Banaripara",
+    "Barishal Sadar",
+    "Gaurnadi",
+    "Hizla",
+    "Mehendiganj",
+    "Muladi",
+    "Wazirpur"
+   ],
+   "territories": [
+    "Barishal Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Bhola": {
+   "division": "Barishal",
+   "upazilas": [
+    "Bhola Sadar",
+    "Burhanuddin",
+    "Char Fasson",
+    "Daulatkhan",
+    "Lalmohan",
+    "Manpura",
+    "Tazumuddin"
+   ],
+   "territories": [
+    "Bhola Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Bogura": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Adamdighi",
+    "Bogura Sadar",
+    "Dhunat",
+    "Dhupchanchia",
+    "Gabtali",
+    "Kahaloo",
+    "Nandigram",
+    "Sariakandi",
+    "Shajahanpur",
+    "Sherpur",
+    "Shibganj",
+    "Sonatala"
+   ],
+   "territories": [
+    "Bogura Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Brahmanbaria": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Akhaura",
+    "Ashuganj",
+    "Bancharampur",
+    "Bijoynagar",
+    "Brahmanbaria Sadar",
+    "Kasba",
+    "Nabinagar",
+    "Nasirnagar",
+    "Sarail"
+   ],
+   "territories": [
+    "Brahmanbaria Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Chandpur": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Chandpur Sadar",
+    "Faridganj",
+    "Haimchar",
+    "Haziganj",
+    "Kachua",
+    "Matlab Dakshin",
+    "Matlab Uttar",
+    "Shahrasti"
+   ],
+   "territories": [
+    "Chandpur Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Chapainawabganj": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Bholahat",
+    "Chapainawabganj Sadar",
+    "Gomastapur",
+    "Nachole",
+    "Shibganj"
+   ],
+   "territories": [
+    "Chapainawabganj Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Chattogram": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Anwara",
+    "Banshkhali",
+    "Boalkhali",
+    "Chandanaish",
+    "Double Mooring",
+    "Fatikchhari",
+    "Hathazari",
+    "Kotwali",
+    "Lohagara",
+    "Mirsharai",
+    "Pahartali",
+    "Panchlaish",
+    "Patiya",
+    "Rangunia",
+    "Raozan",
+    "Sandwip",
+    "Satkania",
+    "Sitakunda"
+   ],
+   "territories": [
+    "Chattogram North",
+    "Chattogram South",
+    "Chattogram Metro"
+   ]
+  },
+  "Chuadanga": {
+   "division": "Khulna",
+   "upazilas": [
+    "Alamdanga",
+    "Chuadanga Sadar",
+    "Damurhuda",
+    "Jibannagar"
+   ],
+   "territories": [
+    "Chuadanga Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Cox's Bazar": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Chakaria",
+    "Cox's Bazar Sadar",
+    "Kutubdia",
+    "Maheshkhali",
+    "Pekua",
+    "Ramu",
+    "Teknaf",
+    "Ukhia"
+   ],
+   "territories": [
+    "Cox's Bazar Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Cumilla": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Barura",
+    "Brahmanpara",
+    "Burichang",
+    "Chandina",
+    "Chauddagram",
+    "Cumilla Sadar",
+    "Daudkandi",
+    "Debidwar",
+    "Homna",
+    "Laksam",
+    "Meghna",
+    "Monohorgonj",
+    "Muradnagar",
+    "Nangalkot",
+    "Titas"
+   ],
+   "territories": [
+    "Cumilla Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Dhaka": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Dhamrai",
+    "Dhanmondi",
+    "Dohar",
+    "Gulshan",
+    "Keraniganj",
+    "Kotwali",
+    "Lalbagh",
+    "Mirpur",
+    "Motijheel",
+    "Nawabganj",
+    "Ramna",
+    "Savar",
+    "Tejgaon Circle",
+    "Uttara"
+   ],
+   "territories": [
+    "Dhaka North",
+    "Dhaka South",
+    "Dhaka Metro",
+    "Savar-Dhamrai"
+   ]
+  },
+  "Dinajpur": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Biral",
+    "Birampur",
+    "Birganj",
+    "Bochaganj",
+    "Chirirbandar",
+    "Dinajpur Sadar",
+    "Ghoraghat",
+    "Hakimpur",
+    "Kaharole",
+    "Khansama",
+    "Nawabganj",
+    "Parbatipur",
+    "Phulbari"
+   ],
+   "territories": [
+    "Dinajpur Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Faridpur": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Alfadanga",
+    "Bhanga",
+    "Boalmari",
+    "Charbhadrasan",
+    "Faridpur Sadar",
+    "Madhukhali",
+    "Nagarkanda",
+    "Sadarpur",
+    "Saltha"
+   ],
+   "territories": [
+    "Faridpur Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Feni": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Chhagalnaiya",
+    "Daganbhuiyan",
+    "Feni Sadar",
+    "Fulgazi",
+    "Parshuram",
+    "Sonagazi"
+   ],
+   "territories": [
+    "Feni Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Gaibandha": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Gaibandha Sadar",
+    "Gobindaganj",
+    "Palashbari",
+    "Phulchhari",
+    "Sadullapur",
+    "Saghata",
+    "Sundarganj"
+   ],
+   "territories": [
+    "Gaibandha Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Gazipur": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Gazipur Sadar",
+    "Kaliakair",
+    "Kaliganj",
+    "Kapasia",
+    "Sreepur"
+   ],
+   "territories": [
+    "Gazipur Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Gopalganj": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Gopalganj Sadar",
+    "Kashiani",
+    "Kotalipara",
+    "Muksudpur",
+    "Tungipara"
+   ],
+   "territories": [
+    "Gopalganj Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Habiganj": {
+   "division": "Sylhet",
+   "upazilas": [
+    "Ajmiriganj",
+    "Bahubal",
+    "Baniyachong",
+    "Chunarughat",
+    "Habiganj Sadar",
+    "Lakhai",
+    "Madhabpur",
+    "Nabiganj",
+    "Shaistaganj"
+   ],
+   "territories": [
+    "Habiganj Territory",
+    "Sylhet Regional"
+   ]
+  },
+  "Jamalpur": {
+   "division": "Mymensingh",
+   "upazilas": [
+    "Baksiganj",
+    "Dewanganj",
+    "Islampur",
+    "Jamalpur Sadar",
+    "Madarganj",
+    "Melandaha",
+    "Sarishabari"
+   ],
+   "territories": [
+    "Jamalpur Territory",
+    "Mymensingh Regional"
+   ]
+  },
+  "Jashore": {
+   "division": "Khulna",
+   "upazilas": [
+    "Abhaynagar",
+    "Bagherpara",
+    "Chaugachha",
+    "Jashore Sadar",
+    "Jhikargachha",
+    "Keshabpur",
+    "Manirampur",
+    "Sharsha"
+   ],
+   "territories": [
+    "Jashore Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Jhalokati": {
+   "division": "Barishal",
+   "upazilas": [
+    "Jhalokati Sadar",
+    "Kathalia",
+    "Nalchity",
+    "Rajapur"
+   ],
+   "territories": [
+    "Jhalokati Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Jhenaidah": {
+   "division": "Khulna",
+   "upazilas": [
+    "Harinakunda",
+    "Jhenaidah Sadar",
+    "Kaliganj",
+    "Kotchandpur",
+    "Maheshpur",
+    "Shailkupa"
+   ],
+   "territories": [
+    "Jhenaidah Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Joypurhat": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Akkelpur",
+    "Joypurhat Sadar",
+    "Kalai",
+    "Khetlal",
+    "Panchbibi"
+   ],
+   "territories": [
+    "Joypurhat Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Khagrachhari": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Dighinala",
+    "Khagrachhari Sadar",
+    "Lakshmichhari",
+    "Mahalchhari",
+    "Manikchhari",
+    "Matiranga",
+    "Panchhari",
+    "Ramgarh"
+   ],
+   "territories": [
+    "Khagrachhari Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Khulna": {
+   "division": "Khulna",
+   "upazilas": [
+    "Batiaghata",
+    "Dacope",
+    "Daulatpur",
+    "Dighalia",
+    "Dumuria",
+    "Khalishpur",
+    "Koyra",
+    "Paikgachha",
+    "Phultala",
+    "Rupsha",
+    "Sonadanga",
+    "Terokhada"
+   ],
+   "territories": [
+    "Khulna Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Kishoreganj": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Austagram",
+    "Bajitpur",
+    "Bhairab",
+    "Hossainpur",
+    "Itna",
+    "Karimganj",
+    "Katiadi",
+    "Kishoreganj Sadar",
+    "Kuliarchar",
+    "Mithamain",
+    "Nikli",
+    "Pakundia",
+    "Tarail"
+   ],
+   "territories": [
+    "Kishoreganj Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Kurigram": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Bhurungamari",
+    "Char Rajibpur",
+    "Chilmari",
+    "Kurigram Sadar",
+    "Nageshwari",
+    "Phulbari",
+    "Rajarhat",
+    "Raomari",
+    "Ulipur"
+   ],
+   "territories": [
+    "Kurigram Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Kushtia": {
+   "division": "Khulna",
+   "upazilas": [
+    "Bheramara",
+    "Daulatpur",
+    "Khoksa",
+    "Kumarkhali",
+    "Kushtia Sadar",
+    "Mirpur"
+   ],
+   "territories": [
+    "Kushtia Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Lakshmipur": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Kamalnagar",
+    "Lakshmipur Sadar",
+    "Raipur",
+    "Ramganj",
+    "Ramgati"
+   ],
+   "territories": [
+    "Lakshmipur Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Lalmonirhat": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Aditmari",
+    "Hatibandha",
+    "Kaliganj",
+    "Lalmonirhat Sadar",
+    "Patgram"
+   ],
+   "territories": [
+    "Lalmonirhat Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Madaripur": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Kalkini",
+    "Madaripur Sadar",
+    "Rajoir",
+    "Shibchar"
+   ],
+   "territories": [
+    "Madaripur Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Magura": {
+   "division": "Khulna",
+   "upazilas": [
+    "Magura Sadar",
+    "Mohammadpur",
+    "Shalikha",
+    "Sreepur"
+   ],
+   "territories": [
+    "Magura Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Manikganj": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Daulatpur",
+    "Ghior",
+    "Harirampur",
+    "Manikganj Sadar",
+    "Saturia",
+    "Shivalaya",
+    "Singair"
+   ],
+   "territories": [
+    "Manikganj Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Meherpur": {
+   "division": "Khulna",
+   "upazilas": [
+    "Gangni",
+    "Meherpur Sadar",
+    "Mujibnagar"
+   ],
+   "territories": [
+    "Meherpur Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Moulvibazar": {
+   "division": "Sylhet",
+   "upazilas": [
+    "Barlekha",
+    "Juri",
+    "Kamalganj",
+    "Kulaura",
+    "Moulvibazar Sadar",
+    "Rajnagar",
+    "Sreemangal"
+   ],
+   "territories": [
+    "Moulvibazar Territory",
+    "Sylhet Regional"
+   ]
+  },
+  "Munshiganj": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Gazaria",
+    "Lohajang",
+    "Munshiganj Sadar",
+    "Sirajdikhan",
+    "Sreenagar",
+    "Tongibari"
+   ],
+   "territories": [
+    "Munshiganj Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Mymensingh": {
+   "division": "Mymensingh",
+   "upazilas": [
+    "Bhaluka",
+    "Dhobaura",
+    "Fulbaria",
+    "Gaffargaon",
+    "Gauripur",
+    "Haluaghat",
+    "Ishwarganj",
+    "Muktagachha",
+    "Mymensingh Sadar",
+    "Nandail",
+    "Phulpur",
+    "Tara Khanda",
+    "Trishal"
+   ],
+   "territories": [
+    "Mymensingh Territory",
+    "Mymensingh Regional"
+   ]
+  },
+  "Naogaon": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Atrai",
+    "Badalgachhi",
+    "Dhamoirhat",
+    "Mahadebpur",
+    "Manda",
+    "Naogaon Sadar",
+    "Niamatpur",
+    "Patnitala",
+    "Porsha",
+    "Raninagar",
+    "Sapahar"
+   ],
+   "territories": [
+    "Naogaon Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Narail": {
+   "division": "Khulna",
+   "upazilas": [
+    "Kalia",
+    "Lohagara",
+    "Narail Sadar"
+   ],
+   "territories": [
+    "Narail Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Narayanganj": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Araihazar",
+    "Bandar",
+    "Narayanganj Sadar",
+    "Rupganj",
+    "Sonargaon"
+   ],
+   "territories": [
+    "Narayanganj Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Narsingdi": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Belabo",
+    "Monohardi",
+    "Narsingdi Sadar",
+    "Palash",
+    "Raipura",
+    "Shibpur"
+   ],
+   "territories": [
+    "Narsingdi Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Natore": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Bagatipara",
+    "Baraigram",
+    "Gurudaspur",
+    "Lalpur",
+    "Naldanga",
+    "Natore Sadar",
+    "Singra"
+   ],
+   "territories": [
+    "Natore Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Netrokona": {
+   "division": "Mymensingh",
+   "upazilas": [
+    "Atpara",
+    "Barhatta",
+    "Durgapur",
+    "Kalmakanda",
+    "Kendua",
+    "Khaliajuri",
+    "Madan",
+    "Mohanganj",
+    "Netrokona Sadar",
+    "Purbadhala"
+   ],
+   "territories": [
+    "Netrokona Territory",
+    "Mymensingh Regional"
+   ]
+  },
+  "Nilphamari": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Dimla",
+    "Domar",
+    "Jaldhaka",
+    "Kishoreganj",
+    "Nilphamari Sadar",
+    "Saidpur"
+   ],
+   "territories": [
+    "Nilphamari Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Noakhali": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Begumganj",
+    "Chatkhil",
+    "Companiganj",
+    "Hatiya",
+    "Kabirhat",
+    "Noakhali Sadar",
+    "Senbagh",
+    "Sonaimuri",
+    "Subarnachar"
+   ],
+   "territories": [
+    "Noakhali Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Pabna": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Atgharia",
+    "Bera",
+    "Bhangura",
+    "Chatmohar",
+    "Faridpur",
+    "Ishwardi",
+    "Pabna Sadar",
+    "Santhia",
+    "Sujanagar"
+   ],
+   "territories": [
+    "Pabna Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Panchagarh": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Atwari",
+    "Boda",
+    "Debiganj",
+    "Panchagarh Sadar",
+    "Tetulia"
+   ],
+   "territories": [
+    "Panchagarh Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Patuakhali": {
+   "division": "Barishal",
+   "upazilas": [
+    "Bauphal",
+    "Dashmina",
+    "Dumki",
+    "Galachipa",
+    "Kalapara",
+    "Mirzaganj",
+    "Patuakhali Sadar",
+    "Rangabali"
+   ],
+   "territories": [
+    "Patuakhali Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Pirojpur": {
+   "division": "Barishal",
+   "upazilas": [
+    "Bhandaria",
+    "Kawkhali",
+    "Mathbaria",
+    "Nazirpur",
+    "Nesarabad",
+    "Pirojpur Sadar",
+    "Zianagar"
+   ],
+   "territories": [
+    "Pirojpur Territory",
+    "Barishal Regional"
+   ]
+  },
+  "Rajbari": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Baliakandi",
+    "Goalandaghat",
+    "Kalukhali",
+    "Pangsha",
+    "Rajbari Sadar"
+   ],
+   "territories": [
+    "Rajbari Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Rajshahi": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Bagha",
+    "Bagmara",
+    "Boalia",
+    "Charghat",
+    "Durgapur",
+    "Godagari",
+    "Mohanpur",
+    "Motihar",
+    "Paba",
+    "Puthia",
+    "Rajpara",
+    "Shah Makhdum",
+    "Tanore"
+   ],
+   "territories": [
+    "Rajshahi Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Rangamati": {
+   "division": "Chattogram",
+   "upazilas": [
+    "Baghaichhari",
+    "Barkal",
+    "Belaichhari",
+    "Juraichhari",
+    "Kaptai",
+    "Kawkhali",
+    "Langadu",
+    "Naniarchar",
+    "Rajasthali",
+    "Rangamati Sadar"
+   ],
+   "territories": [
+    "Rangamati Territory",
+    "Chattogram Regional"
+   ]
+  },
+  "Rangpur": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Badarganj",
+    "Gangachara",
+    "Kaunia",
+    "Mithapukur",
+    "Pirgachha",
+    "Pirganj",
+    "Rangpur Sadar",
+    "Taraganj"
+   ],
+   "territories": [
+    "Rangpur Territory",
+    "Rangpur Regional"
+   ]
+  },
+  "Satkhira": {
+   "division": "Khulna",
+   "upazilas": [
+    "Assasuni",
+    "Debhata",
+    "Kalaroa",
+    "Kaliganj",
+    "Satkhira Sadar",
+    "Shyamnagar",
+    "Tala"
+   ],
+   "territories": [
+    "Satkhira Territory",
+    "Khulna Regional"
+   ]
+  },
+  "Shariatpur": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Bhedarganj",
+    "Damudya",
+    "Gosairhat",
+    "Naria",
+    "Shariatpur Sadar",
+    "Zajira"
+   ],
+   "territories": [
+    "Shariatpur Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Sherpur": {
+   "division": "Mymensingh",
+   "upazilas": [
+    "Jhenaigati",
+    "Nakla",
+    "Nalitabari",
+    "Sherpur Sadar",
+    "Sreebardi"
+   ],
+   "territories": [
+    "Sherpur Territory",
+    "Mymensingh Regional"
+   ]
+  },
+  "Sirajganj": {
+   "division": "Rajshahi",
+   "upazilas": [
+    "Belkuchi",
+    "Chauhali",
+    "Kamarkhanda",
+    "Kazipur",
+    "Raiganj",
+    "Shahjadpur",
+    "Sirajganj Sadar",
+    "Tarash",
+    "Ullahpara"
+   ],
+   "territories": [
+    "Sirajganj Territory",
+    "Rajshahi Regional"
+   ]
+  },
+  "Sunamganj": {
+   "division": "Sylhet",
+   "upazilas": [
+    "Bishwamvarpur",
+    "Chhatak",
+    "Dakshin Sunamganj",
+    "Derai",
+    "Dharampasha",
+    "Dowarabazar",
+    "Jagannathpur",
+    "Jamalganj",
+    "Sulla",
+    "Sunamganj Sadar",
+    "Tahirpur"
+   ],
+   "territories": [
+    "Sunamganj Territory",
+    "Sylhet Regional"
+   ]
+  },
+  "Sylhet": {
+   "division": "Sylhet",
+   "upazilas": [
+    "Balaganj",
+    "Beanibazar",
+    "Bishwanath",
+    "Companiganj",
+    "Dakshin Surma",
+    "Fenchuganj",
+    "Golapganj",
+    "Gowainghat",
+    "Jaintiapur",
+    "Kanaighat",
+    "Osmani Nagar",
+    "Sylhet Sadar",
+    "Zakiganj"
+   ],
+   "territories": [
+    "Sylhet Territory",
+    "Sylhet Regional"
+   ]
+  },
+  "Tangail": {
+   "division": "Dhaka",
+   "upazilas": [
+    "Basail",
+    "Bhuapur",
+    "Delduar",
+    "Dhanbari",
+    "Ghatail",
+    "Gopalpur",
+    "Kalihati",
+    "Madhupur",
+    "Mirzapur",
+    "Nagarpur",
+    "Sakhipur",
+    "Tangail Sadar"
+   ],
+   "territories": [
+    "Tangail Territory",
+    "Dhaka Regional"
+   ]
+  },
+  "Thakurgaon": {
+   "division": "Rangpur",
+   "upazilas": [
+    "Baliadangi",
+    "Haripur",
+    "Pirganj",
+    "Ranisankail",
+    "Thakurgaon Sadar"
+   ],
+   "territories": [
+    "Thakurgaon Territory",
+    "Rangpur Regional"
+   ]
+  }
+ },
+ "specialties": [
+  "Medicine",
+  "Cardiology",
+  "Neurology",
+  "Nephrology",
+  "Gastroenterology",
+  "Endocrinology",
+  "Pulmonology",
+  "Rheumatology",
+  "Hematology",
+  "Oncology",
+  "Dermatology",
+  "Psychiatry",
+  "Pediatrics",
+  "Neonatology",
+  "Gynecology & Obstetrics",
+  "General Surgery",
+  "Orthopedics",
+  "Urology",
+  "ENT",
+  "Ophthalmology",
+  "Dentistry",
+  "Anesthesiology",
+  "Radiology",
+  "Physical Medicine",
+  "Hepatology",
+  "Colorectal Surgery",
+  "Plastic Surgery",
+  "Neurosurgery",
+  "Cardiac Surgery",
+  "Diabetology",
+  "Infectious Disease",
+  "Family Medicine",
+  "Emergency Medicine"
+ ]
+}
