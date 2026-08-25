@@ -324,30 +324,39 @@ tailwind.config={
     </div>
   </div>
 
-  <!-- Analytics Widgets with Engaging Empty States -->
-  <div class="grid md:grid-cols-2 gap-6">
-    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-      <h4 class="text-xs font-semibold mb-3">A. Most Prescribed Medicines - Bar Chart</h4>
-      <div id="emptyMostPrescribed" class="relative">
-        <canvas id="chartMostPrescribed" class="opacity-30"></canvas>
-        <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl">
-          <p class="text-sm font-medium text-slate-600">No data yet</p>
-          <p class="text-[11px] text-slate-500 mt-1">Scan your first 5 prescriptions to unlock generic-brand trends.</p>
-          <button class="mt-3 px-4 py-1.5 bg-slate-900 text-white rounded-full text-xs" onclick="document.querySelector('[data-tab=workspace]').click()">Start Scanning</button>
+  <!-- Analytics Widgets with explicit chart bounds. Chart.js responsive canvases
+       need a dedicated, relatively positioned parent with a finite height. -->
+  <div class="grid md:grid-cols-2 gap-6 items-start">
+    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5 h-[380px] flex flex-col overflow-hidden">
+      <h4 class="text-xs font-semibold mb-3 flex-none">A. Most Prescribed Medicines - Bar Chart</h4>
+      <div class="relative w-full flex-1 min-h-0 overflow-hidden">
+        <div id="emptyMostPrescribed" class="absolute inset-0 overflow-hidden">
+          <canvas id="chartMostPrescribed" class="w-full h-full opacity-30"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl text-center px-4">
+            <p class="text-sm font-medium text-slate-600">No data yet</p>
+            <p class="text-[11px] text-slate-500 mt-1">Scan your first 5 prescriptions to unlock generic-brand trends.</p>
+            <button class="mt-3 px-4 py-1.5 bg-slate-900 text-white rounded-full text-xs" onclick="document.querySelector('[data-tab=workspace]').click()">Start Scanning</button>
+          </div>
+        </div>
+        <div id="mostPrescribedChartContainer" class="hidden relative w-full h-full min-h-0 overflow-hidden">
+          <canvas id="chartMostPrescribedReal"></canvas>
         </div>
       </div>
-      <canvas id="chartMostPrescribedReal" class="hidden"></canvas>
     </div>
-    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-      <h4 class="text-xs font-semibold mb-3">B. Company Share of Voice - Donut</h4>
-      <div id="emptyCompanyShare" class="relative">
-        <canvas id="chartCompanyShare" class="opacity-30"></canvas>
-        <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl">
-          <p class="text-sm font-medium text-slate-600">Competitor analysis locked</p>
-          <p class="text-[11px] text-slate-500 mt-1">Scan 10 prescriptions to see Square vs Incepta vs Your Company.</p>
+    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5 h-[380px] flex flex-col overflow-hidden">
+      <h4 class="text-xs font-semibold mb-3 flex-none">B. Company Share of Voice - Donut</h4>
+      <div class="relative w-full flex-1 min-h-0 overflow-hidden">
+        <div id="emptyCompanyShare" class="absolute inset-0 overflow-hidden">
+          <canvas id="chartCompanyShare" class="w-full h-full opacity-30"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-xl text-center px-4">
+            <p class="text-sm font-medium text-slate-600">Competitor analysis locked</p>
+            <p class="text-[11px] text-slate-500 mt-1">Scan 10 prescriptions to see Square vs Incepta vs Your Company.</p>
+          </div>
+        </div>
+        <div id="companyShareChartContainer" class="hidden relative w-full h-full min-h-0 overflow-hidden">
+          <canvas id="chartCompanyShareReal"></canvas>
         </div>
       </div>
-      <canvas id="chartCompanyShareReal" class="hidden"></canvas>
     </div>
     <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
       <h4 class="text-xs font-semibold mb-3">C. Top Doctor Prescribers - Leaderboard</h4>
@@ -357,11 +366,13 @@ tailwind.config={
         <p class="text-xs text-slate-500">Scan prescriptions to unlock doctor leaderboard with conversion rates.</p>
       </div>
     </div>
-    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-      <h4 class="text-xs font-semibold mb-3">D. Generic vs Brand Matrix - Stacked Bar by Specialty</h4>
-      <canvas id="chartGenericBrand"></canvas>
-      <div id="emptyGenericBrand" class="text-center py-8">
-        <p class="text-xs text-slate-500">Shows trending generics in therapeutic areas and dominant companies.</p>
+    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5 h-[380px] flex flex-col overflow-hidden">
+      <h4 class="text-xs font-semibold mb-3 flex-none">D. Generic vs Brand Matrix - Stacked Bar by Specialty</h4>
+      <div class="relative w-full flex-1 min-h-0 overflow-hidden">
+        <canvas id="chartGenericBrand"></canvas>
+        <div id="emptyGenericBrand" class="absolute inset-0 flex items-center justify-center bg-white text-center px-4">
+          <p class="text-xs text-slate-500">Shows trending generics in therapeutic areas and dominant companies.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1456,9 +1467,10 @@ async function loadCharts(){
     // ---- Widget A: Most Prescribed Brands (click a bar -> doctor list) ----
     const data1=await (await fetch('/api/dashboard/most-prescribed?limit=8'+qs)).json();
     const ctx1=document.getElementById('chartMostPrescribedReal');
+    const container1=document.getElementById('mostPrescribedChartContainer');
     if(data1.medicines && data1.medicines.length>0){
       document.getElementById('emptyMostPrescribed').classList.add('hidden');
-      ctx1.classList.remove('hidden');
+      container1.classList.remove('hidden');
       if(chartMostPrescribed) chartMostPrescribed.destroy();
       const barColors=companyColorScale(data1.medicines.map(m=>m.manufacturer||''));
       chartMostPrescribed=new Chart(ctx1,{
@@ -1482,7 +1494,7 @@ async function loadCharts(){
       });
     }else{
       document.getElementById('emptyMostPrescribed').classList.remove('hidden');
-      ctx1.classList.add('hidden');
+      container1.classList.add('hidden');
       if(chartMostPrescribed){chartMostPrescribed.destroy();chartMostPrescribed=null;}
     }
 
@@ -1491,9 +1503,10 @@ async function loadCharts(){
     // must start with '?' - using '&' produced a 404 and a blank donut.
     const data2=await (await fetch('/api/dashboard/company-share'+filterQueryFirst())).json();
     const ctx2=document.getElementById('chartCompanyShareReal');
+    const container2=document.getElementById('companyShareChartContainer');
     if(data2.companies && data2.companies.length>0){
       document.getElementById('emptyCompanyShare').classList.add('hidden');
-      ctx2.classList.remove('hidden');
+      container2.classList.remove('hidden');
       if(chartCompanyShare) chartCompanyShare.destroy();
       const names=data2.companies.map(c=>c.company);
       // Every company gets its own colour. Previously all non-Square/Healthcare
@@ -1522,7 +1535,7 @@ async function loadCharts(){
       });
     }else{
       document.getElementById('emptyCompanyShare').classList.remove('hidden');
-      ctx2.classList.add('hidden');
+      container2.classList.add('hidden');
       if(chartCompanyShare){chartCompanyShare.destroy();chartCompanyShare=null;}
     }
 

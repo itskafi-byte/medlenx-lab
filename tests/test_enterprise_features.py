@@ -301,6 +301,25 @@ class TestIssue3RecentScans(unittest.TestCase):
 # ISSUE 4 - Chart colours
 # ======================================================================
 class TestIssue4ChartColors(unittest.TestCase):
+    def test_chart_canvases_have_bounded_responsive_containers(self):
+        """Responsive Chart.js canvases must not size an unconstrained grid row."""
+        for container_id in ("mostPrescribedChartContainer",
+                             "companyShareChartContainer"):
+            tag = re.search(
+                rf'<div id="{container_id}" class="([^"]+)">', TPL
+            )
+            self.assertIsNotNone(tag, f"missing {container_id}")
+            classes = tag.group(1).split()
+            for required in ("relative", "w-full", "h-full", "min-h-0",
+                             "overflow-hidden"):
+                self.assertIn(required, classes,
+                              f"{container_id} needs {required}")
+
+        self.assertGreaterEqual(TPL.count("h-[380px] flex flex-col overflow-hidden"), 3)
+        self.assertIn("grid md:grid-cols-2 gap-6 items-start", TPL)
+        self.assertIn("container1.classList.remove('hidden')", TPL)
+        self.assertIn("container2.classList.remove('hidden')", TPL)
+
     def test_palette_and_mapper_exist(self):
         self.assertIn("COMPANY_COLOR_PALETTE", TPL)
         self.assertIn("function getCompanyColor", TPL)
