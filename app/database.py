@@ -254,15 +254,24 @@ def save_medicine_to_catalog(brand_data):
     conn = get_db()
     cur = conn.cursor()
     
-    # Check if already exists by brand_name + strength + form
-    cur.execute("SELECT id FROM medicines WHERE brand_name=? AND strength=? AND form=?", 
-                (brand_data.get('brand_name'), brand_data.get('strength'), brand_data.get('form')))
+    generic_id = get_or_create_generic(brand_data.get('generic',''), brand_data.get('category',''))
+    company_id = get_or_create_company(brand_data.get('company',''))
+
+    # Dedupe on brand + strength + form + COMPANY. Without the company in the
+    # key, two manufacturers selling the same brand name collapsed into a
+    # single row and the surviving row's company was applied to both.
+    cur.execute(
+        """
+        SELECT id FROM medicines
+        WHERE brand_name=? AND IFNULL(strength,'')=IFNULL(?,'')
+          AND IFNULL(form,'')=IFNULL(?,'') AND IFNULL(company_id,-1)=IFNULL(?,-1)
+        """,
+        (brand_data.get('brand_name'), brand_data.get('strength'),
+         brand_data.get('form'), company_id),
+    )
     if cur.fetchone():
         conn.close()
         return
-    
-    generic_id = get_or_create_generic(brand_data.get('generic',''), brand_data.get('category',''))
-    company_id = get_or_create_company(brand_data.get('company',''))
     
     cur.execute("""
     INSERT INTO medicines (brand_name, generic_id, company_id, form, type, strength, strength_value, ingredient, category, image_url, pack_image, medex_url, medex_id)
@@ -286,6 +295,55 @@ def save_medicine_to_catalog(brand_data):
     conn.close()
 
 # ============ Save Prescription Workflow ============
+
+def _find_medicine_id(cur, brand_name="", company="", strength="", form=""):
+    """
+    Resolve a catalogue medicines.id for a prescribed medicine.
+
+    Narrows by company first (the authoritative field), then strength, then
+    dosage form, so brands marketed by several companies map to the right row.
+    """
+    brand_name = (brand_name or "").strip()
+    if not brand_name:
+        return None
+
+    cur.execute(
+        """
+        SELECT m.id, m.strength, m.type, m.form, c.name AS company
+        FROM medicines m
+        LEFT JOIN pharma_companies c ON m.company_id = c.id
+        WHERE m.brand_name = ? COLLATE NOCASE
+        """,
+        (brand_name,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]["id"]
+
+    def norm(v):
+        return "".join(str(v or "").lower().split())
+
+    want_company = norm(company)
+    want_strength = norm(strength)
+    want_form = norm(form)
+
+    best, best_score = rows[0], -1
+    for r in rows:
+        score = 0
+        rc = norm(r["company"])
+        if want_company and rc:
+            if rc == want_company or rc.startswith(want_company) or want_company.startswith(rc):
+                score += 10
+        if want_strength and norm(r["strength"]) == want_strength:
+            score += 5
+        if want_form and want_form in (norm(r["type"]) + norm(r["form"])):
+            score += 2
+        if score > best_score:
+            best, best_score = r, score
+    return best["id"]
+
 
 def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0):
     """
@@ -351,10 +409,16 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
     
     # Insert into prescribed_medicines junction
     for med in medicines:
-        # Try to find medicine_id in catalog
-        cur.execute("SELECT id FROM medicines WHERE brand_name=? LIMIT 1", (med.get('brand_name',''),))
-        med_row = cur.fetchone()
-        medicine_id = med_row["id"] if med_row else None
+        # Resolve the catalog row using brand + company + strength.
+        # Matching on brand_name alone picked an arbitrary variant (often from
+        # a different manufacturer) for the brands that several companies sell.
+        medicine_id = _find_medicine_id(
+            cur,
+            brand_name=med.get('brand_name', ''),
+            company=med.get('company', ''),
+            strength=med.get('strength', ''),
+            form=med.get('type', '') or med.get('form', ''),
+        )
         
         cur.execute("""
         INSERT INTO prescribed_medicines 

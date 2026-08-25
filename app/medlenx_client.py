@@ -196,7 +196,10 @@ Extract per new design spec:
    - dosage_bengali: Original Bengali if present
    - dosage_normalized: Converted to English 1+0+1
    - frequency: Before meal, After meal, At night etc
-   - company: Pharma company (Square, Incepta, Beximco, Renata etc)
+   - company: ONLY if the manufacturer is literally printed/written on the
+     prescription next to that medicine. DO NOT guess or infer the company from
+     the brand name - the server resolves the manufacturer from the official
+     MedEx catalogue. If it is not written on the paper, return "" (empty string).
    - confidence: 0-1
 
 3. Patient PII: DO NOT extract patient name, age, phone - mask per BMDC compliance, note "masked"
@@ -236,6 +239,10 @@ Return ONLY JSON:
   "patient_info": {"masked": true, "note": "Patient PII masked per BMDC compliance"},
   "meta": {"total_medicines": 1, "legibility": 0.8, "language_mix": "English+Bengali ১+০+১"}
 }
+
+IMPORTANT: never invent a pharmaceutical company. Leave "company" empty unless it
+is actually printed on the prescription. An empty company is correct and useful;
+a guessed company is a data error.
 
 Output JSON only, no markdown.
 """

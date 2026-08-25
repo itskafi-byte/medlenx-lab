@@ -680,9 +680,50 @@ function renderVerification(data){
     const conf=med.confidence||0;
     const isHigh=conf>=0.85;
     const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>';
-    const borderClass=isHigh?'border-slate-200':'border-amber-200 bg-amber-50/50';
-    // Company emphasis - good design: gradient badge + building icon + bold
-    const companyEmphasis = med.company ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit"><i class="fas fa-building"></i> ${med.company}</div>` : '';
+    // Anything the matcher could not confirm is highlighted for review
+    const needsReview = med.needs_review || med.company_ambiguous || med.company_conflict
+                        || (med.company && !med.company_verified);
+    const borderClass=(isHigh && !needsReview)?'border-slate-200':'border-amber-200 bg-amber-50/50';
+    // Company badge. Colour encodes trust:
+    //   verified against the MedEx catalogue -> indigo + check
+    //   unverified model guess / ambiguous brand -> amber + warning
+    const companyVerified = med.company_verified && !med.company_ambiguous;
+    const companyGrad = companyVerified
+      ? 'from-indigo-600 to-violet-600'
+      : 'from-amber-500 to-orange-500';
+    const companyIcon = companyVerified ? 'fa-building' : 'fa-triangle-exclamation';
+    const companyTitle = med.company_ambiguous
+      ? 'This brand name is sold by more than one company - please confirm'
+      : (med.company_verified ? 'Company confirmed from MedEx catalogue'
+                              : 'Not found in MedEx - unverified, please confirm');
+    const companyEmphasis = med.company
+      ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
+           <i class="fas ${companyIcon}"></i> ${med.company}
+           ${companyVerified ? '<i class="fas fa-circle-check text-[10px] opacity-80"></i>' : ''}
+         </div>`
+      : `<div class="mt-2 flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
+           <i class="fas fa-building-circle-xmark"></i> Company not identified
+         </div>`;
+
+    // Warn when the vision model's guess was overridden by the catalogue
+    const conflictNote = med.company_conflict
+      ? `<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1.5"><i class="fas fa-info-circle"></i> Scan read "${med.company_model_guess}" - corrected from MedEx catalogue.</p>`
+      : '';
+
+    // Offer the other manufacturers/strengths of the same brand
+    const altOptions = (med.alternatives && med.alternatives.length)
+      ? `<details class="mt-1.5">
+           <summary class="text-[10px] text-indigo-600 cursor-pointer font-semibold">${med.alternatives.length} other match${med.alternatives.length>1?'es':''} for this brand</summary>
+           <div class="mt-1 space-y-1">
+             ${med.alternatives.map(a=>`
+               <button type="button" class="alt-pick w-full text-left text-[10px] bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg px-2 py-1"
+                 data-idx="${idx}" data-company="${a.company||''}" data-strength="${a.strength||''}"
+                 data-type="${a.type||''}" data-generic="${a.generic||''}" data-image="${a.image_url||''}">
+                 <span class="font-semibold">${a.company||'Unknown company'}</span> • ${a.strength||''} ${a.type||''}
+               </button>`).join('')}
+           </div>
+         </details>`
+      : '';
     return `
       <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border ${borderClass} p-3">
         <div class="flex items-start gap-3">
@@ -719,7 +760,9 @@ function renderVerification(data){
               </div>
             </div>
             ${companyEmphasis}
-            <p class="text-[10px] text-slate-400 mt-2 truncate">Raw: "${med.raw_text}" • Live from medex.com.bd • #${med.line_number}</p>
+            ${conflictNote}
+            ${altOptions}
+            <p class="text-[10px] text-slate-400 mt-2 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
           </div>
         </div>
       </div>
@@ -728,6 +771,7 @@ function renderVerification(data){
 
   // Attach autocomplete for medicine names
   attachMedicineAutocomplete();
+  attachAlternativePickers();
 
   window.lastScannedData=data;
 }
@@ -964,6 +1008,30 @@ async function searchMedex(){
 document.getElementById('medexSearch')?.addEventListener('input',()=>{clearTimeout(window.medexTimer);window.medexTimer=setTimeout(searchMedex,400);});
 document.getElementById('refreshMedex')?.addEventListener('click',loadMedexStats);
 
+// Pick a different manufacturer / strength variant of the same brand.
+// Whatever the user picks is authoritative: mark it verified so it is never
+// second-guessed again downstream.
+function attachAlternativePickers(){
+  document.querySelectorAll('.alt-pick').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=parseInt(btn.dataset.idx);
+      const med=window.lastScannedData?.medicines?.[idx];
+      if(!med) return;
+      med.company=btn.dataset.company||'';
+      med.strength=btn.dataset.strength||med.strength;
+      med.type=btn.dataset.type||med.type;
+      med.generic_name=btn.dataset.generic||med.generic_name;
+      if(btn.dataset.image) med.image_url=btn.dataset.image;
+      med.company_source='user';
+      med.company_verified=true;
+      med.company_ambiguous=false;
+      med.company_conflict=false;
+      med.needs_review=false;
+      renderVerification(window.lastScannedData);
+    });
+  });
+}
+
 // Medicine Name Autocomplete - Suggest names from database or live from medex.com.bd
 function attachMedicineAutocomplete(){
   document.querySelectorAll('.medicine-autocomplete').forEach(input=>{
@@ -1025,6 +1093,13 @@ function attachMedicineAutocomplete(){
                   window.lastScannedData.medicines[medIdx].ingredient=ingredient||generic;
                   window.lastScannedData.medicines[medIdx].strength=strength;
                   window.lastScannedData.medicines[medIdx].company=company;
+                  // A human picked this row straight out of the MedEx
+                  // catalogue -> it is authoritative and fully verified.
+                  window.lastScannedData.medicines[medIdx].company_source='user';
+                  window.lastScannedData.medicines[medIdx].company_verified=true;
+                  window.lastScannedData.medicines[medIdx].company_ambiguous=false;
+                  window.lastScannedData.medicines[medIdx].company_conflict=false;
+                  window.lastScannedData.medicines[medIdx].needs_review=false;
                   if(image) window.lastScannedData.medicines[medIdx].image_url=image;
                   
                   // Update UI elements in card
