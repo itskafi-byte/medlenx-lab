@@ -104,3 +104,60 @@ Behind MedLenX VL branding uses `qwen/qwen3-vl-235b-a22b-instruct` via OpenRoute
 ## License
 
 MIT - MedLenX Lab
+
+## Enterprise Dashboard & Data Integrity (v3.1)
+
+### Cascading location engine
+`data/bd_locations.json` holds all 8 divisions, **64 districts, 508 upazilas**
+and pharma sales territories. The verification form renders bound `<select>`
+elements (District → Upazila → Territory); changing the district invalidates
+its dependents. `resolve_location()` validates every triple server-side, so an
+upazila that does not belong to its district is dropped instead of stored.
+
+```bash
+GET /api/locations      # cascade + specialty list
+```
+
+### Itemized recent scans
+Every detected medicine is written to `recent_scanned_medicines` (append-only,
+keyed by `mr_id`) in addition to the `prescribed_medicines` analytics junction.
+Re-verifying a prescription replaces its rows rather than duplicating them.
+
+```bash
+GET /api/recent-medicines?q=&mr_id=&limit=&offset=&order=&direction=
+GET /api/export/recent-medicines.csv
+```
+
+### Global filters & drill-down
+Every dashboard widget honours Territory / District / Specialty / MR / date range.
+
+```bash
+GET /api/filters                            # distinct values present in data
+GET /api/dashboard/kpis?district=&days=
+GET /api/dashboard/company-drilldown?company=
+GET /api/dashboard/brand-doctors?brand=
+```
+
+### Design system — light only
+Dark mode is fully removed (no `dark:` classes, no toggle, `<html class="light">`).
+
+| Token | Colour | Use |
+|---|---|---|
+| Primary | `#0F172A` | Headers, primary buttons |
+| Secondary | `#2563EB` | Active states, links |
+| Success | `#059669` | Verified badges |
+| Warning | `#D97706` | Needs review |
+| Surface | `#F8FAFC` | App background |
+| Card | `#FFFFFF` | Panels |
+| Border | `#E2E8F0` | Dividers |
+
+Company chart colours come from `COMPANY_COLOR_PALETTE` with a deterministic
+HSL hash fallback, so every manufacturer gets a distinct, stable slice.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests/ -q        # 77 unit/integration tests
+node tests/dom_smoke.js                     # 34 DOM tests (server on :8000)
+.venv/bin/python tests/diagnose_issues.py   # issue reproduction harness
+```

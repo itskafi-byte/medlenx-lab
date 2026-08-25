@@ -9,7 +9,7 @@ import time
 import re
 from difflib import SequenceMatcher
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -23,6 +23,9 @@ from .database import (
     get_generic_brand_matrix, search_medex_db, get_bengali_normalized_dosage, save_medicine_to_catalog
 )
 from .medlenx_client import MedLenXVLClient
+from .medicine_matcher import (
+    MedexIndex, normalize_brand, resolve_company, same_company,
+)
 
 init_db()
 
@@ -36,7 +39,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 medlenx_client = None
 medex_db = []
-medex_index = {}
+medex_index = MedexIndex()
 live_medex_cache = {}
 
 def get_medlenx_client():
@@ -55,8 +58,16 @@ def load_medex_db():
                     data = json.load(f)
                     if isinstance(data, list) and len(data) > 0:
                         medex_db = data
-                        medex_index = {entry.get('brand_name','').lower(): entry for entry in data if entry.get('brand_name')}
-                        print(f"✅ Loaded MedEx DB: {len(medex_db)} from {path}")
+                        # Multi-variant index: one brand -> ALL its catalogue
+                        # rows. The old dict-comprehension kept only the last
+                        # row per brand and was the main cause of wrong company
+                        # names being attached to detected medicines.
+                        medex_index = MedexIndex(data)
+                        print(
+                            f"✅ Loaded MedEx DB: {len(medex_db)} rows / "
+                            f"{len(medex_index)} brands / "
+                            f"{medex_index.variant_count} variants from {path}"
+                        )
                         for e in data[:200]:
                             try:
                                 save_medicine_to_catalog(e)
@@ -66,8 +77,65 @@ def load_medex_db():
             except Exception as e:
                 print(f"Failed load {path}: {e}")
     medex_db = []
+    medex_index = MedexIndex()
 
 load_medex_db()
+
+# ---- Cascading location reference data (District -> Upazila -> Territory) ----
+_locations_cache = None
+
+
+def load_locations():
+    """Load + cache the BD administrative cascade used by the verify form."""
+    global _locations_cache
+    if _locations_cache is not None:
+        return _locations_cache
+    path = os.path.join(settings.DATA_DIR, "bd_locations.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            _locations_cache = json.load(f)
+    except Exception as e:
+        print(f"⚠️  Could not load locations from {path}: {e}")
+        _locations_cache = {"divisions": [], "districts": {}, "specialties": []}
+    return _locations_cache
+
+
+def resolve_location(district="", upazila="", territory=""):
+    """
+    Validate/normalise a location triple against the cascade.
+
+    Returns the corrected values plus a `valid` flag so bad combinations
+    (e.g. an upazila that does not belong to the district) never reach the DB.
+    """
+    data = load_locations()
+    districts = data.get("districts", {})
+    district = (district or "").strip()
+    upazila = (upazila or "").strip()
+    territory = (territory or "").strip()
+
+    # case-insensitive district resolution
+    if district and district not in districts:
+        for name in districts:
+            if name.lower() == district.lower():
+                district = name
+                break
+
+    entry = districts.get(district)
+    if not entry:
+        return {"district": district, "upazila": upazila,
+                "territory": territory, "division": "", "valid": not district}
+
+    if upazila and upazila not in entry["upazilas"]:
+        match = next((u for u in entry["upazilas"] if u.lower() == upazila.lower()), None)
+        upazila = match or ""
+    if territory and territory not in entry["territories"]:
+        match = next((t for t in entry["territories"] if t.lower() == territory.lower()), None)
+        territory = match or entry["territories"][0]
+    if not territory:
+        territory = entry["territories"][0]
+
+    return {"district": district, "upazila": upazila, "territory": territory,
+            "division": entry["division"], "valid": True}
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -189,120 +257,215 @@ def get_medex_form_image(form_type):
             return v
     return 'https://medex.com.bd/img/dosage-forms/tablet.png'
 
+def _company_logo_or_blank(company_name: str) -> str:
+    """Only return a logo path when the file really exists (avoids broken imgs)."""
+    if not company_name:
+        return ""
+    safe_name = ''.join([c if c.isalnum() else '_' for c in company_name])[:50]
+    if os.path.exists(os.path.join(BASE_DIR, "static", "images", "companies", f"{safe_name}.png")):
+        return f"/static/images/companies/{safe_name}.png"
+    first_word = company_name.split()[0] if company_name else ""
+    safe_first = ''.join([c if c.isalnum() else '_' for c in first_word])[:30]
+    if os.path.exists(os.path.join(BASE_DIR, "static", "images", "companies", f"{safe_first}.png")):
+        return f"/static/images/companies/{safe_first}.png"
+    return ""
+
+
+def _is_placeholder(url):
+    return not url or 'placehold.co' in str(url).lower()
+
+
+def _build_enriched(med, entry, *, match_type, match_score=None,
+                    ambiguous=False, alternatives=None):
+    """
+    Merge a detected medicine with an authoritative MedEx catalogue row.
+
+    The company ALWAYS comes from the catalogue row. Previously the code did
+    `med.get('company') or entry.get('company')`, which let the vision model's
+    hallucinated company override the correct catalogue value - that is why a
+    scan showed the wrong company while manually picking the same medicine in
+    the edit dropdown (which reads straight from the catalogue) showed the
+    right one.
+    """
+    image_url = entry.get('image_url') or entry.get('pack_image') or ""
+    if _is_placeholder(image_url):
+        live = fetch_live_medex_details(entry.get('brand_name') or med.get('brand_name', ''))
+        if live and live.get('image_url'):
+            image_url = live['image_url']
+    if _is_placeholder(image_url):
+        image_url = get_medex_form_image(entry.get('type'))
+
+    model_company = (med.get('company') or '').strip()
+    company_name, company_source, company_verified = resolve_company(
+        entry.get('company', ''), model_company
+    )
+    company_conflict = bool(
+        model_company and company_name and not same_company(model_company, company_name)
+    )
+
+    out = {
+        **med,
+        "brand_name": entry.get('brand_name') or med.get('brand_name', ''),
+        "generic_name": entry.get('generic') or med.get('generic_name', ''),
+        "generic": entry.get('generic', ''),
+        "ingredient": entry.get('ingredient') or entry.get('generic', ''),
+        "company": company_name,
+        "company_source": company_source,
+        "company_verified": company_verified,
+        "company_logo": _company_logo_or_blank(company_name),
+        "type": entry.get('type') or med.get('type', 'Tablet'),
+        "form": entry.get('form') or med.get('form', 'Tab'),
+        "strength": entry.get('strength') or med.get('strength', ''),
+        "image_url": image_url,
+        "pack_image": image_url,
+        "medex_url": entry.get('url', ''),
+        "medex_id": entry.get('id', ''),
+        "enriched": True,
+        "match_type": match_type,
+        "dosage_normalized": get_bengali_normalized_dosage(
+            med.get('dosage', '') or med.get('dosage_bengali', '')
+        ),
+    }
+    # Make sure the matched catalogue row exists in the relational `medicines`
+    # table so prescribed_medicines.medicine_id can link to it. The catalogue
+    # is only bulk-seeded with the first 200 rows, so without this most scans
+    # stored a NULL medicine_id.
+    try:
+        save_medicine_to_catalog(entry)
+    except Exception as exc:  # never fail a scan because of catalogue upkeep
+        print(f"catalog upsert skipped: {exc}")
+
+    if match_score is not None:
+        out["match_score"] = match_score
+    if company_conflict:
+        # keep the discarded guess for auditing / QA
+        out["company_model_guess"] = model_company
+        out["company_conflict"] = True
+    if ambiguous:
+        # same brand name sold by several companies -> ask the user to confirm
+        out["company_ambiguous"] = True
+        out["needs_review"] = True
+    if alternatives:
+        out["alternatives"] = alternatives
+    return out
+
+
+def _alternatives_payload(entries, chosen, limit=6):
+    """Other catalogue variants of the same brand, for the review dropdown."""
+    alts = []
+    for e in entries:
+        if e is chosen:
+            continue
+        alts.append({
+            "brand_name": e.get('brand_name', ''),
+            "company": e.get('company', ''),
+            "strength": e.get('strength', ''),
+            "type": e.get('type', ''),
+            "form": e.get('form', ''),
+            "generic": e.get('generic', ''),
+            "image_url": e.get('image_url') or e.get('pack_image') or '',
+            "medex_url": e.get('url', ''),
+        })
+        if len(alts) >= limit:
+            break
+    return alts
+
+
 def enrich_medicine_with_medex(med):
-    brand_raw = med.get('brand_name','').strip()
+    """
+    Attach authoritative MedEx data (company, generic, strength, image) to a
+    medicine detected by MedLenX VL.
+
+    Matching order:
+      1. exact brand match  -> disambiguate variants by strength + dosage form
+      2. bounded fuzzy match -> same disambiguation, flagged with a score
+      3. live medex.com.bd lookup
+      4. unenriched fallback (company left unverified, never invented)
+    """
+    brand_raw = (med.get('brand_name') or '').strip()
     if not brand_raw:
         return med
-    brand_lower = brand_raw.lower()
-    def is_placeholder(url):
-        return not url or 'placehold.co' in url.lower()
-    
-    if brand_lower in medex_index:
-        entry = medex_index[brand_lower]
-        image_url = entry.get('image_url') or entry.get('pack_image') or ""
-        if is_placeholder(image_url):
-            live = fetch_live_medex_details(brand_raw)
-            if live and live.get('image_url'):
-                image_url = live.get('image_url')
-        if is_placeholder(image_url):
-            image_url = get_medex_form_image(entry.get('type'))
-        
-        company_name = med.get('company') or entry.get('company','')
-        company_logo = get_company_logo_url(company_name)
-        
-        return {
-            **med,
-            "generic_name": med.get('generic_name') or entry.get('generic',''),
-            "generic": entry.get('generic',''),
-            "ingredient": entry.get('ingredient',''),
-            "company": company_name,
-            "company_logo": company_logo,
-            "type": entry.get('type', med.get('type','Tablet')),
-            "form": med.get('form') or entry.get('form','Tab'),
-            "strength": med.get('strength') or entry.get('strength',''),
-            "image_url": image_url,
-            "pack_image": image_url,
-            "medex_url": entry.get('url',''),
-            "enriched": True,
-            "dosage_normalized": get_bengali_normalized_dosage(med.get('dosage','') or med.get('dosage_bengali',''))
-        }
-    
-    best_match = None
-    best_score = 0
-    for entry in medex_db:
-        bname = entry.get('brand_name','')
-        if not bname:
-            continue
-        score = SequenceMatcher(None, brand_lower, bname.lower()).ratio()
-        if brand_lower in bname.lower() or bname.lower() in brand_lower:
-            score += 0.2
-        if score > best_score and score > 0.75:
-            best_score = score
-            best_match = entry
-    
-    if best_match:
-        img = best_match.get('image_url') or best_match.get('pack_image') or ""
-        live = None
-        if is_placeholder(img):
-            live = fetch_live_medex_details(brand_raw)
-            if live and live.get('image_url'):
-                img = live.get('image_url')
-        if is_placeholder(img):
-            img = get_medex_form_image(best_match.get('type'))
-        
-        company_name = med.get('company') or best_match.get('company','')
-        return {
-            **med,
-            "generic_name": med.get('generic_name') or best_match.get('generic',''),
-            "generic": best_match.get('generic',''),
-            "ingredient": best_match.get('ingredient',''),
-            "company": company_name,
-            "company_logo": get_company_logo_url(company_name),
-            "type": best_match.get('type', med.get('type','Tablet')),
-            "form": med.get('form') or best_match.get('form','Tab'),
-            "strength": med.get('strength') or best_match.get('strength',''),
-            "image_url": img,
-            "pack_image": img,
-            "medex_url": best_match.get('url',''),
-            "enriched": True,
-            "match_score": round(best_score,3),
-            "dosage_normalized": get_bengali_normalized_dosage(med.get('dosage','') or med.get('dosage_bengali',''))
-        }
-    
+
+    strength = med.get('strength', '') or ''
+    form_hint = f"{med.get('type', '')} {med.get('form', '')}"
+
+    # --- 1. exact match on the normalised brand -------------------------
+    entries = medex_index.exact(brand_raw)
+    if entries:
+        chosen = medex_index.pick_variant(entries, strength, form_hint)
+        ambiguous = medex_index.company_is_ambiguous(entries)
+        return _build_enriched(
+            med, chosen,
+            match_type="exact",
+            ambiguous=ambiguous,
+            alternatives=_alternatives_payload(entries, chosen) if (ambiguous or len(entries) > 1) else None,
+        )
+
+    # --- 2. bounded fuzzy match -----------------------------------------
+    entries, score, _key = medex_index.fuzzy(brand_raw)
+    if entries:
+        chosen = medex_index.pick_variant(entries, strength, form_hint)
+        ambiguous = medex_index.company_is_ambiguous(entries)
+        return _build_enriched(
+            med, chosen,
+            match_type="fuzzy",
+            match_score=score,
+            ambiguous=ambiguous,
+            # a fuzzy brand match is never fully trusted -> always offer options
+            alternatives=_alternatives_payload(entries, chosen),
+        )
+
+    # --- 3. live medex.com.bd lookup ------------------------------------
     live_data = fetch_live_medex_details(brand_raw)
     if live_data and live_data.get('image_url'):
-        company_name = live_data.get('company') or med.get('company') or 'Unknown'
+        company_name, company_source, company_verified = resolve_company(
+            live_data.get('company', ''), med.get('company', '')
+        )
         return {
             **med,
-            "generic_name": med.get('generic_name') or live_data.get('generic',''),
+            "generic_name": live_data.get('generic') or med.get('generic_name', ''),
             "generic": live_data.get('generic') or '',
             "ingredient": live_data.get('generic') or '',
             "company": company_name,
-            "company_logo": get_company_logo_url(company_name),
+            "company_source": company_source if company_source != "medex" else "medex_live",
+            "company_verified": company_verified,
+            "company_logo": _company_logo_or_blank(company_name),
             "type": med.get('type') or 'Tablet',
             "form": med.get('form') or 'Tab',
             "image_url": live_data.get('image_url'),
             "pack_image": live_data.get('image_url'),
-            "medex_url": live_data.get('url',''),
+            "medex_url": live_data.get('url', ''),
             "enriched": True,
+            "match_type": "live",
             "live_fetched": True,
-            "dosage_normalized": get_bengali_normalized_dosage(med.get('dosage','') or med.get('dosage_bengali',''))
+            "dosage_normalized": get_bengali_normalized_dosage(
+                med.get('dosage', '') or med.get('dosage_bengali', '')
+            ),
         }
-    
-    company_name = med.get('company','Unknown')
+
+    # --- 4. no catalogue backing: never present a guess as fact ----------
+    model_company = (med.get('company') or '').strip()
+    company_name, company_source, company_verified = resolve_company('', model_company)
     return {
         **med,
-        "generic": med.get('generic_name','Unknown'),
-        "ingredient": med.get('generic_name','Unknown'),
+        "generic": med.get('generic_name', ''),
+        "ingredient": med.get('generic_name', ''),
         "company": company_name,
-        "company_logo": get_company_logo_url(company_name),
+        "company_source": company_source,
+        "company_verified": company_verified,
+        "company_logo": _company_logo_or_blank(company_name),
         "type": med.get('type') or 'Tablet',
         "form": med.get('form') or 'Tab',
         "image_url": get_medex_form_image(med.get('type') or 'Tablet'),
         "pack_image": get_medex_form_image(med.get('type') or 'Tablet'),
         "enriched": False,
-        "dosage_normalized": get_bengali_normalized_dosage(med.get('dosage','') or med.get('dosage_bengali',''))
+        "match_type": "none",
+        "needs_review": True,
+        "dosage_normalized": get_bengali_normalized_dosage(
+            med.get('dosage', '') or med.get('dosage_bengali', '')
+        ),
     }
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
@@ -363,6 +526,20 @@ async def scan_prescription(
     total_time = time.time() - start_time
     avg_conf = sum(m.get("confidence",0) for m in enriched_meds)/len(enriched_meds) if enriched_meds else 0
 
+    # Normalise the location triple against the District->Upazila->Territory
+    # cascade. The form values win; anything the model guessed is only used to
+    # fill a blank. Invalid combinations are dropped rather than stored.
+    loc = resolve_location(
+        district=district or doctor.get("district", ""),
+        upazila=upazila or doctor.get("upazila", ""),
+        territory=territory or doctor.get("territory", ""),
+    )
+    district, upazila, territory = loc["district"], loc["upazila"], loc["territory"]
+    doctor["district"] = district
+    doctor["upazila"] = upazila
+    doctor["territory"] = territory
+    doctor["division"] = loc["division"]
+
     result = {
         "doctor": doctor,
         "medicines": enriched_meds,
@@ -390,34 +567,214 @@ async def scan_prescription(
 
 @app.post("/api/prescriptions/{pid}/verify")
 async def verify_prescription(pid: int, verified_data: dict):
-    from .database import get_db
+    """
+    Persist a human-verified prescription.
+
+    Fixes:
+      * doctor specialty + district/upazila/territory are written to the
+        prescriptions row AND synced onto the doctors row (they were silently
+        dropped before, so the analytics kept the original scan's values);
+      * itemized medicines are rewritten to prescribed_medicines and appended
+        to recent_scanned_medicines;
+      * returns a real `message` (the UI printed `undefined`).
+    """
+    from .database import get_db, get_or_create_doctor, _write_medicine_rows
+
+    doctor = verified_data.get('doctor', {}) or {}
+    medicines = verified_data.get('medicines', []) or []
+
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE prescriptions SET is_verified=1, doctor_json=?, medicines_json=? WHERE id=?",
-                (json.dumps(verified_data.get('doctor',{})), json.dumps(verified_data.get('medicines',[])), pid))
+    row = cur.execute("SELECT id, mr_id FROM prescriptions WHERE id=?", (pid,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Prescription {pid} not found")
+    mr_id = row["mr_id"] or "MR001"
+
+    name = (doctor.get('name') or '').strip() or 'Unknown'
+    bmdc_no = (doctor.get('bmdc_no') or '').strip()
+    specialty = (doctor.get('specialty') or doctor.get('department') or '').strip()
+    district = (doctor.get('district') or '').strip()
+    upazila = (doctor.get('upazila') or '').strip()
+    territory = (doctor.get('territory') or '').strip()
+    division = (doctor.get('division') or '').strip()
+
+    # validate the location triple against the cascade before persisting
+    loc = resolve_location(district=district, upazila=upazila, territory=territory)
+    district, upazila, territory = loc["district"], loc["upazila"], loc["territory"]
+    division = division or loc["division"]
+    doctor["district"], doctor["upazila"] = district, upazila
+    doctor["territory"], doctor["division"] = territory, division
+
+    # keep the doctor master record in sync (no count bump on re-verify)
+    doctor_id = get_or_create_doctor(
+        name=name, bmdc_no=bmdc_no,
+        qualifications=doctor.get('qualifications', ''),
+        specialty=specialty, chamber=doctor.get('chamber', ''),
+        hospital=doctor.get('hospital', ''), upazila=upazila,
+        district=district, territory=territory, division=division,
+        increment=False,
+    )
+
+    cur.execute("""
+        UPDATE prescriptions SET
+            is_verified=1, doctor_json=?, medicines_json=?,
+            doctor_id=?, doctor_name=?, doctor_bmdc_no=?,
+            doctor_qualifications=?, doctor_hospital=?, doctor_specialty=?,
+            district=?, upazila=?, territory=?,
+            total_medicines=?
+        WHERE id=?
+    """, (
+        json.dumps(doctor), json.dumps(medicines), doctor_id, name, bmdc_no,
+        doctor.get('qualifications', ''),
+        doctor.get('hospital', '') or doctor.get('chamber', ''),
+        specialty, district, upazila, territory, len(medicines), pid,
+    ))
+
+    # rebuild analytics rows, refresh the itemized feed for this prescription
     cur.execute("DELETE FROM prescribed_medicines WHERE prescription_id=?", (pid,))
-    for med in verified_data.get('medicines',[]):
-        cur.execute("INSERT INTO prescribed_medicines (prescription_id, brand_name, generic_name, form, type, strength, dosage_frequency, raw_text, confidence, line_number, company_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (pid, med.get('brand_name'), med.get('generic_name') or med.get('generic'), med.get('form'), med.get('type'), med.get('strength'), med.get('dosage') or med.get('dosage_normalized'), med.get('raw_text'), med.get('confidence',0), med.get('line_number',0), med.get('company','')))
+    cur.execute("DELETE FROM recent_scanned_medicines WHERE prescription_id=?", (pid,))
+    _write_medicine_rows(
+        cur, pid, medicines, mr_id=mr_id, doctor_id=doctor_id, doctor_name=name,
+        specialty=specialty, district=district, upazila=upazila,
+        territory=territory, write_recent=True,
+    )
+
     conn.commit()
     conn.close()
-    return {"success": True}
+
+    return {
+        "success": True,
+        "id": pid,
+        "message": f"Verified and saved - {len(medicines)} medicine(s) recorded",
+        "medicines_saved": len(medicines),
+        "doctor_id": doctor_id,
+        "doctor": {"name": name, "specialty": specialty, "district": district,
+                   "upazila": upazila, "territory": territory},
+    }
+
+
+@app.get("/api/locations")
+async def locations():
+    """Cascading District -> Upazila -> Territory reference data + specialties."""
+    return load_locations()
+
+
+@app.get("/api/recent-medicines")
+async def recent_medicines(
+    limit: int = 25, offset: int = 0, mr_id: str = "", q: str = "",
+    company: str = "", district: str = "", territory: str = "",
+    specialty: str = "", days: Optional[int] = None,
+    order: str = "created_at", direction: str = "desc",
+):
+    """Itemized Recent Scans feed (searchable, sortable, paginated)."""
+    from .database import get_recent_scanned_medicines
+    return get_recent_scanned_medicines(
+        limit=limit, offset=offset, mr_id=mr_id, q=q, company=company,
+        district=district, territory=territory, specialty=specialty,
+        days=days, order=order, direction=direction,
+    )
+
+
+@app.get("/api/filters")
+async def filter_options():
+    """Distinct filter values present in the data, for the global filter bar."""
+    from .database import get_filter_options
+    return get_filter_options()
+
+
+@app.get("/api/dashboard/company-drilldown")
+async def company_drilldown(
+    company: str, limit: int = 10, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    from .database import get_company_drilldown
+    return get_company_drilldown(company, limit=limit, district=district,
+                                 territory=territory, specialty=specialty,
+                                 mr_id=mr_id, days=days)
+
+
+@app.get("/api/dashboard/brand-doctors")
+async def brand_doctors(
+    brand: str, limit: int = 15, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    from .database import get_brand_doctors
+    return get_brand_doctors(brand, limit=limit, district=district,
+                             territory=territory, specialty=specialty,
+                             mr_id=mr_id, days=days)
+
+
+@app.get("/api/export/recent-medicines.csv")
+async def export_recent_medicines(
+    mr_id: str = "", q: str = "", company: str = "", district: str = "",
+    territory: str = "", specialty: str = "", days: Optional[int] = None,
+    limit: int = 5000,
+):
+    """CSV export for field reporting."""
+    import csv
+    import io as _io
+    from .database import get_recent_scanned_medicines
+    data = get_recent_scanned_medicines(
+        limit=limit, offset=0, mr_id=mr_id, q=q, company=company,
+        district=district, territory=territory, specialty=specialty, days=days)
+    cols = ["created_at", "mr_id", "doctor_name", "specialty", "brand_name",
+            "generic_name", "company_name", "dosage_form", "strength", "dosage",
+            "confidence_score", "company_verified", "district", "upazila",
+            "territory", "prescription_id"]
+    buf = _io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    w.writeheader()
+    for r in data["items"]:
+        w.writerow(r)
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="recent_scanned_medicines.csv"'},
+    )
+
 
 @app.get("/api/dashboard/kpis")
-async def dashboard_kpis(own_company: Optional[str] = None):
-    return get_dashboard_kpis(own_company_name=own_company)
+async def dashboard_kpis(
+    own_company: Optional[str] = None, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+):
+    return get_dashboard_kpis(own_company_name=own_company, district=district,
+                              territory=territory, specialty=specialty,
+                              mr_id=mr_id, days=days)
+
 
 @app.get("/api/dashboard/most-prescribed")
-async def most_prescribed(limit: int = 10, generic: Optional[str] = None):
-    return {"medicines": get_most_prescribed_medicines(limit=limit, filter_generic=generic or "")}
+async def most_prescribed(
+    limit: int = 10, generic: Optional[str] = None, district: str = "",
+    territory: str = "", specialty: str = "", mr_id: str = "",
+    days: Optional[int] = None,
+):
+    return {"medicines": get_most_prescribed_medicines(
+        limit=limit, filter_generic=generic or "", district=district,
+        territory=territory, specialty=specialty, mr_id=mr_id, days=days)}
+
 
 @app.get("/api/dashboard/company-share")
-async def company_share():
-    return {"companies": get_company_share()}
+async def company_share(
+    district: str = "", territory: str = "", specialty: str = "",
+    mr_id: str = "", days: Optional[int] = None,
+):
+    return {"companies": get_company_share(
+        district=district, territory=territory, specialty=specialty,
+        mr_id=mr_id, days=days)}
+
 
 @app.get("/api/dashboard/top-doctors")
-async def top_doctors(limit: int = 10, own_company: Optional[str] = None):
-    return {"doctors": get_top_doctor_prescribers(own_company_name=own_company, limit=limit)}
+async def top_doctors(
+    limit: int = 10, offset: int = 0, own_company: Optional[str] = None,
+    q: str = "", district: str = "", territory: str = "", specialty: str = "",
+    mr_id: str = "", days: Optional[int] = None,
+):
+    return get_top_doctor_prescribers(
+        own_company_name=own_company, limit=limit, offset=offset, q=q,
+        district=district, territory=territory, specialty=specialty,
+        mr_id=mr_id, days=days)
+
 
 @app.get("/api/dashboard/generic-brand-matrix")
 async def generic_brand_matrix():
@@ -437,25 +794,81 @@ async def list_prescriptions(limit: int = 50):
 
 @app.get("/api/medex")
 async def search_medex(q: str = "", form: str = "", limit: int = 50):
-    from .database import search_medex_db
+    """
+    Catalogue search used by the medicine autocomplete in the edit panel.
+
+    Searches the full in-memory MedEx catalogue (25k rows). The old code hit
+    the SQLite `medicines` table first, which is only seeded with the first 200
+    rows, so the dropdown could only ever offer a tiny slice of the catalogue.
+    Results are ranked so exact brand matches come first, and every variant
+    keeps its own company (no de-duplication by brand name).
+    """
     from collections import Counter
-    db_results = search_medex_db(q=q, form=form, limit=limit)
-    if db_results:
-        form_counts = Counter([r.get('type','Unknown') for r in medex_db]) if medex_db else {}
-        # Add company logos to results
-        for r in db_results:
-            r['company_logo'] = get_company_logo_url(r.get('company') or r.get('company_name',''))
-        return {"total": len(medex_db), "filtered": len(db_results), "form_counts": dict(form_counts), "results": db_results}
-    results = medex_db
-    if q:
-        q_lower = q.lower()
-        results = [r for r in results if q_lower in r.get('brand_name','').lower() or q_lower in r.get('generic','').lower() or q_lower in r.get('company','').lower()]
-    if form:
-        results = [r for r in results if form.lower() in r.get('type','').lower() or form.lower() in r.get('form','').lower()]
-    form_counts = Counter([r.get('type','Unknown') for r in medex_db])
-    for r in results[:limit]:
-        r['company_logo'] = get_company_logo_url(r.get('company',''))
-    return {"total": len(medex_db), "filtered": len(results), "form_counts": dict(form_counts), "results": results[:limit]}
+    from .database import search_medex_db
+
+    form_counts = Counter([r.get('type', 'Unknown') for r in medex_db]) if medex_db else {}
+
+    results = []
+    if medex_db:
+        q_norm = normalize_brand(q) if q else ""
+        q_lower = (q or "").lower().strip()
+        form_lower = (form or "").lower().strip()
+
+        for r in medex_db:
+            if form_lower and form_lower not in (
+                str(r.get('type', '')).lower() + " " + str(r.get('form', '')).lower()
+            ):
+                continue
+            if not q_lower:
+                results.append((0, r))
+                continue
+
+            brand = str(r.get('brand_name', ''))
+            brand_norm = normalize_brand(brand)
+            generic = str(r.get('generic', '')).lower()
+            company = str(r.get('company', '')).lower()
+
+            if q_norm and brand_norm == q_norm:
+                rank = 100
+            elif brand.lower().startswith(q_lower):
+                rank = 80
+            elif q_lower in brand.lower():
+                rank = 60
+            elif generic.startswith(q_lower):
+                rank = 40
+            elif q_lower in generic:
+                rank = 30
+            elif q_lower in company:
+                rank = 10
+            else:
+                continue
+            # prefer rows with a real pack image, then shorter brand names
+            if 'medex.com.bd/storage' in str(r.get('pack_image') or r.get('image_url') or ''):
+                rank += 2
+            results.append((rank, r))
+
+        results.sort(key=lambda t: (-t[0], len(str(t[1].get('brand_name', ''))),
+                                    str(t[1].get('brand_name', ''))))
+        filtered_total = len(results)
+        results = [r for _rank, r in results[:limit]]
+    else:
+        results = search_medex_db(q=q, form=form, limit=limit)
+        filtered_total = len(results)
+
+    out = []
+    for r in results:
+        item = dict(r)
+        company = item.get('company') or item.get('company_name', '')
+        item['company'] = company
+        item['company_logo'] = _company_logo_or_blank(company)
+        out.append(item)
+
+    return {
+        "total": len(medex_db),
+        "filtered": filtered_total,
+        "form_counts": dict(form_counts),
+        "results": out,
+    }
 
 @app.get("/api/popular-medicines")
 async def popular_medicines_live():

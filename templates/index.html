@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MedLenX Lab</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#8b5cf6">
+<meta name="theme-color" content="#0F172A">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -16,7 +16,10 @@ tailwind.config={
     extend:{
       fontFamily:{sans:['Inter']},
       colors:{
-        brand:{50:'#f5f3ff',100:'#ede9fe',500:'#8b5cf6',600:'#7c3aed',700:'#6d28d9',900:'#4c1d95'}
+        brand:{50:'#F8FAFC',100:'#F1F5F9',200:'#E2E8F0',300:'#CBD5E1',400:'#94A3B8',500:'#2563EB',600:'#1D4ED8',700:'#1E40AF',800:'#172554',900:'#0F172A'},
+        accent:{50:'#EFF6FF',100:'#DBEAFE',500:'#2563EB',600:'#1D4ED8',700:'#1E40AF'},
+        ok:{50:'#ECFDF5',100:'#D1FAE5',500:'#059669',600:'#047857'},
+        warn:{50:'#FFFBEB',100:'#FEF3C7',500:'#D97706',600:'#B45309'}
       }
     }
   }
@@ -24,61 +27,40 @@ tailwind.config={
 </script>
 <style>
 .glass{backdrop-filter:blur(12px);background:rgba(255,255,255,0.9)}
-.dark .glass{background:rgba(15,23,42,0.9)}
 .upload-zone{border:2px dashed #cbd5e1;transition:.3s}
-.upload-zone.dragover{border-color:#8b5cf6;background:#f5f3ff}
-.dark .upload-zone{border-color:#334155;background:#1e293b}
-.dark .upload-zone.dragover{border-color:#8b5cf6;background:#312e81}
+.upload-zone.dragover{border-color:#2563EB;background:#EFF6FF}
 .image-viewer{overflow:hidden;cursor:grab;position:relative}
 .image-viewer:active{cursor:grabbing}
 .image-viewer img{transform-origin:center center;transition:transform .15s ease;user-select:none;pointer-events:none}
 .pill-blue{background:#dbeafe;color:#1d4ed8}
-.dark .pill-blue{background:#1e3a8a;color:#bfdbfe}
-.pill-violet{background:#ede9fe;color:#6d28d9}
-.dark .pill-violet{background:#4c1d95;color:#ddd6fe}
+.pill-violet{background:#DBEAFE;color:#1E40AF}
 .pill-emerald{background:#d1fae5;color:#065f46}
-.dark .pill-emerald{background:#064e3b;color:#a7f3d0}
 .pill-amber{background:#fef3c7;color:#92400e}
-.dark .pill-amber{background:#78350f;color:#fde68a}
 .skeleton{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 37%,#f1f5f9 63%);background-size:400% 100%;animation:skeleton 1.4s ease infinite}
-.dark .skeleton{background:linear-gradient(90deg,#1e293b 25%,#334155 37%,#1e293b 63%);background-size:400% 100%}
 @keyframes skeleton{0%{background-position:100% 50%}100%{background-position:0% 50%}}
-.dark .bg-white{color-scheme:dark}
-.dark .text-slate-900{color:#e2e8f0}
-.dark .text-slate-600{color:#94a3b8}
-.dark .text-slate-500{color:#94a3b8}
-.dark .text-slate-400{color:#64748b}
-.dark .border-slate-200{border-color:#334155}
-.dark .border-slate-100{border-color:#334155}
-.dark .bg-slate-50{background-color:#1e293b}
-.dark .bg-slate-100{background-color:#334155}
 .drawer{transform:translateX(100%);transition:transform .35s cubic-bezier(0.4,0,0.2,1)}
 .drawer.open{transform:translateX(0)}
 .modal-backdrop{backdrop-filter:blur(8px);background:rgba(0,0,0,0.4)}
-.zoom-lens{position:absolute;border:2px solid #8b5cf6;border-radius:50%;width:120px;height:120px;pointer-events:none;display:none;background-repeat:no-repeat;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:10}
+.zoom-lens{position:absolute;border:2px solid #2563EB;border-radius:50%;width:120px;height:120px;pointer-events:none;display:none;background-repeat:no-repeat;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:10}
 .kpi-card{transition:all .2s}
 .kpi-card:hover{transform:translateY(-3px)}
-.kpi-card.active-filter{ring:2px solid #8b5cf6;transform:translateY(-2px)}
+.kpi-card.active-filter{ring:2px solid #2563EB;transform:translateY(-2px)}
 </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-900 min-h-screen font-sans text-slate-900 dark:text-slate-200 transition-colors duration-300">
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900 transition-colors duration-300">
 
 <!-- Sidebar -->
 <div class="fixed left-0 top-0 h-full w-[260px] bg-white border-r border-slate-200 z-30 hidden lg:flex flex-col">
   <div class="p-6 border-b border-slate-100">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center text-white shadow-sm"><i class="fas fa-microscope"></i></div>
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-900 to-blue-800 flex items-center justify-center text-white shadow-sm"><i class="fas fa-microscope"></i></div>
         <div>
           <h1 class="font-bold text-[16px] tracking-tight">MedLenX Lab</h1>
           <p class="text-[10px] text-slate-500">Prescription Intelligence</p>
         </div>
       </div>
       <!-- Dark/Light Theme Switch Top of Left Side -->
-      <button id="themeToggle" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition" title="Switch Dark/Light Theme">
-        <i class="fas fa-moon text-sm" id="themeIconMoon"></i>
-        <i class="fas fa-sun text-sm hidden" id="themeIconSun"></i>
-      </button>
     </div>
   </div>
 
@@ -106,7 +88,7 @@ tailwind.config={
   <div class="p-4 border-t border-slate-100">
     <div class="bg-slate-50 rounded-xl p-3">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-violet-500 flex items-center justify-center text-white text-xs font-bold">MR</div>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-slate-900 to-blue-700 flex items-center justify-center text-white text-xs font-bold">MR</div>
         <div><p class="text-xs font-semibold">MR001 • Dhaka South</p><p class="text-[10px] text-slate-500" id="sidebarOnlineStatus">Online • Sync enabled</p></div>
       </div>
     </div>
@@ -128,20 +110,20 @@ tailwind.config={
   <div class="max-w-7xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-4">
     <!-- Mobile logo -->
     <div class="lg:hidden flex items-center gap-2">
-      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center text-white"><i class="fas fa-microscope text-xs"></i></div>
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-900 to-blue-800 flex items-center justify-center text-white"><i class="fas fa-microscope text-xs"></i></div>
       <span class="font-bold text-sm">MedLenX</span>
     </div>
 
     <!-- Global Search - Medicine Database always accessible -->
     <div class="flex-1 max-w-2xl relative">
       <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fas fa-search text-xs"></i></div>
-      <input id="globalSearch" placeholder="Search medicines, doctors, generics - always accessible from anywhere..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm">
+      <input id="globalSearch" placeholder="Search medicines, doctors, generics - always accessible from anywhere..." class="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
       <div id="globalSearchResults" class="hidden absolute top-full mt-2 left-0 right-0 bg-white rounded-xl shadow-xl border border-slate-200 max-h-80 overflow-y-auto z-50"></div>
     </div>
 
     <div class="flex items-center gap-2">
       <span id="onlineStatus" class="hidden md:flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-200"><i class="fas fa-circle text-[6px] mr-1"></i>Online</span>
-      <span class="hidden md:flex px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-medium border border-brand-200"><i class="fas fa-bolt text-[10px] mr-1"></i>Powered By MedLenX Vision LM</span>
+      <span class="hidden md:flex px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-[11px] font-medium border border-blue-200"><i class="fas fa-bolt text-[10px] mr-1"></i>Powered By MedLenX Vision LM</span>
       <button id="installPwaBtn" class="hidden px-3 py-1 rounded-full bg-slate-900 text-white text-[11px]"><i class="fas fa-download"></i> Install</button>
       <div class="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs"><i class="fas fa-user"></i></div>
     </div>
@@ -155,9 +137,9 @@ tailwind.config={
 <div id="tab-workspace" class="tab-content space-y-6">
 
   <!-- Empty State - Hero Action Full-Width Banner just beneath header (per design upgrade #2) -->
-  <div id="workspaceEmpty" class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-2xl border-2 border-dashed border-brand-200 overflow-hidden">
-    <div id="uploadZone" class="upload-zone p-10 md:p-16 text-center cursor-pointer bg-gradient-to-br from-brand-50/50 to-indigo-50/30">
-      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center text-white text-3xl shadow-lg"><i class="fas fa-file-medical"></i></div>
+  <div id="workspaceEmpty" class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-2xl border-2 border-dashed border-blue-200 overflow-hidden">
+    <div id="uploadZone" class="upload-zone p-10 md:p-16 text-center cursor-pointer bg-gradient-to-br from-slate-50 to-blue-50/40">
+      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-slate-900 to-blue-700 flex items-center justify-center text-white text-3xl shadow-lg"><i class="fas fa-file-medical"></i></div>
       <h2 class="text-xl font-bold">Drop prescription image here</h2>
       <p class="text-sm text-slate-500 mt-2 max-w-md mx-auto">Drag & drop or click to upload. Supports camera capture, rotation, contrast adjustment for cursive handwriting.</p>
       <div class="mt-6 flex justify-center gap-3">
@@ -180,7 +162,7 @@ tailwind.config={
     <!-- Left Column: Image Viewer with scroll-to-zoom, drag pan, rotate/contrast -->
     <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-2xl border overflow-hidden flex flex-col">
       <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-image text-brand-600"></i> Prescription Image Viewer</h3>
+        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-image text-blue-700"></i> Prescription Image Viewer</h3>
         <div class="flex items-center gap-1">
           <button class="viewer-control bg-white border border-slate-200 w-8 h-8 rounded-lg text-xs hover:bg-slate-50" data-action="zoom-in" title="Scroll to zoom"><i class="fas fa-magnifying-glass-plus"></i></button>
           <button class="viewer-control bg-white border border-slate-200 w-8 h-8 rounded-lg text-xs hover:bg-slate-50" data-action="zoom-out"><i class="fas fa-magnifying-glass-minus"></i></button>
@@ -271,7 +253,7 @@ tailwind.config={
 <div id="tab-dashboard" class="tab-content hidden space-y-6">
 
   <!-- Hero Action Full-Width Banner just beneath KPIs - per upgrade #2 -->
-  <div class="bg-gradient-to-r from-brand-600 to-violet-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+  <div class="bg-gradient-to-r from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
     <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
     <div class="relative flex flex-col md:flex-row items-center justify-between gap-4">
       <div>
@@ -285,23 +267,59 @@ tailwind.config={
     </div>
   </div>
 
-  <!-- KPI Cards - Depth and Contrast upgrade #3: bg-white shadow-sm hover:shadow-md -->
+  <!-- ===== Global Filter Toolbar ===== -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sticky top-0 z-30">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 pr-1">
+        <i class="fas fa-filter text-blue-600"></i> Filters
+      </span>
+      <select id="fTerritory" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[130px]">
+        <option value="">All Territories</option>
+      </select>
+      <select id="fDistrict" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[130px]">
+        <option value="">All Districts</option>
+      </select>
+      <select id="fSpecialty" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[130px]">
+        <option value="">All Specialties</option>
+      </select>
+      <select id="fMr" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[110px]">
+        <option value="">All MRs</option>
+      </select>
+      <select id="fDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+        <option value="">All Time</option>
+        <option value="7">Last 7 Days</option>
+        <option value="30" selected>Last 30 Days</option>
+        <option value="90">Last 90 Days</option>
+        <option value="365">Last 12 Months</option>
+      </select>
+      <button id="fReset" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600">
+        <i class="fas fa-rotate-left mr-1"></i>Reset
+      </button>
+      <div class="flex-1"></div>
+      <span id="fActiveCount" class="text-[10px] text-slate-400"></span>
+      <button id="fExport" class="text-xs px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium">
+        <i class="fas fa-file-csv mr-1"></i>Export Data
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
   <div>
-    <h2 class="font-semibold text-sm mb-3 flex items-center gap-2"><i class="fas fa-chart-line text-brand-600"></i> Top Summary KPIs</h2>
+    <h2 class="font-semibold text-sm mb-3 flex items-center gap-2"><i class="fas fa-chart-line text-blue-600"></i> Top Summary KPIs</h2>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Total Captured</p><p class="text-2xl font-bold mt-1" id="kpiTotalAll">0</p></div><div class="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-600"><i class="fas fa-file-medical"></i></div></div>
-        <div class="mt-3 flex gap-2 text-[10px]"><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Today <b id="kpiToday">0</b></span><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Week <b id="kpiWeek">0</b></span><span class="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full border border-brand-200">Month <b id="kpiMonth">0</b></span></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Total Captured</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1" id="kpiTotalAll">0</p><span id="kpiScansDelta" class="text-[10px] font-semibold"></span></div></div><div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-file-medical"></i></div></div>
+        <div class="mt-3 flex gap-2 text-[10px]"><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Today <b id="kpiToday">0</b></span><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Week <b id="kpiWeek">0</b></span><span class="px-2 py-0.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">Month <b id="kpiMonth">0</b></span></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Top Prescribed Brand</p><p class="text-lg font-bold mt-1 truncate" id="kpiTopBrand">-</p><p class="text-[11px] text-slate-500 mt-1"><span id="kpiTopBrandCount">0</span> captures</p></div><div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><i class="fas fa-crown"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Identified Medicines</p><p class="text-2xl font-bold mt-1" id="kpiItems">0</p><p class="text-[11px] text-slate-500 mt-1 truncate">Top: <b id="kpiTopBrand">-</b> (<span id="kpiTopBrandCount">0</span>)</p></div><div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><i class="fas fa-crown"></i></div></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Company Market Share</p><p class="text-2xl font-bold mt-1"><span id="kpiMarketShare">0</span>%</p><p class="text-[11px] text-slate-500 mt-1 truncate" id="kpiOwnCompany">Your Company</p></div><div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600"><i class="fas fa-chart-pie"></i></div></div>
-        <div class="mt-2 w-full bg-slate-200 rounded-full h-1.5"><div id="kpiMarketBar" class="h-1.5 bg-brand-500 rounded-full" style="width:0%"></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Target Share</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1"><span id="kpiMarketShare">0</span>%</p><span id="kpiShareDelta" class="text-[10px] font-semibold"></span></div><p class="text-[11px] text-slate-500 mt-1 truncate" id="kpiOwnCompany">Your Company</p></div><div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600"><i class="fas fa-chart-pie"></i></div></div>
+        <div class="mt-2 w-full bg-slate-200 rounded-full h-1.5"><div id="kpiMarketBar" class="h-1.5 bg-emerald-600 rounded-full transition-all" style="width:0%"></div></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Active Doctor Coverage</p><p class="text-2xl font-bold mt-1"><span id="kpiActiveDoctors">0</span> / <span id="kpiTotalDoctors" class="text-sm text-slate-500">0</span></p><p class="text-[11px] text-slate-500 mt-1">Unique doctors</p></div><div class="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600"><i class="fas fa-user-doctor"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Active Doctor Coverage</p><p class="text-2xl font-bold mt-1"><span id="kpiActiveDoctors">0</span> / <span id="kpiTotalDoctors" class="text-sm text-slate-500">0</span></p><p class="text-[11px] text-slate-500 mt-1">Unique doctors</p></div><div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700"><i class="fas fa-user-doctor"></i></div></div>
       </div>
     </div>
   </div>
@@ -348,16 +366,80 @@ tailwind.config={
     </div>
   </div>
 
+  <!-- ===== Live Recent Scans Engine (itemized data grid) ===== -->
+  <div class="bg-white shadow-sm rounded-xl border border-slate-200 p-5">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div>
+        <h3 class="font-semibold text-sm flex items-center gap-2">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          Live Recent Scans
+        </h3>
+        <p class="text-[10px] text-slate-500 mt-0.5">Every individual medicine detected, per MR</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="relative">
+          <i class="fas fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
+          <input id="rsSearch" placeholder="Search medicine, company, doctor..."
+                 class="text-xs pl-7 pr-3 py-1.5 rounded-lg border border-slate-200 w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+        </div>
+        <button id="rsExport" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">
+          <i class="fas fa-file-csv mr-1"></i>CSV
+        </button>
+        <button id="rsRefresh" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">
+          <i class="fas fa-rotate"></i>
+        </button>
+      </div>
+    </div>
+    <div class="overflow-x-auto -mx-1">
+      <table class="w-full text-xs min-w-[820px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 px-2 font-semibold cursor-pointer hover:text-slate-900" data-sort="created_at">Time <i class="fas fa-sort text-[8px]"></i></th>
+            <th class="py-2 px-2 font-semibold cursor-pointer hover:text-slate-900" data-sort="doctor_name">Doctor <i class="fas fa-sort text-[8px]"></i></th>
+            <th class="py-2 px-2 font-semibold">Specialty</th>
+            <th class="py-2 px-2 font-semibold cursor-pointer hover:text-slate-900" data-sort="brand_name">Medicine <i class="fas fa-sort text-[8px]"></i></th>
+            <th class="py-2 px-2 font-semibold cursor-pointer hover:text-slate-900" data-sort="company_name">Company <i class="fas fa-sort text-[8px]"></i></th>
+            <th class="py-2 px-2 font-semibold cursor-pointer hover:text-slate-900" data-sort="confidence">Conf. <i class="fas fa-sort text-[8px]"></i></th>
+            <th class="py-2 px-2 font-semibold">Location</th>
+          </tr>
+        </thead>
+        <tbody id="rsBody"></tbody>
+      </table>
+    </div>
+    <div id="rsEmpty" class="text-center py-10 hidden">
+      <div class="w-12 h-12 mx-auto bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-2"><i class="fas fa-pills"></i></div>
+      <p class="text-xs text-slate-500">No scanned medicines yet. Scan a prescription to populate this feed.</p>
+    </div>
+    <div id="rsPager" class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100"></div>
+  </div>
+
   <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
     <div class="flex items-center justify-between mb-3"><h3 class="font-semibold text-sm">Recent Prescriptions</h3><button id="refreshHistDash" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full">Refresh</button></div>
     <div id="historyGridDash" class="space-y-2 max-h-96 overflow-y-auto"></div>
   </div>
 </div>
 
+<!-- ===== Drill-down modal ===== -->
+<div id="drillModal" class="fixed inset-0 z-[9998] hidden items-center justify-center modal-backdrop p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+      <div>
+        <h3 id="drillTitle" class="font-bold text-slate-900">Drill-down</h3>
+        <p id="drillSubtitle" class="text-[11px] text-slate-500 mt-0.5"></p>
+      </div>
+      <button id="drillClose" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div id="drillBody" class="p-5 overflow-y-auto"></div>
+  </div>
+</div>
+
 <!-- ==================== TAB: DATABASE ==================== -->
 <div id="tab-database" class="tab-content hidden space-y-6">
   <!-- Popular Medicines from Top Pharma - Live Fetch from medex.com.bd -->
-  <div class="bg-gradient-to-br from-brand-600 to-violet-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+  <div class="bg-gradient-to-br from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
     <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
     <div class="relative">
       <h2 class="text-lg font-bold flex items-center gap-2"><i class="fas fa-fire"></i> Currently Popular Medicines from Top Pharmaceutical Companies</h2>
@@ -368,9 +450,9 @@ tailwind.config={
   </div>
 
   <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-6">
-    <h2 class="font-semibold text-sm mb-4 flex items-center gap-2"><i class="fas fa-database text-brand-600"></i> Medicine Database - Every Form Type</h2>
+    <h2 class="font-semibold text-sm mb-4 flex items-center gap-2"><i class="fas fa-database text-blue-700"></i> Medicine Database - Every Form Type</h2>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="medexStats"></div>
-    <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 shadow-sm">
+    <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
     <div id="medexResults" class="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto"></div>
   </div>
 </div>
@@ -379,30 +461,174 @@ tailwind.config={
 </div>
 
 <script>
-// Theme Toggle - Dark/Light Top of Left Side
-const themeToggle=document.getElementById('themeToggle');
-const themeIconMoon=document.getElementById('themeIconMoon');
-const themeIconSun=document.getElementById('themeIconSun');
-function applyTheme(theme){
-  if(theme==='dark'){
-    document.documentElement.classList.add('dark');
-    if(themeIconMoon) themeIconMoon.classList.add('hidden');
-    if(themeIconSun) themeIconSun.classList.remove('hidden');
-    localStorage.setItem('theme','dark');
-  }else{
-    document.documentElement.classList.remove('dark');
-    if(themeIconMoon) themeIconMoon.classList.remove('hidden');
-    if(themeIconSun) themeIconSun.classList.add('hidden');
-    localStorage.setItem('theme','light');
+/* ============================================================
+   Enterprise UI primitives: toasts, company colours, locations
+   ============================================================ */
+
+// ---------- Toast notification system (Issue 2) ----------
+const TOAST_ICONS={loading:'fa-circle-notch fa-spin',success:'fa-circle-check',
+                   error:'fa-circle-exclamation',info:'fa-circle-info'};
+const TOAST_STYLES={
+  loading:'bg-white border-slate-200 text-slate-700',
+  success:'bg-white border-emerald-200 text-emerald-800',
+  error:'bg-white border-red-200 text-red-800',
+  info:'bg-white border-blue-200 text-blue-800'};
+const TOAST_ICON_COLORS={loading:'text-blue-600',success:'text-emerald-600',
+                         error:'text-red-600',info:'text-blue-600'};
+
+function toastContainer(){
+  let c=document.getElementById('toastRoot');
+  if(!c){
+    c=document.createElement('div');
+    c.id='toastRoot';
+    c.className='fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none';
+    document.body.appendChild(c);
   }
+  return c;
 }
-const savedTheme=localStorage.getItem('theme')||'light';
-applyTheme(savedTheme);
-if(themeToggle){
-  themeToggle.addEventListener('click',()=>{
-    const isDark=document.documentElement.classList.contains('dark');
-    applyTheme(isDark?'light':'dark');
-  });
+
+/** toast(msg,{type,id,duration}) - reuses the node when `id` repeats,
+ *  so a loading toast becomes the success/error toast in place. */
+function toast(message,{type='info',id=null,duration=null}={}){
+  const root=toastContainer();
+  const key=id||('t'+Date.now()+Math.random());
+  let el=root.querySelector(`[data-toast-id="${key}"]`);
+  if(!el){
+    el=document.createElement('div');
+    el.dataset.toastId=key;
+    el.className='pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[380px] '+
+                 'px-4 py-3 rounded-xl border shadow-lg text-sm font-medium '+
+                 'transition-all duration-200 translate-x-2 opacity-0';
+    root.appendChild(el);
+    requestAnimationFrame(()=>{el.classList.remove('translate-x-2','opacity-0');});
+  }
+  el.className=el.className.replace(/bg-\S+|border-\S+|text-\S+/g,'').trim()+' '+
+    'pointer-events-auto flex items-start gap-3 min-w-[280px] max-w-[380px] px-4 py-3 '+
+    'rounded-xl border shadow-lg text-sm font-medium transition-all duration-200 '+TOAST_STYLES[type];
+  el.innerHTML=`<i class="fas ${TOAST_ICONS[type]} ${TOAST_ICON_COLORS[type]} mt-0.5"></i>
+    <span class="flex-1">${message}</span>
+    ${type!=='loading'?'<button class="text-slate-400 hover:text-slate-600" aria-label="Dismiss"><i class="fas fa-xmark"></i></button>':''}`;
+  const close=()=>{
+    el.classList.add('translate-x-2','opacity-0');
+    setTimeout(()=>el.remove(),200);
+  };
+  el.querySelector('button')?.addEventListener('click',close);
+  clearTimeout(el._timer);
+  const ms=duration!==null?duration:(type==='loading'?0:type==='error'?6000:4000);
+  if(ms>0) el._timer=setTimeout(close,ms);
+  return {id:key,close};
+}
+toast.loading=(m,o={})=>toast(m,{...o,type:'loading'});
+toast.success=(m,o={})=>toast(m,{...o,type:'success'});
+toast.error  =(m,o={})=>toast(m,{...o,type:'error'});
+toast.info   =(m,o={})=>toast(m,{...o,type:'info'});
+
+// ---------- Company colour mapper (Issue 4) ----------
+const COMPANY_COLOR_PALETTE={
+  'square':'#1E40AF',        // Deep royal blue
+  'incepta':'#0284C7',       // Sky blue
+  'beximco':'#0D9488',       // Teal
+  'renata':'#D97706',        // Warm amber
+  'aci':'#DC2626',           // Crimson
+  'healthcare':'#7C3AED',    // Violet
+  'opsonin':'#0891B2',       // Cyan
+  'eskayef':'#4F46E5',       // Indigo
+  'acme':'#B45309',          // Bronze
+  'drug international':'#15803D', // Green
+  'popular':'#BE185D',       // Rose
+  'aristopharma':'#0F766E',  // Deep teal
+  'unimed':'#7E22CE',        // Purple
+  'beacon':'#A16207',        // Gold
+  'general':'#1D4ED8',       // Blue
+  'ibn sina':'#065F46',      // Forest
+  'ziska':'#9333EA',
+  'biopharma':'#0369A1',
+  'sanofi':'#6D28D9',
+  'novo nordisk':'#1E3A8A',
+  'others':'#94A3B8',        // Slate for the Others bucket
+};
+
+/** Deterministic, readable colour for any company name. */
+function getCompanyColor(name){
+  if(!name) return '#94A3B8';
+  const k=String(name).toLowerCase();
+  for(const key in COMPANY_COLOR_PALETTE){
+    if(k.includes(key)) return COMPANY_COLOR_PALETTE[key];
+  }
+  let hash=0;
+  for(let i=0;i<k.length;i++) hash=k.charCodeAt(i)+((hash<<5)-hash);
+  // constrained HSL keeps contrast high and avoids neon/pastel collisions
+  const hue=Math.abs(hash)%360;
+  const sat=62+(Math.abs(hash>>3)%14);   // 62-76%
+  const light=38+(Math.abs(hash>>7)%10); // 38-48%
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
+/** Distinct colours for a list of companies (nudges exact duplicates apart). */
+function companyColorScale(names){
+  const used=new Set(); const out=[];
+  for(const n of names){
+    let c=getCompanyColor(n);
+    if(used.has(c) && c.startsWith('hsl')){
+      const m=c.match(/hsl\((\d+)/);
+      c=`hsl(${(parseInt(m[1])+37)%360}, 68%, 43%)`;
+    }
+    used.add(c); out.push(c);
+  }
+  return out;
+}
+
+const CHART_SERIES_COLORS=['#1E40AF','#059669','#D97706','#0891B2','#7C3AED','#DC2626'];
+
+// ---------- Cascading location engine (Issue 1) ----------
+let LOCATIONS={districts:{},specialties:[],divisions:[]};
+
+async function loadLocations(){
+  try{
+    const r=await fetch('/api/locations');
+    LOCATIONS=await r.json();
+  }catch(e){ console.error('locations load failed',e); }
+  return LOCATIONS;
+}
+
+function districtNames(){ return Object.keys(LOCATIONS.districts||{}); }
+function upazilasFor(d){ return (LOCATIONS.districts?.[d]?.upazilas)||[]; }
+function territoriesFor(d){ return (LOCATIONS.districts?.[d]?.territories)||[]; }
+
+/** Single source of truth for the verification form's doctor fields. */
+const formData={doctor:{},location:{district:'',upazila:'',territory:''}};
+
+/**
+ * Cascading change handler: changing District invalidates Upazila +
+ * Territory, so a stale Savar/Chattogram combination can never be saved.
+ */
+function handleLocationChange(type,value){
+  formData.location[type]=value;
+  if(type==='district'){
+    formData.location.upazila='';
+    formData.location.territory=territoriesFor(value)[0]||'';
+  }
+  syncLocationSelects();
+}
+
+function fillSelect(sel,options,value,placeholder){
+  if(!sel) return;
+  sel.innerHTML=`<option value="">${placeholder}</option>`+
+    options.map(o=>`<option value="${o}"${o===value?' selected':''}>${o}</option>`).join('');
+  sel.value=value||'';
+}
+
+function syncLocationSelects(){
+  const d=formData.location.district;
+  fillSelect(document.getElementById('verifyDistrict'),districtNames(),d,'Select district');
+  fillSelect(document.getElementById('verifyUpazila'),upazilasFor(d),formData.location.upazila,
+             d?'Select upazila':'Select district first');
+  fillSelect(document.getElementById('verifyTerritory'),territoriesFor(d),formData.location.territory,
+             d?'Select territory':'Select district first');
+  const up=document.getElementById('verifyUpazila');
+  const te=document.getElementById('verifyTerritory');
+  if(up) up.disabled=!d;
+  if(te) te.disabled=!d;
 }
 
 // --- Global State ---
@@ -455,7 +681,7 @@ document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn=>{
       if(b.classList.contains('nav-btn')){b.classList.add('bg-slate-900','text-white');b.classList.remove('hover:bg-slate-50','text-slate-600');}
       else{b.classList.add('bg-slate-900','text-white');b.classList.remove('text-slate-500');}
     });
-    if(tab==='dashboard'){loadKpis();loadCharts();loadHistoryDash();}
+    if(tab==='dashboard'){loadKpis();loadCharts();loadHistoryDash();loadRecentMedicines();}
     if(tab==='database'){loadMedexStats();searchMedex();loadPopularMedicinesLive();}
   });
 });
@@ -655,21 +881,54 @@ function renderVerification(data){
     const isHigh = confidence>=0.85;
     const icon = isHigh ? '<i class="fas fa-check-circle text-emerald-500"></i>' : '<i class="fas fa-triangle-exclamation text-amber-500"></i>';
     const bg = isHigh ? 'bg-white border-slate-200' : 'bg-amber-50 border-amber-200';
-    return `<div class="flex items-center gap-2"><div class="flex-1"><label class="text-[10px] font-semibold text-slate-500 uppercase">${label}</label><div class="mt-1 flex items-center gap-2"><input id="${id}" value="${value||''}" class="flex-1 px-3 py-2 rounded-xl border ${bg} text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"><span class="text-xs">${icon}</span></div></div></div>`;
+    return `<div class="flex items-center gap-2"><div class="flex-1"><label class="text-[10px] font-semibold text-slate-500 uppercase">${label}</label><div class="mt-1 flex items-center gap-2"><input id="${id}" value="${value||''}" class="flex-1 px-3 py-2 rounded-xl border ${bg} text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"><span class="text-xs">${icon}</span></div></div></div>`;
   }
+
+  // Selects are bound to formData so the submitted payload can never drift
+  // from what is on screen (previously free-text inputs read at submit time).
+  function selectRow(label, id, options, value, placeholder, hint){
+    const opts=`<option value="">${placeholder}</option>`+
+      options.map(o=>`<option value="${o}"${o===value?' selected':''}>${o}</option>`).join('');
+    return `<div class="flex-1">
+      <label class="text-[10px] font-semibold text-slate-500 uppercase">${label}</label>
+      <div class="mt-1 flex items-center gap-2">
+        <select id="${id}" class="flex-1 px-3 py-2 rounded-xl border bg-white border-slate-200 text-sm
+                focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
+                disabled:bg-slate-50 disabled:text-slate-400">${opts}</select>
+      </div>
+      ${hint?`<p class="text-[9px] text-slate-400 mt-0.5">${hint}</p>`:''}
+    </div>`;
+  }
+
+  // seed the shared form state from the scan result
+  formData.doctor={...doc};
+  formData.location={
+    district: doc.district||'',
+    upazila: doc.upazila||'',
+    territory: doc.territory||'',
+  };
 
   doctorForm.innerHTML = `
     ${fieldRow('Doctor Name', doc.name, 0.92, 'verifyDocName')}
     ${fieldRow('BMDC Reg No', doc.bmdc_no, doc.bmdc_no?0.88:0.5, 'verifyBmdc')}
     ${fieldRow('Qualifications', doc.qualifications, 0.9, 'verifyQual')}
     ${fieldRow('Hospital/Chamber', doc.hospital||doc.chamber, 0.85, 'verifyChamber')}
-    ${fieldRow('Specialty', doc.specialty, 0.8, 'verifySpecialty')}
+    <div class="flex gap-2">
+      ${selectRow('Specialty','verifySpecialty',LOCATIONS.specialties||[],doc.specialty||'','Select specialty','Drives the specialty analytics')}
+    </div>
     <div class="grid grid-cols-3 gap-2">
-      ${fieldRow('Upazila', doc.upazila, 0.7, 'verifyUpazila')}
-      ${fieldRow('District', doc.district, 0.7, 'verifyDistrict')}
-      ${fieldRow('Territory', doc.territory, 0.7, 'verifyTerritory')}
+      ${selectRow('District','verifyDistrict',districtNames(),formData.location.district,'Select district','')}
+      ${selectRow('Upazila','verifyUpazila',upazilasFor(formData.location.district),formData.location.upazila,'Select district first','')}
+      ${selectRow('Territory','verifyTerritory',territoriesFor(formData.location.district),formData.location.territory,'Select district first','')}
     </div>
   `;
+
+  // cascade wiring
+  document.getElementById('verifyDistrict').addEventListener('change',e=>handleLocationChange('district',e.target.value));
+  document.getElementById('verifyUpazila').addEventListener('change',e=>handleLocationChange('upazila',e.target.value));
+  document.getElementById('verifyTerritory').addEventListener('change',e=>handleLocationChange('territory',e.target.value));
+  document.getElementById('verifySpecialty').addEventListener('change',e=>{formData.doctor.specialty=e.target.value;});
+  syncLocationSelects();
 
   // Medicines Verification with status pills per upgrade #3
   const medicinesGrid=document.getElementById('medicinesVerifyGrid');
@@ -680,20 +939,61 @@ function renderVerification(data){
     const conf=med.confidence||0;
     const isHigh=conf>=0.85;
     const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>';
-    const borderClass=isHigh?'border-slate-200':'border-amber-200 bg-amber-50/50';
-    // Company emphasis - good design: gradient badge + building icon + bold
-    const companyEmphasis = med.company ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit"><i class="fas fa-building"></i> ${med.company}</div>` : '';
+    // Anything the matcher could not confirm is highlighted for review
+    const needsReview = med.needs_review || med.company_ambiguous || med.company_conflict
+                        || (med.company && !med.company_verified);
+    const borderClass=(isHigh && !needsReview)?'border-slate-200':'border-amber-200 bg-amber-50/50';
+    // Company badge. Colour encodes trust:
+    //   verified against the MedEx catalogue -> indigo + check
+    //   unverified model guess / ambiguous brand -> amber + warning
+    const companyVerified = med.company_verified && !med.company_ambiguous;
+    const companyGrad = companyVerified
+      ? 'from-blue-700 to-blue-600'
+      : 'from-amber-500 to-orange-500';
+    const companyIcon = companyVerified ? 'fa-building' : 'fa-triangle-exclamation';
+    const companyTitle = med.company_ambiguous
+      ? 'This brand name is sold by more than one company - please confirm'
+      : (med.company_verified ? 'Company confirmed from MedEx catalogue'
+                              : 'Not found in MedEx - unverified, please confirm');
+    const companyEmphasis = med.company
+      ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
+           <i class="fas ${companyIcon}"></i> ${med.company}
+           ${companyVerified ? '<i class="fas fa-circle-check text-[10px] opacity-80"></i>' : ''}
+         </div>`
+      : `<div class="mt-2 flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
+           <i class="fas fa-building-circle-xmark"></i> Company not identified
+         </div>`;
+
+    // Warn when the vision model's guess was overridden by the catalogue
+    const conflictNote = med.company_conflict
+      ? `<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1.5"><i class="fas fa-info-circle"></i> Scan read "${med.company_model_guess}" - corrected from MedEx catalogue.</p>`
+      : '';
+
+    // Offer the other manufacturers/strengths of the same brand
+    const altOptions = (med.alternatives && med.alternatives.length)
+      ? `<details class="mt-1.5">
+           <summary class="text-[10px] text-indigo-600 cursor-pointer font-semibold">${med.alternatives.length} other match${med.alternatives.length>1?'es':''} for this brand</summary>
+           <div class="mt-1 space-y-1">
+             ${med.alternatives.map(a=>`
+               <button type="button" class="alt-pick w-full text-left text-[10px] bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-lg px-2 py-1"
+                 data-idx="${idx}" data-company="${a.company||''}" data-strength="${a.strength||''}"
+                 data-type="${a.type||''}" data-generic="${a.generic||''}" data-image="${a.image_url||''}">
+                 <span class="font-semibold">${a.company||'Unknown company'}</span> • ${a.strength||''} ${a.type||''}
+               </button>`).join('')}
+           </div>
+         </details>`
+      : '';
     return `
       <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border ${borderClass} p-3">
         <div class="flex items-start gap-3">
           <div class="relative flex-shrink-0">
             <img src="${med.image_url}" class="w-20 h-20 rounded-xl object-contain bg-slate-50 border-2 border-slate-100 shadow-sm" onerror="this.src='https://placehold.co/100x100'">
-            <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full shadow flex items-center justify-center text-[10px] border"><i class="fas fa-image text-brand-600"></i></div>
+            <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full shadow flex items-center justify-center text-[10px] border"><i class="fas fa-image text-blue-700"></i></div>
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <div class="relative flex-1">
-                <input value="${med.brand_name}" data-idx="${idx}" data-field="brand_name" data-type="medicine-name" class="verify-med medicine-autocomplete font-bold text-[15px] bg-transparent border-b-2 border-slate-200 hover:border-brand-300 focus:border-brand-600 focus:outline-none w-full pb-1" placeholder="Type medicine name...">
+                <input value="${med.brand_name}" data-idx="${idx}" data-field="brand_name" data-type="medicine-name" class="verify-med medicine-autocomplete font-bold text-[15px] bg-transparent border-b-2 border-slate-200 hover:border-blue-300 focus:border-blue-600 focus:outline-none w-full pb-1" placeholder="Type medicine name...">
                 <div id="autocomplete-${idx}" class="autocomplete-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-50"></div>
               </div>
               ${icon}
@@ -705,8 +1005,8 @@ function renderVerification(data){
                 <div class="text-[9px] font-bold tracking-widest uppercase text-blue-600">Type</div>
                 <div class="font-semibold text-slate-900 mt-0.5 flex items-center gap-1.5"><i class="fas fa-capsules text-blue-500"></i> ${med.type||med.form||'Tablet'}</div>
               </div>
-              <div class="bg-violet-50 border border-violet-100 rounded-xl p-2.5">
-                <div class="text-[9px] font-bold tracking-widest uppercase text-violet-600">Ingredient</div>
+              <div class="bg-blue-50 border border-blue-100 rounded-xl p-2.5">
+                <div class="text-[9px] font-bold tracking-widest uppercase text-blue-700">Ingredient</div>
                 <div class="font-medium text-slate-900 mt-0.5 truncate" title="${med.generic_name||med.generic||''}">${med.generic_name||med.generic||'Unknown'}</div>
               </div>
               <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5">
@@ -719,7 +1019,9 @@ function renderVerification(data){
               </div>
             </div>
             ${companyEmphasis}
-            <p class="text-[10px] text-slate-400 mt-2 truncate">Raw: "${med.raw_text}" • Live from medex.com.bd • #${med.line_number}</p>
+            ${conflictNote}
+            ${altOptions}
+            <p class="text-[10px] text-slate-400 mt-2 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
           </div>
         </div>
       </div>
@@ -728,65 +1030,420 @@ function renderVerification(data){
 
   // Attach autocomplete for medicine names
   attachMedicineAutocomplete();
+  attachAlternativePickers();
 
   window.lastScannedData=data;
 }
 
-document.getElementById('verifySaveBtn').addEventListener('click', async()=>{
-  if(!window.lastScannedData) return;
+/**
+ * Verify & Save (Issue 2)
+ * Loading toast -> disabled button with spinner -> success toast ->
+ * dashboard refresh -> workspace reset. Guarded against double submit.
+ */
+let isSaving=false;
+
+function resetWorkspaceState(){
+  window.lastScannedData=null;
+  formData.doctor={};
+  formData.location={district:'',upazila:'',territory:''};
+  const dv=document.getElementById('doctorVerification');
+  const mv=document.getElementById('medicinesVerification');
+  if(dv) dv.classList.add('hidden');
+  if(mv) mv.classList.add('hidden');
+  clearWorkspace();
+}
+
+async function verifyAndSave(){
+  if(isSaving) return;
+  if(!window.lastScannedData){ toast.error('Nothing to save - scan a prescription first'); return; }
+
+  const btn=document.getElementById('verifySaveBtn');
+  const original=btn.innerHTML;
   const id=window.lastScannedData.id;
+
+  // Read straight from the bound state; selects keep formData authoritative.
   const verifiedDoctor={
-    name:document.getElementById('verifyDocName').value,
-    bmdc_no:document.getElementById('verifyBmdc').value,
-    chamber:document.getElementById('verifyChamber')?.value || window.lastScannedData.doctor.chamber,
-    qualifications:document.getElementById('verifyQual')?.value || window.lastScannedData.doctor.qualifications,
-    specialty:document.getElementById('verifySpecialty')?.value || window.lastScannedData.doctor.specialty,
-    upazila:document.getElementById('verifyUpazila')?.value,
-    district:document.getElementById('verifyDistrict')?.value,
-    territory:document.getElementById('verifyTerritory')?.value,
-    hospital:window.lastScannedData.doctor.hospital
+    name:document.getElementById('verifyDocName')?.value?.trim()||'',
+    bmdc_no:document.getElementById('verifyBmdc')?.value?.trim()||'',
+    chamber:document.getElementById('verifyChamber')?.value?.trim()||'',
+    qualifications:document.getElementById('verifyQual')?.value?.trim()||'',
+    specialty:document.getElementById('verifySpecialty')?.value||'',
+    district:document.getElementById('verifyDistrict')?.value||'',
+    upazila:document.getElementById('verifyUpazila')?.value||'',
+    territory:document.getElementById('verifyTerritory')?.value||'',
+    hospital:window.lastScannedData.doctor?.hospital||'',
   };
-  const verifiedMeds=[...window.lastScannedData.medicines];
+
+  // client-side validation with inline focus
+  if(!verifiedDoctor.name){
+    toast.error('Doctor name is required');
+    document.getElementById('verifyDocName')?.focus();
+    return;
+  }
+  if(verifiedDoctor.upazila && !verifiedDoctor.district){
+    toast.error('Select a district before an upazila');
+    document.getElementById('verifyDistrict')?.focus();
+    return;
+  }
+
+  const verifiedMeds=[...(window.lastScannedData.medicines||[])];
   document.querySelectorAll('.verify-med').forEach(input=>{
     const idx=parseInt(input.dataset.idx);
     const field=input.dataset.field;
+    if(!verifiedMeds[idx]) return;
     if(field==='brand_name') verifiedMeds[idx].brand_name=input.value;
     if(field==='dosage'){verifiedMeds[idx].dosage=input.value;verifiedMeds[idx].dosage_normalized=input.value;}
     if(field==='frequency') verifiedMeds[idx].frequency=input.value;
   });
 
+  isSaving=true;
+  btn.disabled=true;
+  btn.classList.add('opacity-70','cursor-not-allowed');
+  btn.innerHTML='<i class="fas fa-circle-notch fa-spin mr-2"></i>Saving...';
+  toast.loading('Saving prescription analytics...',{id:'save-prescription'});
+
   try{
-    if(id){
-      const resp=await fetch(`/api/prescriptions/${id}/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({doctor:verifiedDoctor, medicines:verifiedMeds})});
-      const data=await resp.json();
-      alert('Verified & Saved! '+data.message);
-    }else{
-      alert('Saved locally - verification would update DB in production');
+    if(!id) throw new Error('This scan has no database id');
+    const resp=await fetch(`/api/prescriptions/${id}/verify`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({doctor:verifiedDoctor, medicines:verifiedMeds})});
+    if(!resp.ok){
+      let detail=`HTTP ${resp.status}`;
+      try{ detail=(await resp.json()).detail||detail; }catch(_){}
+      throw new Error(detail);
     }
-    loadKpis();loadCharts();loadHistory();loadHistoryDash();
-  }catch(e){alert('Verification failed: '+e.message);}
+    const data=await resp.json();
+
+    toast.success(data.message||'Prescription verified and saved successfully!',
+                  {id:'save-prescription'});
+
+    // refresh every dependent view, then return to the idle workspace
+    await refreshDashboard();
+    resetWorkspaceState();
+  }catch(e){
+    toast.error(`Save failed: ${e.message}`,{id:'save-prescription'});
+  }finally{
+    isSaving=false;
+    btn.disabled=false;
+    btn.classList.remove('opacity-70','cursor-not-allowed');
+    btn.innerHTML=original;
+  }
+}
+
+document.getElementById('verifySaveBtn').addEventListener('click', verifyAndSave);
+document.getElementById('verifyCancelBtn').addEventListener('click',()=>{
+  resetWorkspaceState();
+  toast.info('Verification discarded');
 });
-document.getElementById('verifyCancelBtn').addEventListener('click',()=>{document.getElementById('verificationWorkspace').classList.add('hidden');document.getElementById('workspaceEmpty').classList.remove('hidden');});
+
+/** Invalidate + refetch everything the save affects. */
+async function refreshDashboard(){
+  await Promise.allSettled([
+    loadKpis(), loadCharts(), loadHistory(), loadRecentMedicines(), loadFilterOptions(),
+  ]);
+}
+
+/* ============================================================
+   Global filter toolbar
+   ============================================================ */
+const globalFilters={territory:'',district:'',specialty:'',mr_id:'',days:'30'};
+
+/** Query-string fragment appended to every dashboard request. */
+function filterQuery(){
+  const p=new URLSearchParams();
+  if(globalFilters.territory) p.set('territory',globalFilters.territory);
+  if(globalFilters.district)  p.set('district',globalFilters.district);
+  if(globalFilters.specialty) p.set('specialty',globalFilters.specialty);
+  if(globalFilters.mr_id)     p.set('mr_id',globalFilters.mr_id);
+  if(globalFilters.days)      p.set('days',globalFilters.days);
+  const s=p.toString();
+  return s?('&'+s):'';
+}
+/** Same fragment, but starting with '?' - for URLs that have no other param. */
+function filterQueryFirst(){ return filterQuery().replace(/^&/,'?'); }
+
+/** Build a URL safely regardless of whether `path` already has a query. */
+function apiUrl(path, params){
+  const u=new URLSearchParams(params||{});
+  const f=new URLSearchParams(filterQuery().replace(/^&/,''));
+  for(const [k,v] of f) u.set(k,v);
+  const s=u.toString();
+  return s ? `${path}${path.includes('?')?'&':'?'}${s}` : path;
+}
+
+async function loadFilterOptions(){
+  try{
+    const d=await (await fetch('/api/filters')).json();
+    const keep=(sel,val)=>{ if(sel) sel.value=val||''; };
+    const fill=(id,items,label,cur)=>{
+      const sel=document.getElementById(id);
+      if(!sel) return;
+      sel.innerHTML=`<option value="">${label}</option>`+
+        items.map(v=>`<option value="${v}">${v}</option>`).join('');
+      keep(sel,cur);
+    };
+    fill('fTerritory',d.territories||[],'All Territories',globalFilters.territory);
+    fill('fDistrict', d.districts||[], 'All Districts',  globalFilters.district);
+    fill('fSpecialty',d.specialties||[],'All Specialties',globalFilters.specialty);
+    fill('fMr',       d.mr_ids||[],    'All MRs',        globalFilters.mr_id);
+  }catch(e){ console.error('filters',e); }
+}
+
+function activeFilterCount(){
+  return ['territory','district','specialty','mr_id'].filter(k=>globalFilters[k]).length;
+}
+
+async function applyFilters(){
+  const badge=document.getElementById('fActiveCount');
+  const n=activeFilterCount();
+  if(badge) badge.textContent=n?`${n} filter${n>1?'s':''} active`:'';
+  leaderboardState.offset=0;
+  rsState.offset=0;
+  await Promise.allSettled([loadKpis(), loadCharts(), loadRecentMedicines()]);
+}
+
+function initFilterBar(){
+  const bind=(id,key)=>document.getElementById(id)?.addEventListener('change',e=>{
+    globalFilters[key]=e.target.value; applyFilters();
+  });
+  bind('fTerritory','territory'); bind('fDistrict','district');
+  bind('fSpecialty','specialty'); bind('fMr','mr_id'); bind('fDays','days');
+
+  document.getElementById('fReset')?.addEventListener('click',()=>{
+    Object.assign(globalFilters,{territory:'',district:'',specialty:'',mr_id:'',days:'30'});
+    ['fTerritory','fDistrict','fSpecialty','fMr'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';});
+    const fd=document.getElementById('fDays'); if(fd) fd.value='30';
+    applyFilters(); toast.info('Filters reset');
+  });
+
+  const doExport=()=>{
+    const p=new URLSearchParams();
+    if(globalFilters.territory) p.set('territory',globalFilters.territory);
+    if(globalFilters.district)  p.set('district',globalFilters.district);
+    if(globalFilters.specialty) p.set('specialty',globalFilters.specialty);
+    if(globalFilters.mr_id)     p.set('mr_id',globalFilters.mr_id);
+    if(globalFilters.days)      p.set('days',globalFilters.days);
+    if(rsState.q)               p.set('q',rsState.q);
+    window.location.href='/api/export/recent-medicines.csv?'+p.toString();
+    toast.success('Export started');
+  };
+  document.getElementById('fExport')?.addEventListener('click',doExport);
+  document.getElementById('rsExport')?.addEventListener('click',doExport);
+}
+
+/* ============================================================
+   Live Recent Scans data grid (Issue 3)
+   ============================================================ */
+const rsState={offset:0,limit:10,q:'',order:'created_at',direction:'desc'};
+
+function timeAgo(iso){
+  if(!iso) return '';
+  const d=new Date(iso), s=(Date.now()-d.getTime())/1000;
+  if(s<60) return 'just now';
+  if(s<3600) return `${Math.floor(s/60)}m ago`;
+  if(s<86400) return `${Math.floor(s/3600)}h ago`;
+  if(s<604800) return `${Math.floor(s/86400)}d ago`;
+  return d.toLocaleDateString();
+}
+
+async function loadRecentMedicines(){
+  const body=document.getElementById('rsBody');
+  const empty=document.getElementById('rsEmpty');
+  const pager=document.getElementById('rsPager');
+  if(!body) return;
+  try{
+    const p=new URLSearchParams({limit:rsState.limit,offset:rsState.offset,
+                                 order:rsState.order,direction:rsState.direction});
+    if(rsState.q) p.set('q',rsState.q);
+    const data=await (await fetch('/api/recent-medicines?'+p+filterQuery())).json();
+    const items=data.items||[];
+
+    if(!items.length){
+      body.innerHTML='';
+      empty?.classList.remove('hidden');
+      if(pager) pager.innerHTML='';
+      return;
+    }
+    empty?.classList.add('hidden');
+
+    body.innerHTML=items.map(it=>{
+      const conf=Math.round((it.confidence_score||0)*100);
+      const confCls=conf>=85?'bg-emerald-50 text-emerald-700 border-emerald-200'
+                   :conf>=60?'bg-amber-50 text-amber-700 border-amber-200'
+                            :'bg-red-50 text-red-700 border-red-200';
+      const color=getCompanyColor(it.company_name||'');
+      const verified=it.company_verified
+        ? '<i class="fas fa-circle-check text-emerald-500 text-[9px]" title="Company verified against MedEx"></i>'
+        : '<i class="fas fa-triangle-exclamation text-amber-500 text-[9px]" title="Company unverified"></i>';
+      return `<tr class="border-b border-slate-100 hover:bg-slate-50/70">
+        <td class="py-2 px-2 text-slate-500 whitespace-nowrap">${timeAgo(it.created_at)}</td>
+        <td class="py-2 px-2 font-medium text-slate-900 truncate max-w-[130px]" title="${it.doctor_name||''}">${it.doctor_name||'—'}</td>
+        <td class="py-2 px-2 text-slate-500 truncate max-w-[100px]">${it.specialty||'—'}</td>
+        <td class="py-2 px-2">
+          <div class="font-semibold text-slate-900">${it.brand_name}</div>
+          <div class="text-[10px] text-slate-500">${it.strength||''} ${it.dosage_form||''}</div>
+        </td>
+        <td class="py-2 px-2">
+          <span class="inline-flex items-center gap-1.5 max-w-[170px]">
+            <span class="w-2 h-2 rounded-full shrink-0" style="background:${color}"></span>
+            <span class="truncate" title="${it.company_name||''}">${it.company_name||'Unknown'}</span>
+            ${verified}
+          </span>
+        </td>
+        <td class="py-2 px-2"><span class="px-1.5 py-0.5 rounded-full border text-[10px] font-semibold ${confCls}">${conf}%</span></td>
+        <td class="py-2 px-2 text-slate-500 text-[10px]">${[it.upazila,it.district].filter(Boolean).join(', ')||'—'}</td>
+      </tr>`;}).join('');
+
+    const from=data.total?rsState.offset+1:0;
+    const to=Math.min(rsState.offset+rsState.limit,data.total);
+    if(pager){
+      pager.innerHTML=`
+        <span class="text-[11px] text-slate-500">Showing ${from}-${to} of ${data.total} medicines</span>
+        <div class="flex items-center gap-1">
+          <button id="rsPrev" class="px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40" ${rsState.offset===0?'disabled':''}>
+            <i class="fas fa-chevron-left mr-1"></i>Prev</button>
+          <button id="rsNext" class="px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40" ${to>=data.total?'disabled':''}>
+            Next<i class="fas fa-chevron-right ml-1"></i></button>
+        </div>`;
+      document.getElementById('rsPrev')?.addEventListener('click',()=>{
+        rsState.offset=Math.max(0,rsState.offset-rsState.limit); loadRecentMedicines();});
+      document.getElementById('rsNext')?.addEventListener('click',()=>{
+        rsState.offset+=rsState.limit; loadRecentMedicines();});
+    }
+  }catch(e){ console.error('recent medicines',e); }
+}
+
+function initRecentScans(){
+  let t=null;
+  document.getElementById('rsSearch')?.addEventListener('input',e=>{
+    clearTimeout(t);
+    t=setTimeout(()=>{rsState.q=e.target.value.trim();rsState.offset=0;loadRecentMedicines();},350);
+  });
+  document.getElementById('rsRefresh')?.addEventListener('click',()=>{
+    loadRecentMedicines(); toast.info('Recent scans refreshed');
+  });
+  document.querySelectorAll('[data-sort]').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const col=th.dataset.sort;
+      if(rsState.order===col){
+        rsState.direction=rsState.direction==='desc'?'asc':'desc';
+      }else{ rsState.order=col; rsState.direction='desc'; }
+      rsState.offset=0; loadRecentMedicines();
+    });
+  });
+}
+
+/* ============================================================
+   Drill-down modal
+   ============================================================ */
+function openDrill(title,subtitle,html){
+  document.getElementById('drillTitle').textContent=title;
+  document.getElementById('drillSubtitle').textContent=subtitle||'';
+  document.getElementById('drillBody').innerHTML=html;
+  const m=document.getElementById('drillModal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeDrill(){
+  const m=document.getElementById('drillModal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+function drillList(rows,labelKey,valueKey,accent){
+  if(!rows||!rows.length) return '<p class="text-xs text-slate-500">No data.</p>';
+  const max=Math.max(...rows.map(r=>r[valueKey]))||1;
+  return `<div class="space-y-1.5">`+rows.map(r=>`
+    <div class="flex items-center gap-2">
+      <span class="text-xs w-44 truncate text-slate-700" title="${r[labelKey]}">${r[labelKey]}</span>
+      <div class="flex-1 h-4 bg-slate-100 rounded-md overflow-hidden">
+        <div class="h-full rounded-md" style="width:${r[valueKey]/max*100}%;background:${accent}"></div>
+      </div>
+      <span class="text-[11px] font-bold text-slate-900 w-8 text-right">${r[valueKey]}</span>
+    </div>`).join('')+`</div>`;
+}
+
+async function openCompanyDrilldown(company){
+  openDrill(company,'Loading...','<div class="py-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin"></i></div>');
+  try{
+    const d=await (await fetch('/api/dashboard/company-drilldown?company='+encodeURIComponent(company)+filterQuery())).json();
+    const color=getCompanyColor(company);
+    openDrill(company,`${d.total} captured items in the current filter`,`
+      <div class="grid md:grid-cols-2 gap-5">
+        <div><h4 class="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">Top Generics</h4>
+          ${drillList(d.generics,'generic','count',color)}</div>
+        <div><h4 class="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">Top Brands</h4>
+          ${drillList(d.brands,'brand_name','count',color)}</div>
+      </div>
+      <div class="mt-5"><h4 class="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">Top Prescribing Doctors</h4>
+        ${drillList(d.doctors,'doctor_name','count','#1E40AF')}</div>`);
+  }catch(e){
+    openDrill(company,'','<p class="text-xs text-red-600">Failed to load drill-down.</p>');
+  }
+}
+
+async function openBrandDrilldown(brand){
+  openDrill(brand,'Loading...','<div class="py-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin"></i></div>');
+  try{
+    const d=await (await fetch('/api/dashboard/brand-doctors?brand='+encodeURIComponent(brand)+filterQuery())).json();
+    const rows=d.doctors||[];
+    const html=rows.length?`
+      <table class="w-full text-xs">
+        <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+          <th class="py-2 font-semibold">Doctor</th><th class="py-2 font-semibold">Specialty</th>
+          <th class="py-2 font-semibold">Chamber</th><th class="py-2 font-semibold text-right">Times</th>
+        </tr></thead>
+        <tbody>${rows.map(r=>`<tr class="border-b border-slate-100">
+          <td class="py-2 font-medium text-slate-900">${r.doctor_name}</td>
+          <td class="py-2 text-slate-500">${r.specialty}</td>
+          <td class="py-2 text-slate-500 truncate max-w-[160px]">${r.chamber}</td>
+          <td class="py-2 text-right font-bold">${r.count}</td></tr>`).join('')}</tbody>
+      </table>`:'<p class="text-xs text-slate-500">No doctors found for this brand.</p>';
+    openDrill(brand,`Prescribed by ${rows.length} doctor(s)`,html);
+  }catch(e){
+    openDrill(brand,'','<p class="text-xs text-red-600">Failed to load drill-down.</p>');
+  }
+}
+
+document.getElementById('drillClose')?.addEventListener('click',closeDrill);
+document.getElementById('drillModal')?.addEventListener('click',e=>{
+  if(e.target.id==='drillModal') closeDrill();});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrill(); });
 
 // Dashboard KPIs
 async function loadKpis(){
   try{
-    const res=await fetch('/api/dashboard/kpis');
-    const data=await res.json();
-    document.getElementById('kpiToday').textContent=data.total_prescriptions.today;
-    document.getElementById('kpiWeek').textContent=data.total_prescriptions.week;
-    document.getElementById('kpiMonth').textContent=data.total_prescriptions.month;
-    document.getElementById('kpiTotalAll').textContent=data.total_prescriptions.all;
-    document.getElementById('kpiTopBrand').textContent=data.top_brand.brand;
-    document.getElementById('kpiTopBrandCount').textContent=data.top_brand.count;
-    document.getElementById('kpiMarketShare').textContent=data.market_share.percentage;
-    document.getElementById('kpiOwnCompany').textContent=data.market_share.own_company;
-    document.getElementById('kpiMarketBar').style.width=data.market_share.percentage+'%';
-    document.getElementById('kpiActiveDoctors').textContent=data.doctor_coverage.active;
-    document.getElementById('kpiTotalDoctors').textContent=data.doctor_coverage.total;
+    const data=await (await fetch('/api/dashboard/kpis'+filterQueryFirst())).json();
+    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+
+    set('kpiToday',data.total_prescriptions.today);
+    set('kpiWeek',data.total_prescriptions.week);
+    set('kpiMonth',data.total_prescriptions.month);
+    set('kpiTotalAll',data.total_prescriptions.all);
+    set('kpiItems',(data.identified_items?.count)||0);
+    set('kpiTopBrand',data.top_brand.brand);
+    set('kpiTopBrandCount',data.top_brand.count);
+    set('kpiMarketShare',data.market_share.percentage);
+    set('kpiOwnCompany',data.market_share.own_company);
+    set('kpiActiveDoctors',data.doctor_coverage.active);
+    set('kpiTotalDoctors',data.doctor_coverage.total);
+
+    const bar=document.getElementById('kpiMarketBar');
+    if(bar) bar.style.width=data.market_share.percentage+'%';
+
+    // period-over-period deltas
+    const delta=(id,val,suffix='%')=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      if(val===null||val===undefined||isNaN(val)){el.textContent='';return;}
+      const up=val>=0;
+      el.className='text-[10px] font-semibold '+(up?'text-emerald-600':'text-red-600');
+      el.innerHTML=`<i class="fas fa-arrow-${up?'up':'down'}"></i> ${up?'+':''}${val}${suffix}`;
+    };
+    delta('kpiScansDelta',data.total_prescriptions.delta_percent);
+    delta('kpiShareDelta',data.market_share.delta_percent,' pts');
+
     if(data.total_prescriptions.all>0){
       document.querySelectorAll('[id^="empty"]').forEach(el=>el.classList.add('hidden'));
-      document.querySelectorAll('canvas').forEach(c=>c.classList.remove('hidden','opacity-30'));
     }
   }catch(e){console.error(e);}
 }
@@ -794,75 +1451,164 @@ async function loadKpis(){
 let chartMostPrescribed=null, chartCompanyShare=null, chartGenericBrand=null;
 
 async function loadCharts(){
+  const qs=filterQuery();
   try{
-    const res1=await fetch('/api/dashboard/most-prescribed?limit=8');
-    const data1=await res1.json();
+    // ---- Widget A: Most Prescribed Brands (click a bar -> doctor list) ----
+    const data1=await (await fetch('/api/dashboard/most-prescribed?limit=8'+qs)).json();
+    const ctx1=document.getElementById('chartMostPrescribedReal');
     if(data1.medicines && data1.medicines.length>0){
       document.getElementById('emptyMostPrescribed').classList.add('hidden');
-      const ctx1=document.getElementById('chartMostPrescribedReal');
       ctx1.classList.remove('hidden');
       if(chartMostPrescribed) chartMostPrescribed.destroy();
+      const barColors=companyColorScale(data1.medicines.map(m=>m.manufacturer||''));
       chartMostPrescribed=new Chart(ctx1,{
         type:'bar',
-        data:{
-          labels:data1.medicines.map(m=>m.brand_name),
-          datasets:[{label:'Capture Count', data:data1.medicines.map(m=>m.capture_count), backgroundColor:'rgba(139,92,246,0.8)', borderRadius:6}]
-        },
-        options:{indexAxis:'y', responsive:true, plugins:{legend:{display:false}}}
+        data:{labels:data1.medicines.map(m=>m.brand_name),
+          datasets:[{label:'Prescriptions', data:data1.medicines.map(m=>m.capture_count),
+            backgroundColor:barColors, borderRadius:6, borderWidth:0}]},
+        options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+          onClick:(evt,els)=>{
+            if(!els.length) return;
+            openBrandDrilldown(data1.medicines[els[0].index].brand_name);
+          },
+          onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},
+          plugins:{legend:{display:false},
+            tooltip:{callbacks:{afterLabel:(c)=>{
+              const m=data1.medicines[c.dataIndex];
+              return [`${m.manufacturer||'Unknown company'}`,
+                      `${m.market_share_percent}% of captured items`,
+                      'Click to see prescribing doctors'];}}}},
+          scales:{x:{grid:{color:'#F1F5F9'},ticks:{precision:0}},y:{grid:{display:false}}}}
       });
+    }else{
+      document.getElementById('emptyMostPrescribed').classList.remove('hidden');
+      ctx1.classList.add('hidden');
+      if(chartMostPrescribed){chartMostPrescribed.destroy();chartMostPrescribed=null;}
     }
 
-    const res2=await fetch('/api/dashboard/company-share');
-    const data2=await res2.json();
+    // ---- Widget B: Company Share of Voice (distinct colours + drill-down) ----
+    // NOTE: this endpoint has no other query param, so the filter fragment
+    // must start with '?' - using '&' produced a 404 and a blank donut.
+    const data2=await (await fetch('/api/dashboard/company-share'+filterQueryFirst())).json();
+    const ctx2=document.getElementById('chartCompanyShareReal');
     if(data2.companies && data2.companies.length>0){
       document.getElementById('emptyCompanyShare').classList.add('hidden');
-      const ctx2=document.getElementById('chartCompanyShareReal');
       ctx2.classList.remove('hidden');
       if(chartCompanyShare) chartCompanyShare.destroy();
-      const colors=data2.companies.map(c=>c.company.toLowerCase().includes('healthcare')||c.company.toLowerCase().includes('square')?'#8b5cf6':'#e5e7eb');
+      const names=data2.companies.map(c=>c.company);
+      // Every company gets its own colour. Previously all non-Square/Healthcare
+      // companies shared one grey, making the donut unreadable.
+      const colors=companyColorScale(names);
       chartCompanyShare=new Chart(ctx2,{
         type:'doughnut',
-        data:{
-          labels:data2.companies.map(c=>c.company.substring(0,20)),
-          datasets:[{data:data2.companies.map(c=>c.percentage), backgroundColor:colors, borderWidth:0}]
-        },
-        options:{responsive:true, plugins:{legend:{position:'bottom',labels:{font:{size:10}, usePointStyle:true}}}}
+        data:{labels:names.map(n=>n.length>26?n.slice(0,26)+'...':n),
+          datasets:[{data:data2.companies.map(c=>c.percentage),
+            backgroundColor:colors, borderWidth:2, borderColor:'#FFFFFF',
+            hoverOffset:10}]},
+        options:{responsive:true, maintainAspectRatio:false, cutout:'62%',
+          onClick:(evt,els)=>{
+            if(!els.length) return;
+            const c=data2.companies[els[0].index];
+            if(c.is_others){ toast.info(`Others = ${c.members?.length||0} smaller companies`); return; }
+            openCompanyDrilldown(c.company);
+          },
+          onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},
+          plugins:{legend:{position:'bottom',
+              labels:{font:{size:10},usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:10}},
+            tooltip:{callbacks:{label:(c)=>{
+              const item=data2.companies[c.dataIndex];
+              return ` ${item.company}: ${item.percentage}% (${item.count} items)`;},
+              afterLabel:(c)=>data2.companies[c.dataIndex].is_others?'':'Click to drill down'}}}}
       });
+    }else{
+      document.getElementById('emptyCompanyShare').classList.remove('hidden');
+      ctx2.classList.add('hidden');
+      if(chartCompanyShare){chartCompanyShare.destroy();chartCompanyShare=null;}
     }
 
-    const res4=await fetch('/api/dashboard/generic-brand-matrix');
-    const data4=await res4.json();
+    // ---- Widget D: Generic vs Brand by Specialty ----
+    const data4=await (await fetch('/api/dashboard/generic-brand-matrix')).json();
     if(data4.matrix && data4.matrix.length>0){
       document.getElementById('emptyGenericBrand').classList.add('hidden');
       const ctx4=document.getElementById('chartGenericBrand');
+      ctx4.classList.remove('hidden');
       if(chartGenericBrand) chartGenericBrand.destroy();
       const generics=Object.keys(data4.matrix[0]).filter(k=>k!=='specialty');
-      const datasets=generics.slice(0,4).map((gen,idx)=>({label:gen, data:data4.matrix.map(m=>m[gen]||0), backgroundColor:['#8b5cf6','#10b981','#f59e0b','#06b6d4'][idx%4], borderRadius:4}));
+      const datasets=generics.slice(0,6).map((gen,idx)=>({
+        label:gen, data:data4.matrix.map(m=>m[gen]||0),
+        backgroundColor:CHART_SERIES_COLORS[idx%CHART_SERIES_COLORS.length],
+        borderRadius:4, borderWidth:0}));
       chartGenericBrand=new Chart(ctx4,{
         type:'bar',
-        data:{labels:data4.matrix.map(m=>m.specialty), datasets:datasets},
-        options:{responsive:true, scales:{x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#f1f5f9'}}}, plugins:{legend:{position:'bottom',labels:{font:{size:10}, usePointStyle:true}}}}
+        data:{labels:data4.matrix.map(m=>m.specialty), datasets},
+        options:{responsive:true, maintainAspectRatio:false,
+          scales:{x:{stacked:true,grid:{display:false}},
+                  y:{stacked:true,grid:{color:'#F1F5F9'},ticks:{precision:0}}},
+          plugins:{legend:{position:'bottom',
+            labels:{font:{size:10},usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:10}}}}
       });
-    }
-
-    const res3=await fetch('/api/dashboard/top-doctors?limit=5');
-    const data3=await res3.json();
-    const leaderboardDiv=document.getElementById('doctorLeaderboard');
-    const emptyLeaderboard=document.getElementById('emptyDoctorLeaderboard');
-    if(data3.doctors && data3.doctors.length>0){
-      emptyLeaderboard.classList.add('hidden');
-      leaderboardDiv.innerHTML=data3.doctors.map((doc,idx)=>`
-        <div class="flex items-center gap-2 p-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
-          <div class="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-[11px] font-bold">${idx+1}</div>
-          <div class="flex-1 min-w-0"><p class="text-xs font-medium truncate">${doc.doctor_name}</p><p class="text-[10px] text-slate-500 truncate">${doc.chamber} • ${doc.specialty}</p></div>
-          <div class="text-right"><p class="text-[11px] font-bold"><span class="text-brand-600">${doc.prescription_volume_own}</span> / ${doc.prescription_volume_competitor}</p><p class="text-[10px] ${doc.conversion_rate>=50?'text-emerald-600':'text-amber-600'}">${doc.conversion_rate}% conv</p></div>
-        </div>
-      `).join('');
     }else{
-      emptyLeaderboard.classList.remove('hidden');
+      document.getElementById('emptyGenericBrand').classList.remove('hidden');
     }
 
+    await loadDoctorLeaderboard();
   }catch(e){console.error('Charts error',e);}
+}
+
+/* ---------- Doctor Conversion Leaderboard (searchable + paginated) ---------- */
+let leaderboardState={offset:0,limit:5,q:''};
+
+async function loadDoctorLeaderboard(){
+  const div=document.getElementById('doctorLeaderboard');
+  const empty=document.getElementById('emptyDoctorLeaderboard');
+  if(!div) return;
+  try{
+    const p=new URLSearchParams({limit:leaderboardState.limit,offset:leaderboardState.offset});
+    if(leaderboardState.q) p.set('q',leaderboardState.q);
+    const data=await (await fetch('/api/dashboard/top-doctors?'+p+filterQuery())).json();
+    const docs=data.doctors||[];
+    if(!docs.length){
+      div.innerHTML='';
+      empty?.classList.remove('hidden');
+      const pager=document.getElementById('leaderboardPager');
+      if(pager) pager.innerHTML='';
+      return;
+    }
+    empty?.classList.add('hidden');
+    div.innerHTML=docs.map((doc,idx)=>`
+      <div class="flex items-center gap-2 p-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+        <div class="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-bold">${leaderboardState.offset+idx+1}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold truncate text-slate-900">${doc.doctor_name}</p>
+          <p class="text-[10px] text-slate-500 truncate">${doc.specialty} • ${doc.chamber}${doc.district?' • '+doc.district:''}</p>
+          <div class="mt-1 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500 rounded-full" style="width:${doc.conversion_rate}%"></div>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-[11px] font-bold"><span class="text-emerald-600">${doc.prescription_volume_own}</span> <span class="text-slate-400">/</span> ${doc.prescription_volume_competitor}</p>
+          <p class="text-[10px] ${doc.conversion_rate>=50?'text-emerald-600':'text-amber-600'} font-semibold">${doc.conversion_rate}% conv</p>
+          <p class="text-[9px] text-slate-400">${doc.prescriptions} Rx</p>
+        </div>
+      </div>`).join('');
+
+    const pager=document.getElementById('leaderboardPager');
+    if(pager){
+      const from=data.total?leaderboardState.offset+1:0;
+      const to=Math.min(leaderboardState.offset+leaderboardState.limit,data.total);
+      pager.innerHTML=`
+        <span class="text-[10px] text-slate-500">${from}-${to} of ${data.total}</span>
+        <div class="flex gap-1">
+          <button id="lbPrev" class="px-2 py-1 text-[10px] rounded-lg border border-slate-200 bg-white disabled:opacity-40" ${leaderboardState.offset===0?'disabled':''}>Prev</button>
+          <button id="lbNext" class="px-2 py-1 text-[10px] rounded-lg border border-slate-200 bg-white disabled:opacity-40" ${to>=data.total?'disabled':''}>Next</button>
+        </div>`;
+      document.getElementById('lbPrev')?.addEventListener('click',()=>{
+        leaderboardState.offset=Math.max(0,leaderboardState.offset-leaderboardState.limit);
+        loadDoctorLeaderboard();});
+      document.getElementById('lbNext')?.addEventListener('click',()=>{
+        leaderboardState.offset+=leaderboardState.limit; loadDoctorLeaderboard();});
+    }
+  }catch(e){console.error('leaderboard',e);}
 }
 
 // Global Search
@@ -964,6 +1710,30 @@ async function searchMedex(){
 document.getElementById('medexSearch')?.addEventListener('input',()=>{clearTimeout(window.medexTimer);window.medexTimer=setTimeout(searchMedex,400);});
 document.getElementById('refreshMedex')?.addEventListener('click',loadMedexStats);
 
+// Pick a different manufacturer / strength variant of the same brand.
+// Whatever the user picks is authoritative: mark it verified so it is never
+// second-guessed again downstream.
+function attachAlternativePickers(){
+  document.querySelectorAll('.alt-pick').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=parseInt(btn.dataset.idx);
+      const med=window.lastScannedData?.medicines?.[idx];
+      if(!med) return;
+      med.company=btn.dataset.company||'';
+      med.strength=btn.dataset.strength||med.strength;
+      med.type=btn.dataset.type||med.type;
+      med.generic_name=btn.dataset.generic||med.generic_name;
+      if(btn.dataset.image) med.image_url=btn.dataset.image;
+      med.company_source='user';
+      med.company_verified=true;
+      med.company_ambiguous=false;
+      med.company_conflict=false;
+      med.needs_review=false;
+      renderVerification(window.lastScannedData);
+    });
+  });
+}
+
 // Medicine Name Autocomplete - Suggest names from database or live from medex.com.bd
 function attachMedicineAutocomplete(){
   document.querySelectorAll('.medicine-autocomplete').forEach(input=>{
@@ -1025,14 +1795,21 @@ function attachMedicineAutocomplete(){
                   window.lastScannedData.medicines[medIdx].ingredient=ingredient||generic;
                   window.lastScannedData.medicines[medIdx].strength=strength;
                   window.lastScannedData.medicines[medIdx].company=company;
+                  // A human picked this row straight out of the MedEx
+                  // catalogue -> it is authoritative and fully verified.
+                  window.lastScannedData.medicines[medIdx].company_source='user';
+                  window.lastScannedData.medicines[medIdx].company_verified=true;
+                  window.lastScannedData.medicines[medIdx].company_ambiguous=false;
+                  window.lastScannedData.medicines[medIdx].company_conflict=false;
+                  window.lastScannedData.medicines[medIdx].needs_review=false;
                   if(image) window.lastScannedData.medicines[medIdx].image_url=image;
                   
                   // Update UI elements in card
                   const typeEl = card.querySelector('.bg-blue-50');
                   if(typeEl) typeEl.innerHTML=`<div class="text-[9px] font-bold tracking-widest uppercase text-blue-600">Type</div><div class="font-semibold text-slate-900 mt-0.5 flex items-center gap-1.5"><i class="fas fa-capsules text-blue-500"></i> ${type}</div>`;
 
-                  const ingredientEl = card.querySelector('.bg-violet-50');
-                  if(ingredientEl) ingredientEl.innerHTML=`<div class="text-[9px] font-bold tracking-widest uppercase text-violet-600">Ingredient</div><div class="font-medium text-slate-900 mt-0.5 truncate">${generic}</div>`;
+                  const ingredientEl = card.querySelector('.bg-blue-50');
+                  if(ingredientEl) ingredientEl.innerHTML=`<div class="text-[9px] font-bold tracking-widest uppercase text-blue-700">Ingredient</div><div class="font-medium text-slate-900 mt-0.5 truncate">${generic}</div>`;
 
                   const strengthEl = card.querySelector('.bg-emerald-50');
                   if(strengthEl) strengthEl.innerHTML=`<div class="text-[9px] font-bold tracking-widest uppercase text-emerald-600">MG / Strength</div><div class="font-bold text-slate-900 mt-0.5 text-[13px]">${strength}</div>`;
@@ -1061,10 +1838,19 @@ function attachMedicineAutocomplete(){
   });
 }
 
-loadHistory();
-loadKpis();
-loadCharts();
-loadMedexStats();
+/* ---------- Bootstrap ---------- */
+(async function initApp(){
+  // locations must be loaded before the verification form can render selects
+  await loadLocations();
+  initFilterBar();
+  initRecentScans();
+  await loadFilterOptions();
+  loadHistory();
+  loadKpis();
+  loadCharts();
+  loadRecentMedicines();
+  loadMedexStats();
+})();
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/static/js/sw.js').then(()=>console.log('SW registered')).catch(e=>console.log('SW fail',e));

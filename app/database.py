@@ -142,6 +142,86 @@ def init_db():
     )
     """)
 
+    # 7. recent_scanned_medicines - itemized feed of every detected medicine.
+    # prescribed_medicines is the analytics junction (rewritten on re-verify);
+    # this table is the append-only per-MR activity feed that powers the
+    # "Recent Scans" data grid. Kept separate so re-verifying a prescription
+    # never erases the field rep's scan history.
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS recent_scanned_medicines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prescription_id INTEGER NOT NULL,
+        mr_id TEXT NOT NULL,
+        brand_name TEXT NOT NULL,
+        generic_name TEXT,
+        company_name TEXT,
+        dosage_form TEXT,
+        strength TEXT,
+        dosage TEXT,
+        confidence_score REAL,
+        company_verified INTEGER DEFAULT 0,
+        needs_review INTEGER DEFAULT 0,
+        doctor_id INTEGER,
+        doctor_name TEXT,
+        specialty TEXT,
+        district TEXT,
+        upazila TEXT,
+        territory TEXT,
+        image_url TEXT,
+        medex_url TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (prescription_id) REFERENCES prescriptions(id) ON DELETE CASCADE
+    )
+    """)
+
+    conn.commit()
+
+    # ---- lightweight migrations for pre-existing databases ----
+    def _cols(table):
+        return {r[1] for r in cur.execute(f"PRAGMA table_info({table})")}
+
+    for table, column, ddl in [
+        ("prescribed_medicines", "mr_id", "TEXT"),
+        ("prescribed_medicines", "company_verified", "INTEGER DEFAULT 0"),
+        ("prescribed_medicines", "needs_review", "INTEGER DEFAULT 0"),
+        ("doctors", "division", "TEXT"),
+    ]:
+        try:
+            if column not in _cols(table):
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        except sqlite3.OperationalError:
+            pass
+
+    # ---- repair legacy 'YYYY-MM-DD HH:MM:SS' timestamps to ISO-8601 ----
+    try:
+        cur.execute("""
+            UPDATE prescriptions
+            SET timestamp = substr(timestamp,1,10) || 'T' || substr(timestamp,12)
+            WHERE timestamp LIKE '____-__-__ __:__:%'
+        """)
+    except sqlite3.OperationalError:
+        pass
+
+    # ---- indexes: the dashboard filters on these constantly ----
+    for stmt in [
+        "CREATE INDEX IF NOT EXISTS idx_rsm_created ON recent_scanned_medicines(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_rsm_mr ON recent_scanned_medicines(mr_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rsm_brand ON recent_scanned_medicines(brand_name)",
+        "CREATE INDEX IF NOT EXISTS idx_rsm_company ON recent_scanned_medicines(company_name)",
+        "CREATE INDEX IF NOT EXISTS idx_rsm_presc ON recent_scanned_medicines(prescription_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pm_presc ON prescribed_medicines(prescription_id)",
+        "CREATE INDEX IF NOT EXISTS idx_pm_company ON prescribed_medicines(company_name)",
+        "CREATE INDEX IF NOT EXISTS idx_pm_brand ON prescribed_medicines(brand_name)",
+        "CREATE INDEX IF NOT EXISTS idx_presc_ts ON prescriptions(timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_presc_doctor ON prescriptions(doctor_id)",
+        "CREATE INDEX IF NOT EXISTS idx_presc_district ON prescriptions(district)",
+        "CREATE INDEX IF NOT EXISTS idx_med_brand ON medicines(brand_name)",
+    ]:
+        try:
+            cur.execute(stmt)
+        except sqlite3.OperationalError:
+            pass
+
     conn.commit()
 
     # Seed pharma companies if empty
@@ -190,32 +270,72 @@ def init_db():
 
 # ============ Helper: Get or Create ============
 
-def get_or_create_doctor(name, bmdc_no="", qualifications="", specialty="", chamber="", hospital="", upazila="", district="", territory=""):
+def get_or_create_doctor(name, bmdc_no="", qualifications="", specialty="",
+                         chamber="", hospital="", upazila="", district="",
+                         territory="", division="", increment=True):
+    """
+    Upsert a doctor and KEEP THEIR PROFILE IN SYNC.
+
+    The previous version only bumped prescription_count for an existing doctor
+    and never wrote back specialty/district/upazila/territory. Verifying a
+    prescription therefore appeared to save those fields while the doctors
+    table (which drives the specialty + territory analytics) kept the stale
+    values from the very first scan.
+
+    `increment=False` is used by the verify flow so re-verifying the same
+    prescription does not inflate prescription_count.
+    """
     conn = get_db()
     cur = conn.cursor()
-    
-    # Try find by BMDC or name
-    cur.execute("SELECT * FROM doctors WHERE bmdc_no=? AND bmdc_no!=''", (bmdc_no,))
-    row = cur.fetchone()
-    if not row:
-        cur.execute("SELECT * FROM doctors WHERE name=?", (name,))
+
+    name = (name or "").strip()
+    bmdc_no = (bmdc_no or "").strip()
+
+    row = None
+    if bmdc_no:
+        cur.execute("SELECT * FROM doctors WHERE bmdc_no=? AND bmdc_no!=''", (bmdc_no,))
         row = cur.fetchone()
-    
+    if not row and name:
+        cur.execute("SELECT * FROM doctors WHERE name=? COLLATE NOCASE", (name,))
+        row = cur.fetchone()
+
     if row:
-        # Update prescription_count
-        cur.execute("UPDATE doctors SET prescription_count = prescription_count + 1 WHERE id=?", (row["id"],))
-        conn.commit()
         doctor_id = row["id"]
+        existing = dict(row)
+        # Fill in / correct the profile. A non-empty incoming value always wins
+        # (it came from a human verifying the prescription).
+        updates, params = [], []
+        for col, val in [
+            ("name", name), ("bmdc_no", bmdc_no), ("qualifications", qualifications),
+            ("specialty", specialty), ("chamber", chamber), ("hospital", hospital),
+            ("upazila", upazila), ("district", district), ("territory", territory),
+            ("division", division),
+        ]:
+            val = (val or "").strip()
+            if val and val != (existing.get(col) or ""):
+                updates.append(f"{col}=?")
+                params.append(val)
+        if increment:
+            updates.append("prescription_count = prescription_count + 1")
+        if updates:
+            params.append(doctor_id)
+            cur.execute(f"UPDATE doctors SET {', '.join(updates)} WHERE id=?", params)
+            conn.commit()
     else:
         cur.execute("""
-        INSERT INTO doctors (name, bmdc_no, qualifications, specialty, chamber, hospital, upazila, district, territory, created_at, prescription_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        """, (name, bmdc_no, qualifications, specialty, chamber, hospital, upazila, district, territory, datetime.now().isoformat()))
+        INSERT INTO doctors (name, bmdc_no, qualifications, specialty, chamber,
+                             hospital, upazila, district, territory, division,
+                             created_at, prescription_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name or "Unknown", bmdc_no, qualifications, specialty, chamber,
+              hospital, upazila, district, territory, division,
+              datetime.now().isoformat(), 1 if increment else 0))
         doctor_id = cur.lastrowid
         conn.commit()
-    
+
     conn.close()
     return doctor_id
+
 
 def get_or_create_company(name):
     if not name:
@@ -254,15 +374,24 @@ def save_medicine_to_catalog(brand_data):
     conn = get_db()
     cur = conn.cursor()
     
-    # Check if already exists by brand_name + strength + form
-    cur.execute("SELECT id FROM medicines WHERE brand_name=? AND strength=? AND form=?", 
-                (brand_data.get('brand_name'), brand_data.get('strength'), brand_data.get('form')))
+    generic_id = get_or_create_generic(brand_data.get('generic',''), brand_data.get('category',''))
+    company_id = get_or_create_company(brand_data.get('company',''))
+
+    # Dedupe on brand + strength + form + COMPANY. Without the company in the
+    # key, two manufacturers selling the same brand name collapsed into a
+    # single row and the surviving row's company was applied to both.
+    cur.execute(
+        """
+        SELECT id FROM medicines
+        WHERE brand_name=? AND IFNULL(strength,'')=IFNULL(?,'')
+          AND IFNULL(form,'')=IFNULL(?,'') AND IFNULL(company_id,-1)=IFNULL(?,-1)
+        """,
+        (brand_data.get('brand_name'), brand_data.get('strength'),
+         brand_data.get('form'), company_id),
+    )
     if cur.fetchone():
         conn.close()
         return
-    
-    generic_id = get_or_create_generic(brand_data.get('generic',''), brand_data.get('category',''))
-    company_id = get_or_create_company(brand_data.get('company',''))
     
     cur.execute("""
     INSERT INTO medicines (brand_name, generic_id, company_id, form, type, strength, strength_value, ingredient, category, image_url, pack_image, medex_url, medex_id)
@@ -286,6 +415,141 @@ def save_medicine_to_catalog(brand_data):
     conn.close()
 
 # ============ Save Prescription Workflow ============
+
+def _find_medicine_id(cur, brand_name="", company="", strength="", form=""):
+    """
+    Resolve a catalogue medicines.id for a prescribed medicine.
+
+    Narrows by company first (the authoritative field), then strength, then
+    dosage form, so brands marketed by several companies map to the right row.
+    """
+    brand_name = (brand_name or "").strip()
+    if not brand_name:
+        return None
+
+    cur.execute(
+        """
+        SELECT m.id, m.strength, m.type, m.form, c.name AS company
+        FROM medicines m
+        LEFT JOIN pharma_companies c ON m.company_id = c.id
+        WHERE m.brand_name = ? COLLATE NOCASE
+        """,
+        (brand_name,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]["id"]
+
+    def norm(v):
+        return "".join(str(v or "").lower().split())
+
+    want_company = norm(company)
+    want_strength = norm(strength)
+    want_form = norm(form)
+
+    best, best_score = rows[0], -1
+    for r in rows:
+        score = 0
+        rc = norm(r["company"])
+        if want_company and rc:
+            if rc == want_company or rc.startswith(want_company) or want_company.startswith(rc):
+                score += 10
+        if want_strength and norm(r["strength"]) == want_strength:
+            score += 5
+        if want_form and want_form in (norm(r["type"]) + norm(r["form"])):
+            score += 2
+        if score > best_score:
+            best, best_score = r, score
+    return best["id"]
+
+
+def _normalize_timestamp(value):
+    """
+    Coerce any incoming timestamp to ISO-8601 ('YYYY-MM-DDTHH:MM:SS').
+
+    All date filtering compares timestamps as strings, so the separator must be
+    consistent: ' ' (0x20) sorts before 'T' (0x54), which silently broke the
+    Today/Week/Month KPIs and every date-range filter.
+    """
+    if not value:
+        return datetime.now().isoformat()
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
+                "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S.%f"):
+        try:
+            return datetime.strptime(text, fmt).isoformat()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text.replace(" ", "T")).isoformat()
+    except ValueError:
+        return datetime.now().isoformat()
+
+
+def _write_medicine_rows(cur, prescription_id, medicines, *, mr_id="MR001",
+                         doctor_id=None, doctor_name="", specialty="",
+                         district="", upazila="", territory="",
+                         write_recent=True):
+    """
+    Write every detected medicine to BOTH:
+      * prescribed_medicines - analytics junction (replaced on re-verify)
+      * recent_scanned_medicines - append-only itemized activity feed
+
+    Previously only the junction was written and the itemized feed did not
+    exist, so the "Recent Scans" view could never show individual medicines.
+    """
+    now = datetime.now().isoformat()
+    for idx, med in enumerate(medicines or []):
+        brand = (med.get('brand_name') or '').strip()
+        if not brand:
+            continue
+        generic = med.get('generic_name') or med.get('generic') or ''
+        company = med.get('company') or ''
+        dosage = (med.get('dosage_normalized') or med.get('dosage')
+                  or med.get('dosage_frequency') or '')
+        confidence = med.get('confidence', 0) or 0
+        verified = 1 if med.get('company_verified') else 0
+        review = 1 if (med.get('needs_review') or med.get('company_ambiguous')
+                       or med.get('company_conflict')) else 0
+
+        medicine_id = _find_medicine_id(
+            cur, brand_name=brand, company=company,
+            strength=med.get('strength', ''),
+            form=med.get('type', '') or med.get('form', ''),
+        )
+
+        cur.execute("""
+        INSERT INTO prescribed_medicines
+        (prescription_id, medicine_id, brand_name, generic_name, form, type,
+         strength, dosage_frequency, raw_text, confidence, line_number,
+         company_name, mr_id, company_verified, needs_review)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            prescription_id, medicine_id, brand, generic,
+            med.get('form', ''), med.get('type', ''), med.get('strength', ''),
+            dosage, med.get('raw_text', ''), confidence,
+            med.get('line_number', idx + 1), company, mr_id, verified, review,
+        ))
+
+        if write_recent:
+            cur.execute("""
+            INSERT INTO recent_scanned_medicines
+            (prescription_id, mr_id, brand_name, generic_name, company_name,
+             dosage_form, strength, dosage, confidence_score, company_verified,
+             needs_review, doctor_id, doctor_name, specialty, district,
+             upazila, territory, image_url, medex_url, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                prescription_id, mr_id, brand, generic, company,
+                med.get('type', '') or med.get('form', ''),
+                med.get('strength', ''), dosage, confidence, verified, review,
+                doctor_id, doctor_name, specialty, district, upazila, territory,
+                med.get('image_url', '') or med.get('pack_image', ''),
+                med.get('medex_url', ''), now,
+            ))
+
 
 def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0):
     """
@@ -322,7 +586,11 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
     (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        meta.get('timestamp') or datetime.now().isoformat(),
+        # Always store a real ISO-8601 timestamp. The scan meta uses
+        # "%Y-%m-%d %H:%M:%S" (space separator); a space sorts BEFORE 'T', so
+        # storing it verbatim broke every string range comparison and the
+        # "Today" KPI always read 0.
+        _normalize_timestamp(meta.get('timestamp')),
         image_path,
         result.get('saved_image_path',''),
         doctor_id,
@@ -349,232 +617,347 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
     ))
     prescription_id = cur.lastrowid
     
-    # Insert into prescribed_medicines junction
-    for med in medicines:
-        # Try to find medicine_id in catalog
-        cur.execute("SELECT id FROM medicines WHERE brand_name=? LIMIT 1", (med.get('brand_name',''),))
-        med_row = cur.fetchone()
-        medicine_id = med_row["id"] if med_row else None
-        
-        cur.execute("""
-        INSERT INTO prescribed_medicines 
-        (prescription_id, medicine_id, brand_name, generic_name, form, type, strength, dosage_frequency, raw_text, confidence, line_number, company_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            prescription_id,
-            medicine_id,
-            med.get('brand_name',''),
-            med.get('generic',''),
-            med.get('form',''),
-            med.get('type',''),
-            med.get('strength',''),
-            med.get('dosage','') or med.get('dosage_frequency',''),
-            med.get('raw_text',''),
-            med.get('confidence',0),
-            med.get('line_number',0),
-            med.get('company','')
-        ))
-    
+    # Insert into prescribed_medicines junction + itemized recent-scan feed
+    _write_medicine_rows(
+        cur, prescription_id, medicines,
+        mr_id=mr_id, doctor_id=doctor_id, doctor_name=doctor_name,
+        specialty=doctor_info.get('specialty','') or doctor_info.get('department',''),
+        district=district, upazila=upazila, territory=territory,
+        write_recent=True,
+    )
+
     conn.commit()
     conn.close()
     return prescription_id
 
 # ============ Analytics for Dashboard ============
 
-def get_dashboard_kpis(own_company_name=None):
-    """Top Summary KPI Cards from design.pdf"""
+def get_dashboard_kpis(own_company_name=None, district="", territory="",
+                       specialty="", mr_id="", days=None):
+    """KPI strip with period-over-period deltas, honouring global filters."""
     conn = get_db()
     cur = conn.cursor()
-    
+
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, None)
+
+    def count_since(dt):
+        return cur.execute(f"""
+            SELECT COUNT(DISTINCT p.id) AS c FROM prescriptions p
+            LEFT JOIN doctors d ON p.doctor_id = d.id
+            WHERE p.timestamp >= ? {fsql}""",
+            [dt.isoformat()] + fparams).fetchone()["c"]
+
     now = datetime.now()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    week_start = (now - timedelta(days=7)).isoformat()
-    month_start = (now - timedelta(days=30)).isoformat()
-    
-    # Total Prescriptions Captured: Today / Week / Month
-    cur.execute("SELECT COUNT(*) as cnt FROM prescriptions WHERE timestamp >= ?", (today_start,))
-    total_today = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM prescriptions WHERE timestamp >= ?", (week_start,))
-    total_week = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM prescriptions WHERE timestamp >= ?", (month_start,))
-    total_month = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM prescriptions")
-    total_all = cur.fetchone()["cnt"]
-    
-    # Top Prescribed Brand: overall most frequent
-    cur.execute("""
-    SELECT brand_name, COUNT(*) as cnt FROM prescribed_medicines 
-    GROUP BY brand_name ORDER BY cnt DESC LIMIT 1
-    """)
-    row = cur.fetchone()
-    top_brand = {"brand": row["brand_name"], "count": row["cnt"]} if row else {"brand": "N/A", "count": 0}
-    
-    # Company Market Share (%): own vs competitors
-    cur.execute("SELECT company_name, COUNT(*) as cnt FROM prescribed_medicines GROUP BY company_name")
-    company_counts = cur.fetchall()
-    total_meds = sum([r["cnt"] for r in company_counts]) or 1
-    
-    # Determine own company
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    total_today = count_since(today)
+    total_week = count_since(now - timedelta(days=7))
+    total_month = count_since(now - timedelta(days=30))
+    total_all = cur.execute(f"""
+        SELECT COUNT(DISTINCT p.id) AS c FROM prescriptions p
+        LEFT JOIN doctors d ON p.doctor_id = d.id WHERE 1=1 {fsql}""",
+        fparams).fetchone()["c"]
+
+    # window used for the headline numbers + its immediately preceding window
+    win = int(days) if days else 30
+    cur_start = now - timedelta(days=win)
+    prev_start = now - timedelta(days=win * 2)
+
+    scans_cur = count_since(cur_start)
+    scans_prev = cur.execute(f"""
+        SELECT COUNT(DISTINCT p.id) AS c FROM prescriptions p
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE p.timestamp >= ? AND p.timestamp < ? {fsql}""",
+        [prev_start.isoformat(), cur_start.isoformat()] + fparams).fetchone()["c"]
+
+    def pct_delta(cur_v, prev_v):
+        if not prev_v:
+            return 100.0 if cur_v else 0.0
+        return round((cur_v - prev_v) / prev_v * 100, 1)
+
+    dsql, dparams = _filter_sql(district, territory, specialty, mr_id, days)
+
+    items_total = cur.execute(f"""
+        SELECT COUNT(*) AS c FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id WHERE 1=1 {dsql}""",
+        dparams).fetchone()["c"]
+
+    row = cur.execute(f"""
+        SELECT pm.brand_name, pm.company_name, COUNT(*) AS cnt
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE IFNULL(pm.brand_name,'')!='' {dsql}
+        GROUP BY pm.brand_name ORDER BY cnt DESC LIMIT 1""",
+        dparams).fetchone()
+    top_brand = ({"brand": row["brand_name"], "company": row["company_name"],
+                  "count": row["cnt"]} if row else
+                 {"brand": "N/A", "company": "", "count": 0})
+
     if not own_company_name:
-        # Try to find company marked is_own_company=1
-        cur.execute("SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1")
-        own_row = cur.fetchone()
-        own_company_name = own_row["name"] if own_row else "Square Pharmaceuticals Ltd."
-    
-    own_count = 0
-    for r in company_counts:
-        if own_company_name.lower() in r["company_name"].lower() or r["company_name"].lower() in own_company_name.lower():
-            own_count += r["cnt"]
-    
-    market_share = round((own_count / total_meds * 100), 1) if total_meds else 0
-    
-    # Active Doctor Coverage: unique doctors
-    cur.execute("SELECT COUNT(DISTINCT doctor_id) as cnt FROM prescriptions")
-    active_doctors = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) as cnt FROM doctors")
-    total_doctors = cur.fetchone()["cnt"]
-    
+        r = cur.execute(
+            "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1").fetchone()
+        own_company_name = r["name"] if r else "Square Pharmaceuticals Ltd."
+    own_token = own_company_name.split()[0] if own_company_name else ""
+
+    own_count = cur.execute(f"""
+        SELECT COUNT(*) AS c FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE pm.company_name LIKE ? {dsql}""",
+        [f"%{own_token}%"] + dparams).fetchone()["c"]
+
+    market_share = round(own_count / items_total * 100, 1) if items_total else 0.0
+
+    # previous-window share for the delta
+    prev_items = cur.execute(f"""
+        SELECT COUNT(*) AS c FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE p.timestamp >= ? AND p.timestamp < ? {fsql}""",
+        [prev_start.isoformat(), cur_start.isoformat()] + fparams).fetchone()["c"]
+    prev_own = cur.execute(f"""
+        SELECT COUNT(*) AS c FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE pm.company_name LIKE ? AND p.timestamp >= ? AND p.timestamp < ? {fsql}""",
+        [f"%{own_token}%", prev_start.isoformat(), cur_start.isoformat()] + fparams
+    ).fetchone()["c"]
+    prev_share = round(prev_own / prev_items * 100, 1) if prev_items else 0.0
+
+    active_doctors = cur.execute(f"""
+        SELECT COUNT(DISTINCT p.doctor_id) AS c FROM prescriptions p
+        LEFT JOIN doctors d ON p.doctor_id = d.id WHERE 1=1 {dsql}""",
+        dparams).fetchone()["c"]
+    total_doctors = cur.execute("SELECT COUNT(*) AS c FROM doctors").fetchone()["c"]
+
     conn.close()
-    
     return {
-        "total_prescriptions": {"today": total_today, "week": total_week, "month": total_month, "all": total_all},
+        "total_prescriptions": {"today": total_today, "week": total_week,
+                                "month": total_month, "all": total_all,
+                                "window": scans_cur,
+                                "delta_percent": pct_delta(scans_cur, scans_prev)},
+        "identified_items": {"count": items_total},
         "top_brand": top_brand,
-        "market_share": {"own_company": own_company_name, "own_count": own_count, "total": total_meds, "percentage": market_share},
-        "doctor_coverage": {"active": active_doctors, "total": total_doctors}
+        "market_share": {"own_company": own_company_name, "own_count": own_count,
+                         "total": items_total, "percentage": market_share,
+                         "delta_percent": round(market_share - prev_share, 1)},
+        "doctor_coverage": {"active": active_doctors, "total": total_doctors},
     }
 
-def get_most_prescribed_medicines(limit=10, filter_generic=""):
-    """Widget A: Most Prescribed Medicines (Market Demand) - Bar Chart"""
+
+def get_most_prescribed_medicines(limit=10, filter_generic="", district="",
+                                  territory="", specialty="", mr_id="", days=None):
+    """Widget A: Most Prescribed Medicines - honours the global filter bar."""
     conn = get_db()
     cur = conn.cursor()
-    
-    query = """
+
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+    params = list(fparams)
+    gen_sql = ""
+    if filter_generic:
+        gen_sql = " AND pm.generic_name LIKE ?"
+        params.append(f"%{filter_generic}%")
+
+    cur.execute(f"""
     SELECT pm.brand_name, pm.generic_name, pm.company_name, COUNT(*) as capture_count
     FROM prescribed_medicines pm
-    GROUP BY pm.brand_name
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE 1=1 {fsql}{gen_sql}
+    GROUP BY pm.brand_name, pm.company_name
     ORDER BY capture_count DESC
     LIMIT ?
-    """
-    if filter_generic:
-        query = """
-        SELECT pm.brand_name, pm.generic_name, pm.company_name, COUNT(*) as capture_count
-        FROM prescribed_medicines pm
-        WHERE pm.generic_name LIKE ?
-        GROUP BY pm.brand_name
-        ORDER BY capture_count DESC
-        LIMIT ?
-        """
-        cur.execute(query, (f"%{filter_generic}%", limit))
-    else:
-        cur.execute(query, (limit,))
-    
+    """, params + [limit])
+
     rows = cur.fetchall()
-    total = sum([r["capture_count"] for r in rows]) or 1
-    
-    result = []
-    for r in rows:
-        result.append({
-            "brand_name": r["brand_name"],
-            "generic": r["generic_name"],
-            "manufacturer": r["company_name"],
-            "capture_count": r["capture_count"],
-            "market_share_percent": round(r["capture_count"]/total*100, 1)
-        })
-    
+    total = sum(r["capture_count"] for r in rows) or 1
+    result = [{
+        "brand_name": r["brand_name"],
+        "generic": r["generic_name"],
+        "manufacturer": r["company_name"],
+        "capture_count": r["capture_count"],
+        "market_share_percent": round(r["capture_count"] / total * 100, 1),
+    } for r in rows]
     conn.close()
     return result
 
-def get_company_share():
-    """Widget B: Company Share of Voice - Donut Pie Chart - Fixed unknown company error"""
+
+def get_company_share(district="", territory="", specialty="", mr_id="",
+                      days=None, min_percent=3.0):
+    """Widget B: Company Share of Voice - filtered, with clean Others bucket."""
     conn = get_db()
     cur = conn.cursor()
-    # Filter out Unknown, empty, and live search failed
-    cur.execute("""
-    SELECT company_name, COUNT(*) as cnt FROM prescribed_medicines 
-    WHERE company_name!='' 
-    AND company_name NOT LIKE '%Unknown%'
-    AND company_name NOT LIKE '%Live search failed%'
-    GROUP BY company_name ORDER BY cnt DESC
-    """)
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+
+    cur.execute(f"""
+    SELECT pm.company_name, COUNT(*) as cnt
+    FROM prescribed_medicines pm
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE IFNULL(pm.company_name,'') != ''
+      AND pm.company_name NOT LIKE '%Unknown%'
+      AND pm.company_name NOT LIKE '%Live search failed%'
+      {fsql}
+    GROUP BY pm.company_name ORDER BY cnt DESC
+    """, fparams)
     rows = cur.fetchall()
     conn.close()
-    
-    total = sum([r["cnt"] for r in rows]) or 1
+
+    total = sum(r["cnt"] for r in rows) or 1
     result = []
     for r in rows:
-        # Skip if still unknown-like
-        if not r["company_name"] or "unknown" in r["company_name"].lower():
+        name = r["company_name"]
+        if not name or "unknown" in name.lower():
             continue
-        result.append({
-            "company": r["company_name"],
-            "count": r["cnt"],
-            "percentage": round(r["cnt"]/total*100, 1)
-        })
-    # Group small <3% into Others
-    main = [x for x in result if x["percentage"] >= 3]
-    others = [x for x in result if x["percentage"] < 3]
+        result.append({"company": name, "count": r["cnt"],
+                       "percentage": round(r["cnt"] / total * 100, 1)})
+
+    main = [x for x in result if x["percentage"] >= min_percent]
+    others = [x for x in result if x["percentage"] < min_percent]
     if others:
-        others_count = sum([o["count"] for o in others])
-        if others_count > 0:
-            main.append({"company": "Others", "count": others_count, "percentage": round(others_count/total*100,1)})
-    
+        cnt = sum(o["count"] for o in others)
+        if cnt:
+            main.append({"company": "Others", "count": cnt,
+                         "percentage": round(cnt / total * 100, 1),
+                         "is_others": True,
+                         "members": [o["company"] for o in others][:40]})
     return main
 
-def get_top_doctor_prescribers(own_company_name=None, limit=10):
-    """Widget C: Top Doctor Prescribers - Leaderboard"""
+
+def get_top_doctor_prescribers(own_company_name=None, limit=10, district="",
+                               territory="", specialty="", mr_id="", days=None,
+                               q="", offset=0):
+    """Widget C: Doctor Conversion Leaderboard - searchable + paginated."""
     conn = get_db()
     cur = conn.cursor()
-    
+
     if not own_company_name:
-        cur.execute("SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1")
-        own_row = cur.fetchone()
-        own_company_name = own_row["name"] if own_row else "Square Pharmaceuticals Ltd."
-    
-    # Get all prescriptions with doctor
-    cur.execute("""
-    SELECT p.doctor_id, p.doctor_name, d.chamber, d.specialty,
-           COUNT(*) as total_prescriptions
+        row = cur.execute(
+            "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1").fetchone()
+        own_company_name = row["name"] if row else "Square Pharmaceuticals Ltd."
+
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+    params = list(fparams)
+    qsql = ""
+    if q:
+        qsql = " AND (p.doctor_name LIKE ? OR d.chamber LIKE ? OR d.specialty LIKE ?)"
+        params.extend([f"%{q}%"] * 3)
+
+    total = cur.execute(f"""
+        SELECT COUNT(*) AS c FROM (
+          SELECT p.doctor_id FROM prescriptions p
+          LEFT JOIN doctors d ON p.doctor_id = d.id
+          WHERE 1=1 {fsql}{qsql} GROUP BY p.doctor_id)
+    """, params).fetchone()["c"]
+
+    # Own-company match token: first significant word (e.g. "Square")
+    own_token = own_company_name.split()[0] if own_company_name else ""
+
+    cur.execute(f"""
+    SELECT p.doctor_id, p.doctor_name, d.chamber, d.specialty, d.district,
+           d.territory,
+           COUNT(DISTINCT p.id) AS total_prescriptions,
+           SUM(CASE WHEN pm.id IS NOT NULL THEN 1 ELSE 0 END) AS total_meds,
+           SUM(CASE WHEN pm.company_name LIKE ? THEN 1 ELSE 0 END) AS own_meds
     FROM prescriptions p
     LEFT JOIN doctors d ON p.doctor_id = d.id
+    LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+    WHERE 1=1 {fsql}{qsql}
     GROUP BY p.doctor_id
-    ORDER BY total_prescriptions DESC
-    LIMIT ?
-    """, (limit,))
-    
-    doctors = cur.fetchall()
+    ORDER BY total_prescriptions DESC, total_meds DESC
+    LIMIT ? OFFSET ?
+    """, [f"%{own_token}%"] + params + [int(limit), int(offset)])
+
     result = []
-    for doc in doctors:
-        doc_id = doc["doctor_id"]
-        # Count own company drugs for this doctor
-        cur.execute("""
-        SELECT COUNT(*) as cnt FROM prescribed_medicines pm
-        JOIN prescriptions p ON pm.prescription_id = p.id
-        WHERE p.doctor_id = ? AND pm.company_name LIKE ?
-        """, (doc_id, f"%{own_company_name.split()[0]}%"))
-        own_cnt = cur.fetchone()["cnt"] or 0
-        
-        cur.execute("""
-        SELECT COUNT(*) as cnt FROM prescribed_medicines pm
-        JOIN prescriptions p ON pm.prescription_id = p.id
-        WHERE p.doctor_id = ?
-        """, (doc_id,))
-        total_cnt = cur.fetchone()["cnt"] or 1
-        
-        competitor_cnt = total_cnt - own_cnt
-        conversion_rate = round(own_cnt/total_cnt*100,1) if total_cnt else 0
-        
+    for r in cur.fetchall():
+        total_cnt = r["total_meds"] or 0
+        own_cnt = r["own_meds"] or 0
         result.append({
-            "doctor_name": doc["doctor_name"],
-            "chamber": doc["chamber"] or "N/A",
-            "specialty": doc["specialty"] or "General",
+            "doctor_id": r["doctor_id"],
+            "doctor_name": r["doctor_name"] or "Unknown",
+            "chamber": r["chamber"] or "N/A",
+            "specialty": r["specialty"] or "General",
+            "district": r["district"] or "",
+            "territory": r["territory"] or "",
+            "prescriptions": r["total_prescriptions"] or 0,
             "prescription_volume_own": own_cnt,
-            "prescription_volume_competitor": competitor_cnt,
+            "prescription_volume_competitor": max(total_cnt - own_cnt, 0),
             "total": total_cnt,
-            "conversion_rate": conversion_rate
+            "conversion_rate": round(own_cnt / total_cnt * 100, 1) if total_cnt else 0.0,
         })
-    
     conn.close()
-    return result
+    return {"doctors": result, "total": total, "own_company": own_company_name,
+            "limit": int(limit), "offset": int(offset)}
+
+
+def get_company_drilldown(company, limit=10, district="", territory="",
+                          specialty="", mr_id="", days=None):
+    """Drill-down: top generics + brands for one company (donut slice click)."""
+    conn = get_db()
+    cur = conn.cursor()
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+
+    cur.execute(f"""
+    SELECT IFNULL(NULLIF(pm.generic_name,''),'Unspecified') AS generic,
+           COUNT(*) AS cnt
+    FROM prescribed_medicines pm
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE pm.company_name = ? {fsql}
+    GROUP BY generic ORDER BY cnt DESC LIMIT ?
+    """, [company] + fparams + [limit])
+    generics = [{"generic": r["generic"], "count": r["cnt"]} for r in cur.fetchall()]
+
+    cur.execute(f"""
+    SELECT pm.brand_name, COUNT(*) AS cnt
+    FROM prescribed_medicines pm
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE pm.company_name = ? {fsql}
+    GROUP BY pm.brand_name ORDER BY cnt DESC LIMIT ?
+    """, [company] + fparams + [limit])
+    brands = [{"brand_name": r["brand_name"], "count": r["cnt"]} for r in cur.fetchall()]
+
+    cur.execute(f"""
+    SELECT p.doctor_name, COUNT(*) AS cnt
+    FROM prescribed_medicines pm
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE pm.company_name = ? {fsql} AND IFNULL(p.doctor_name,'')!=''
+    GROUP BY p.doctor_name ORDER BY cnt DESC LIMIT ?
+    """, [company] + fparams + [limit])
+    doctors = [{"doctor_name": r["doctor_name"], "count": r["cnt"]} for r in cur.fetchall()]
+
+    total = sum(g["count"] for g in generics)
+    conn.close()
+    return {"company": company, "total": total, "generics": generics,
+            "brands": brands, "doctors": doctors}
+
+
+def get_brand_doctors(brand_name, limit=15, district="", territory="",
+                      specialty="", mr_id="", days=None):
+    """Drill-down: which doctors prescribed a given brand (bar click)."""
+    conn = get_db()
+    cur = conn.cursor()
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+    cur.execute(f"""
+    SELECT p.doctor_name, d.specialty, d.chamber, COUNT(*) AS cnt,
+           MAX(p.timestamp) AS last_seen
+    FROM prescribed_medicines pm
+    JOIN prescriptions p ON pm.prescription_id = p.id
+    LEFT JOIN doctors d ON p.doctor_id = d.id
+    WHERE pm.brand_name = ? {fsql}
+    GROUP BY p.doctor_id ORDER BY cnt DESC LIMIT ?
+    """, [brand_name] + fparams + [limit])
+    rows = [{"doctor_name": r["doctor_name"] or "Unknown",
+             "specialty": r["specialty"] or "General",
+             "chamber": r["chamber"] or "N/A",
+             "count": r["cnt"], "last_seen": r["last_seen"]}
+            for r in cur.fetchall()]
+    conn.close()
+    return {"brand_name": brand_name, "doctors": rows}
+
 
 def get_generic_brand_matrix():
     """Widget D: Generic vs Brand Share Matrix - Stacked Bar Chart by Specialty"""
@@ -674,3 +1057,98 @@ def search_medex_db(q="", form="", limit=50):
     rows = cur.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ============ Issue 3: itemized recent scans feed ============
+
+def get_recent_scanned_medicines(limit=50, offset=0, mr_id="", q="",
+                                 company="", district="", territory="",
+                                 specialty="", days=None, order="created_at",
+                                 direction="desc"):
+    """Paginated, searchable itemized feed backing the Recent Scans data grid."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    where, params = ["1=1"], []
+    if mr_id:
+        where.append("mr_id = ?"); params.append(mr_id)
+    if company:
+        where.append("company_name LIKE ?"); params.append(f"%{company}%")
+    if district:
+        where.append("district = ?"); params.append(district)
+    if territory:
+        where.append("territory = ?"); params.append(territory)
+    if specialty:
+        where.append("specialty = ?"); params.append(specialty)
+    if days:
+        where.append("created_at >= ?")
+        params.append((datetime.now() - timedelta(days=int(days))).isoformat())
+    if q:
+        where.append("(brand_name LIKE ? OR generic_name LIKE ? OR "
+                     "company_name LIKE ? OR doctor_name LIKE ?)")
+        params.extend([f"%{q}%"] * 4)
+
+    allowed_order = {
+        "created_at": "created_at", "brand_name": "brand_name",
+        "company_name": "company_name", "confidence": "confidence_score",
+        "doctor_name": "doctor_name",
+    }
+    col = allowed_order.get(order, "created_at")
+    dirn = "ASC" if str(direction).lower() == "asc" else "DESC"
+    clause = " AND ".join(where)
+
+    total = cur.execute(
+        f"SELECT COUNT(*) AS c FROM recent_scanned_medicines WHERE {clause}",
+        params).fetchone()["c"]
+
+    rows = cur.execute(
+        f"""SELECT * FROM recent_scanned_medicines WHERE {clause}
+            ORDER BY {col} {dirn}, id DESC LIMIT ? OFFSET ?""",
+        params + [int(limit), int(offset)]).fetchall()
+    conn.close()
+    return {"total": total, "limit": int(limit), "offset": int(offset),
+            "items": [dict(r) for r in rows]}
+
+
+def get_filter_options():
+    """Distinct values actually present in the data, for the global filter bar."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    def distinct(sql):
+        return [r[0] for r in cur.execute(sql) if r[0]]
+
+    out = {
+        "districts": distinct(
+            "SELECT DISTINCT district FROM prescriptions WHERE IFNULL(district,'')!='' ORDER BY district"),
+        "territories": distinct(
+            "SELECT DISTINCT territory FROM prescriptions WHERE IFNULL(territory,'')!='' ORDER BY territory"),
+        "specialties": distinct(
+            "SELECT DISTINCT specialty FROM doctors WHERE IFNULL(specialty,'')!='' ORDER BY specialty"),
+        "companies": distinct(
+            "SELECT DISTINCT company_name FROM prescribed_medicines WHERE IFNULL(company_name,'')!='' ORDER BY company_name"),
+        "mr_ids": distinct(
+            "SELECT DISTINCT mr_id FROM prescriptions WHERE IFNULL(mr_id,'')!='' ORDER BY mr_id"),
+    }
+    conn.close()
+    return out
+
+
+# ============ Global dashboard filtering ============
+
+def _filter_sql(district="", territory="", specialty="", mr_id="", days=None,
+                alias="p", doctor_alias="d"):
+    """Shared WHERE fragment so every widget honours the global filter bar."""
+    where, params = [], []
+    if district:
+        where.append(f"{alias}.district = ?"); params.append(district)
+    if territory:
+        where.append(f"{alias}.territory = ?"); params.append(territory)
+    if mr_id:
+        where.append(f"{alias}.mr_id = ?"); params.append(mr_id)
+    if specialty:
+        where.append(f"{doctor_alias}.specialty = ?"); params.append(specialty)
+    if days:
+        where.append(f"{alias}.timestamp >= ?")
+        params.append((datetime.now() - timedelta(days=int(days))).isoformat())
+    return (" AND " + " AND ".join(where)) if where else "", params
