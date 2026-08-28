@@ -1,0 +1,340 @@
+{
+  "source": "DGDA gazette / EML ceiling price notifications (demo dataset)",
+  "updated_at": "2026-08-28",
+  "gazette": "DGDA Price Notification 2026-08",
+  "prices": [
+    {
+      "brand": "Seclo",
+      "generic": "Omeprazole",
+      "company": "Square Pharmaceuticals PLC",
+      "strength": "20 mg",
+      "type": "EC Capsule",
+      "pack": "14 capsules",
+      "mrp": 7.0
+    },
+    {
+      "brand": "Napa",
+      "generic": "Paracetamol",
+      "company": "Beximco Pharmaceuticals Ltd.",
+      "strength": "500 mg",
+      "type": "Pediatric Drop",
+      "pack": "10 tablets",
+      "mrp": 2.0
+    },
+    {
+      "brand": "Pantonix",
+      "generic": "Pantoprazole Sodium",
+      "company": "Incepta Pharmaceuticals Ltd.",
+      "strength": "40 mg",
+      "type": "EC Tablet",
+      "pack": "14 tablets",
+      "mrp": 9.0
+    },
+    {
+      "brand": "Losectil",
+      "generic": "Omeprazole",
+      "company": "Eskayef Pharmaceuticals Ltd.",
+      "strength": "20 mg",
+      "type": "EC Capsule",
+      "pack": "14 capsules",
+      "mrp": 6.5
+    },
+    {
+      "brand": "Histacin",
+      "generic": "Chlorpheniramine Maleate",
+      "company": "Jayson Pharmaceutical Ltd.",
+      "strength": "4 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 1.5
+    },
+    {
+      "brand": "Maxpro",
+      "generic": "Esomeprazole",
+      "company": "Renata PLC",
+      "strength": "20 mg",
+      "type": "EC Tablet",
+      "pack": "14 tablets",
+      "mrp": 8.0
+    },
+    {
+      "brand": "Losa",
+      "generic": "Losartan Potassium",
+      "company": "Alco Pharma Ltd.",
+      "strength": "50 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 6.0
+    },
+    {
+      "brand": "Amdocal",
+      "generic": "Amlodipine Besilate",
+      "company": "Beximco Pharmaceuticals Ltd.",
+      "strength": "5 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 9.0
+    },
+    {
+      "brand": "Losar",
+      "generic": "Losartan Potassium",
+      "company": "Nipa Pharmaceuticals Ltd.",
+      "strength": "50 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 6.5
+    },
+    {
+      "brand": "Losartan",
+      "generic": "",
+      "company": "",
+      "strength": "50 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 6.5
+    },
+    {
+      "brand": "Losaktan",
+      "generic": "",
+      "company": "",
+      "strength": "50 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 6.0
+    },
+    {
+      "brand": "Telmik",
+      "generic": "",
+      "company": "",
+      "strength": "40 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 12.0
+    },
+    {
+      "brand": "Telmisartan",
+      "generic": "",
+      "company": "",
+      "strength": "40 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 12.0
+    },
+    {
+      "brand": "Rosuvas",
+      "generic": "",
+      "company": "",
+      "strength": "10 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 15.0
+    },
+    {
+      "brand": "Rosuvastatin",
+      "generic": "",
+      "company": "",
+      "strength": "10 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 15.0
+    },
+    {
+      "brand": "Azithro",
+      "generic": "Azithromycin Dihydrate",
+      "company": "Astra Biopharmaceuticals Ltd.",
+      "strength": "500 mg",
+      "type": "Tablet",
+      "pack": "6 tablets",
+      "mrp": 12.0
+    },
+    {
+      "brand": "Zithrin",
+      "generic": "Azithromycin Dihydrate",
+      "company": "Renata PLC",
+      "strength": "500 mg",
+      "type": "Tablet",
+      "pack": "6 tablets",
+      "mrp": 13.0
+    },
+    {
+      "brand": "Azithromycin",
+      "generic": "Azithromycin Dihydrate",
+      "company": "Premier Pharmaceuticals Ltd.",
+      "strength": "500 mg",
+      "type": "Suspension",
+      "pack": "6 tablets",
+      "mrp": 12.0
+    },
+    {
+      "brand": "Maxpro Esomeprazole",
+      "generic": "",
+      "company": "",
+      "strength": "20 mg",
+      "type": "",
+      "pack": "14 tablets",
+      "mrp": 8.0
+    },
+    {
+      "brand": "Esomeprazole",
+      "generic": "",
+      "company": "",
+      "strength": "20 mg",
+      "type": "",
+      "pack": "14 tablets",
+      "mrp": 8.0
+    },
+    {
+      "brand": "Omeprazole",
+      "generic": "",
+      "company": "",
+      "strength": "20 mg",
+      "type": "",
+      "pack": "14 capsules",
+      "mrp": 7.0
+    },
+    {
+      "brand": "Paracetamol",
+      "generic": "Paracetamol",
+      "company": "Pristine Pharmaceuticals Ltd",
+      "strength": "500 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 2.0
+    },
+    {
+      "brand": "Gestiva",
+      "generic": "",
+      "company": "",
+      "strength": "40 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 8.5
+    },
+    {
+      "brand": "Amlodipine",
+      "generic": "",
+      "company": "",
+      "strength": "5 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 9.0
+    },
+    {
+      "brand": "Montelukast",
+      "generic": "",
+      "company": "",
+      "strength": "10 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 11.0
+    },
+    {
+      "brand": "Cetirizine",
+      "generic": "Cetirizine Hydrochloride",
+      "company": "Pristine Pharmaceuticals Ltd",
+      "strength": "10 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 3.5
+    },
+    {
+      "brand": "Chlorpheniramine",
+      "generic": "Chlorpheniramine Maleate",
+      "company": "Medimet Pharmaceuticals Ltd.",
+      "strength": "4 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 1.5
+    },
+    {
+      "brand": "Ciprofloxacin",
+      "generic": "Ciprofloxacin",
+      "company": "Pharmik Laboratories Ltd.",
+      "strength": "500 mg",
+      "type": "Tablet",
+      "pack": "10 tablets",
+      "mrp": 10.0
+    },
+    {
+      "brand": "Amoxicillin",
+      "generic": "",
+      "company": "",
+      "strength": "500 mg",
+      "type": "",
+      "pack": "10 capsules",
+      "mrp": 8.0
+    },
+    {
+      "brand": "Cefixime",
+      "generic": "",
+      "company": "",
+      "strength": "200 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 14.0
+    },
+    {
+      "brand": "Metformin",
+      "generic": "",
+      "company": "",
+      "strength": "500 mg",
+      "type": "",
+      "pack": "10 tablets",
+      "mrp": 5.0
+    },
+    {
+      "brand": "Omeprazole 20Mg",
+      "generic": "",
+      "company": "",
+      "strength": "20 mg",
+      "type": "",
+      "pack": "14 capsules",
+      "mrp": 7.0
+    }
+  ],
+  "banned": [
+    {
+      "brand": "Analgin",
+      "generic": "Metamizole Sodium",
+      "reason": "Banned for human use in Bangladesh (adverse haematological effects)"
+    },
+    {
+      "brand": "Metamizole",
+      "generic": "Metamizole Sodium",
+      "reason": "Banned for human use - DGDA notification"
+    },
+    {
+      "brand": "Belladonna Compound",
+      "generic": "Belladonna/Atropine",
+      "reason": "Restricted - prescription only"
+    },
+    {
+      "brand": "FDC Oxyphenbutazone",
+      "generic": "Oxyphenbutazone",
+      "reason": "Withdrawn from market"
+    }
+  ],
+  "price_adjusted": [
+    {
+      "brand": "Seclo",
+      "generic": "Omeprazole",
+      "old_mrp": 8.0,
+      "new_mrp": 7.0,
+      "note": "MRP reduced under EML ceiling price notification"
+    },
+    {
+      "brand": "Maxpro",
+      "generic": "Esomeprazole",
+      "old_mrp": 9.0,
+      "new_mrp": 8.0,
+      "note": "Price adjustment per DGDA gazette"
+    },
+    {
+      "brand": "Pantonix",
+      "generic": "Pantoprazole",
+      "old_mrp": 10.0,
+      "new_mrp": 9.0,
+      "note": "Competitive price alignment"
+    }
+  ]
+}

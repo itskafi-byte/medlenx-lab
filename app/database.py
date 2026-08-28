@@ -233,6 +233,38 @@ def init_db():
         value TEXT
     )
     """)
+    # 8. vision_training - Human-in-the-loop handwriting retraining queue.
+    # Stores the cropped prescription slice + the officer's corrected text so
+    # the Vision AI can learn local Bangladeshi doctor handwriting patterns.
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS vision_training (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prescription_id INTEGER,
+        mr_id TEXT,
+        brand_name TEXT,
+        corrected_brand TEXT,
+        corrected_company TEXT,
+        raw_text TEXT,
+        image_path TEXT,
+        confidence REAL,
+        notes TEXT,
+        status TEXT DEFAULT 'queued',
+        created_at TEXT NOT NULL
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS dgda_flags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand_name TEXT NOT NULL,
+        generic_name TEXT,
+        company_name TEXT,
+        flag_type TEXT,            -- banned | price_adjusted
+        severity TEXT DEFAULT 'warn',
+        note TEXT,
+        source TEXT DEFAULT 'dgda',
+        created_at TEXT NOT NULL
+    )
+    """)
 
     conn.commit()
 
@@ -1631,4 +1663,359 @@ def get_rsm_dashboard(team_id="", rsm_employee_id="", days=30):
             "sov_percent": round(tot_own / tot_items * 100, 1) if tot_items else 0.0,
         },
         "members": team,
+    }
+
+
+def get_rsm_trends(team_id="", rsm_employee_id="", days=30):
+    """Week-over-week Share-of-Voice series per team member.
+
+    Buckets the `days` window into ~7-day bins and returns per-MPO a list of
+    `{week, own, competitor, rx, sov}` points so the RSM can render a sparkline
+    showing whether the team is gaining ground on competitors.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    where, params = ["1=1"], []
+    if team_id:
+        where.append("team_id=?"); params.append(team_id)
+    if rsm_employee_id:
+        where.append("rsm_employee_id=?"); params.append(rsm_employee_id)
+    members = [dict(r) for r in cur.execute(
+        f"SELECT * FROM team_members WHERE {' AND '.join(where)} ORDER BY mpo_mr_id",
+        params,
+    ).fetchall()]
+    days = int(days or 30)
+    base = datetime.now() - timedelta(days=days)
+    since = base.isoformat()
+    bucket_count = max(1, (days + 6) // 7)
+    own_row = cur.execute(
+        "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+    ).fetchone()
+    own_company = own_row["name"] if own_row else "Healthcare Pharmaceuticals Ltd."
+    own_token = own_company.split()[0]
+
+    def _bucket(iso):
+        try:
+            dt = datetime.fromisoformat(str(iso))
+        except Exception:
+            return -1
+        diff = (dt - base).days
+        return int(diff // 7) if diff >= 0 else -1
+
+    trends = []
+    for m in members:
+        mr = m["mpo_mr_id"]
+        rows = cur.execute("""
+            SELECT p.timestamp, pm.company_name
+            FROM prescriptions p
+            LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+            WHERE p.mr_id=? AND p.timestamp >= ?
+        """, (mr, since)).fetchall()
+        own = [0] * bucket_count
+        comp = [0] * bucket_count
+        rx = [0] * bucket_count
+        for r in rows:
+            b = _bucket(r["timestamp"])
+            if b < 0 or b >= bucket_count:
+                continue
+            rx[b] += 1
+            if own_token and own_token.lower() in (r["company_name"] or "").lower():
+                own[b] += 1
+            else:
+                comp[b] += 1
+        series = []
+        for b in range(bucket_count):
+            total = own[b] + comp[b]
+            series.append({
+                "week": b + 1,
+                "label": f"W{b + 1}",
+                "own": own[b],
+                "competitor": comp[b],
+                "rx": rx[b],
+                "sov": round(own[b] / total * 100, 1) if total else 0.0,
+            })
+        # week-over-week growth of own prescriptions (last full vs previous)
+        growth = 0.0
+        prev = None
+        for s in series:
+            if prev is None:
+                prev = s["own"]
+                continue
+            if prev > 0:
+                growth = round((s["own"] - prev) / prev * 100, 1)
+            prev = s["own"]
+        trends.append({
+            **m,
+            "series": series,
+            "own_growth": growth,
+        })
+    conn.close()
+    return {
+        "own_company": own_company,
+        "days": days,
+        "bucket_count": bucket_count,
+        "trends": trends,
+    }
+
+
+# ===========================================================================
+# Vision training queue (Human-in-the-loop handwriting retraining)
+# ===========================================================================
+
+def save_training_item(payload: dict, image_path: str = "") -> int:
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now().isoformat()
+    cur.execute("""
+        INSERT INTO vision_training
+        (prescription_id, mr_id, brand_name, corrected_brand, corrected_company,
+         raw_text, image_path, confidence, notes, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        payload.get("prescription_id"),
+        payload.get("mr_id") or get_current_employee_id() or "",
+        payload.get("brand_name") or "",
+        payload.get("corrected_brand") or "",
+        payload.get("corrected_company") or "",
+        payload.get("raw_text") or "",
+        image_path,
+        payload.get("confidence"),
+        payload.get("notes") or "",
+        payload.get("status") or "queued",
+        now,
+    ))
+    rid = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return rid
+
+
+def list_training_queue(limit: int = 100, status: str = "", mr_id: str = ""):
+    conn = get_db()
+    cur = conn.cursor()
+    where, params = ["1=1"], []
+    if status:
+        where.append("status=?"); params.append(status)
+    if mr_id:
+        where.append("mr_id=?"); params.append(mr_id)
+    rows = [dict(r) for r in cur.execute(
+        f"SELECT * FROM vision_training WHERE {' AND '.join(where)} "
+        f"ORDER BY created_at DESC LIMIT ?",
+        params + [int(limit)],
+    ).fetchall()]
+    conn.close()
+    return {"items": rows, "total": len(rows)}
+
+
+def training_queue_stats():
+    conn = get_db()
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT status, COUNT(*) AS c FROM vision_training GROUP BY status"
+    ).fetchall()
+    conn.close()
+    return {r["status"]: r["c"] for r in rows}
+
+
+# ===========================================================================
+# Doctor prescribing tiering (A/B/C) + at-risk switchers
+# ===========================================================================
+
+def get_doctor_tiers(own_company_name="", territory="", district="", specialty="",
+                     days=30, tier="", min_rx=1, limit=200):
+    """Classify doctors by monthly audit volume and flag at-risk switchers.
+
+    Tier A  >10 prescriptions/month   (high prescriber)
+    Tier B   4-9 prescriptions/month (medium)
+    Tier C  <=3 prescriptions/month  (occasional)
+
+    `at_risk` marks high-volume doctors whose own-brand share is low, i.e. they
+    are writing competitor brands most of the time -> a switch-away risk.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days or 30))).isoformat()
+    own_row = cur.execute(
+        "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+    ).fetchone()
+    own_company = own_company_name or (own_row["name"] if own_row else "Healthcare Pharmaceuticals Ltd.")
+    own_token = own_company.split()[0]
+
+    where = ["p.timestamp >= ?", "IFNULL(p.doctor_name,'') != ''"]
+    params = [since]
+    if territory:
+        where.append("p.territory = ?"); params.append(territory)
+    if district:
+        where.append("p.district = ?"); params.append(district)
+    if specialty:
+        where.append("d.specialty = ?"); params.append(specialty)
+    wsql = " AND ".join(where)
+
+    rows = cur.execute(f"""
+        SELECT p.doctor_id, p.doctor_name, d.specialty AS d_specialty,
+               d.district AS d_district, d.territory AS d_territory,
+               COUNT(DISTINCT p.id) AS rx,
+               COUNT(pm.id) AS items,
+               SUM(CASE WHEN pm.company_name LIKE ? THEN 1 ELSE 0 END) AS own_items
+        FROM prescriptions p
+        LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE {wsql}
+        GROUP BY p.doctor_id
+        HAVING rx >= ?
+        ORDER BY rx DESC
+        LIMIT ?
+    """, [f"%{own_token}%"] + params + [int(min_rx), int(limit)]).fetchall()
+
+    tiers = []
+    for r in rows:
+        rx = r["rx"] or 0
+        items = r["items"] or 0
+        own = r["own_items"] or 0
+        sov = round(own / items * 100, 1) if items else 0.0
+        t = "A" if rx > 10 else ("B" if rx >= 4 else "C")
+        # at-risk: high-volume doctor but own share < 30%
+        at_risk = (rx >= 4) and (sov < 30)
+        tiers.append({
+            "doctor_id": r["doctor_id"],
+            "doctor_name": r["doctor_name"],
+            "specialty": r["d_specialty"] or "General",
+            "district": r["d_district"] or "",
+            "territory": r["d_territory"] or "",
+            "rx": rx,
+            "items": items,
+            "own_items": own,
+            "competitor_items": max(items - own, 0),
+            "sov": sov,
+            "tier": t,
+            "at_risk": at_risk,
+        })
+    conn.close()
+    if tier:
+        tiers = [t for t in tiers if t["tier"] == tier.upper()]
+    return {
+        "own_company": own_company,
+        "days": int(days or 30),
+        "total": len(tiers),
+        "doctors": tiers,
+    }
+
+
+# ===========================================================================
+# Geo heatmap / territory penetration
+# ===========================================================================
+
+def _district_centroid(district):
+    """Best-effort (lat, lng) anchor for a district from bd_geo.json."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "data", "bd_geo.json")
+        with open(path, "r", encoding="utf-8") as f:
+            geo = json.load(f)
+        d = (geo.get("districts") or {}).get(district, {})
+        return d.get("lat"), d.get("lng")
+    except Exception:
+        return None, None
+
+
+def get_geo_heatmap(own_company_name="", days=30, division="", district=""):
+    """Aggregate prescriptions by district + upazila for the BD heatmap.
+
+    Returns own vs competitor item counts + market penetration score per region,
+    plus a district rollup. Geo coords come from the prescriptions row (the
+    itemized feed does not carry lat/lng); when missing we fall back to the
+    district centroid so the map always renders.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days or 30))).isoformat()
+    own_row = cur.execute(
+        "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+    ).fetchone()
+    own_company = own_company_name or (own_row["name"] if own_row else "Healthcare Pharmaceuticals Ltd.")
+    own_token = own_company.split()[0]
+
+    where = ["pm.prescription_id IS NOT NULL", "p.timestamp >= ?", "IFNULL(p.district,'') != ''"]
+    params = [since]
+    if division:
+        where.append("p.division = ?"); params.append(division)
+    if district:
+        where.append("p.district = ?"); params.append(district)
+    wsql = " AND ".join(where)
+
+    rows = cur.execute(f"""
+        SELECT p.district, p.upazila, p.territory, p.geo_lat, p.geo_lng,
+               COUNT(DISTINCT p.id) AS rx,
+               COUNT(pm.id) AS items,
+               SUM(CASE WHEN pm.company_name LIKE ? THEN 1 ELSE 0 END) AS own_items
+        FROM prescriptions p
+        LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+        WHERE {wsql}
+        GROUP BY p.district, p.upazila
+        ORDER BY items DESC
+    """, [f"%{own_token}%"] + params).fetchall()
+
+    regions = []
+    district_rollup = {}
+    for r in rows:
+        items = r["items"] or 0
+        own = r["own_items"] or 0
+        sov = round(own / items * 100, 1) if items else 0.0
+        lat, lng = r["geo_lat"], r["geo_lng"]
+        if lat is None or lng is None:
+            clat, clng = _district_centroid(r["district"])
+            lat = lat if lat is not None else clat
+            lng = lng if lng is not None else clng
+        reg = {
+            "district": r["district"],
+            "upazila": r["upazila"] or r["district"],
+            "territory": r["territory"] or "",
+            "rx": r["rx"] or 0,
+            "items": items,
+            "own_items": own,
+            "competitor_items": max(items - own, 0),
+            "sov": sov,
+            "lat": lat,
+            "lng": lng,
+        }
+        regions.append(reg)
+        d = district_rollup.setdefault(r["district"], {
+            "district": r["district"], "division": "", "items": 0, "own_items": 0,
+            "rx": 0, "lat": None, "lng": None,
+        })
+        d["items"] += items
+        d["own_items"] += own
+        d["rx"] += r["rx"] or 0
+        if d["lat"] is None and lat:
+            d["lat"] = lat
+        if d["lng"] is None and lng:
+            d["lng"] = lng
+
+    districts = []
+    for name, d in district_rollup.items():
+        sov = round(d["own_items"] / d["items"] * 100, 1) if d["items"] else 0.0
+        lat, lng = d["lat"], d["lng"]
+        if lat is None or lng is None:
+            clat, clng = _district_centroid(name)
+            lat = lat if lat is not None else clat
+            lng = lng if lng is not None else clng
+        districts.append({
+            "district": name,
+            "division": d["division"],
+            "items": d["items"],
+            "own_items": d["own_items"],
+            "competitor_items": max(d["items"] - d["own_items"], 0),
+            "rx": d["rx"],
+            "sov": sov,
+            "penetration": sov,
+            "lat": lat,
+            "lng": lng,
+        })
+    districts.sort(key=lambda x: (-x["items"], x["district"]))
+    conn.close()
+    return {
+        "own_company": own_company,
+        "days": int(days or 30),
+        "regions": regions,
+        "districts": districts,
     }

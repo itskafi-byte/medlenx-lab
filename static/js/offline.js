@@ -54,6 +54,71 @@ async function pendingOfflineScans() {
   });
 }
 
+/** Mark a stored scan as synced once the server has accepted it. */
+function markSynced(id) {
+  return openOfflineDb().then((db) => new Promise((resolve) => {
+    const tx = db.transaction(MEDLENX_STORE, 'readwrite');
+    const store = tx.objectStore(MEDLENX_STORE);
+    const get = store.get(id);
+    get.onsuccess = () => {
+      const item = get.result;
+      if (item) {
+        item.synced = true;
+        item.syncedAt = new Date().toISOString();
+        store.put(item);
+      }
+    };
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => resolve(false);
+  }));
+}
+
+/** Replay the offline queue against the real /api/scan endpoint.
+ *  Converts the stored data-URL back to a File and posts it as multipart. */
+async function flushOfflineQueue() {
+  if (!navigator.onLine) return 0;
+  const pending = await pendingOfflineScans();
+  let synced = 0;
+  for (const item of pending) {
+    try {
+      const dataUrl = item.imageData || '';
+      if (!dataUrl.startsWith('data:image')) continue;
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'offline-rx.jpg', { type: blob.type || 'image/jpeg' });
+      const fd = new FormData();
+      fd.append('file', file);
+      if (item.meta) {
+        Object.entries(item.meta).forEach(([k, v]) => fd.append(k, v));
+      }
+      const r = await fetch('/api/scan', { method: 'POST', body: fd });
+      if (r.ok) {
+        await markSynced(item.id);
+        synced += 1;
+      }
+    } catch (e) {
+      console.warn('Offline flush item failed', e);
+    }
+  }
+  return synced;
+}
+
+function renderOfflineBar(count) {
+  let bar = document.getElementById('offlineSyncBar');
+  if (count > 0) {
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'offlineSyncBar';
+      bar.className = 'fixed bottom-0 left-0 right-0 z-50 lg:left-[260px] flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white text-[12px] font-medium shadow-lg';
+      document.body.appendChild(bar);
+    }
+    bar.style.display = 'flex';
+    bar.innerHTML = `<i class="fas fa-cloud-arrow-up"></i> 📱 ${count} Prescription${count > 1 ? 's' : ''} Cached Offline — Will Auto-Sync on Network Connection`;
+  } else if (bar) {
+    bar.style.display = 'none';
+  }
+}
+
 window.MedLenXOffline = {
   checkOnline, saveToLocalStorage, queueOfflineScan, pendingOfflineScans,
+  flushOfflineQueue, renderOfflineBar,
 };

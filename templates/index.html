@@ -8,6 +8,8 @@
 <meta name="theme-color" content="#0F172A">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -45,6 +47,9 @@ tailwind.config={
 .kpi-card{transition:all .2s}
 .kpi-card:hover{transform:translateY(-3px)}
 .kpi-card.active-filter{ring:2px solid #2563EB;transform:translateY(-2px)}
+@keyframes bboxPulse{0%,100%{box-shadow:0 0 0 0 rgba(251,146,60,0.5)}50%{box-shadow:0 0 0 5px rgba(251,146,60,0.15)}}
+.theme-accent-top{border-top:3px solid var(--brand-accent,#1E40AF)}
+.theme-icon{background:var(--brand-accent-soft,#EFF6FF);color:var(--brand-accent,#1E40AF)}
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900 transition-colors duration-300">
@@ -128,6 +133,7 @@ tailwind.config={
 
     <div class="flex items-center gap-2">
       <span id="onlineStatus" class="hidden md:flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-200"><i class="fas fa-circle text-[6px] mr-1"></i>Online</span>
+      <span id="syncBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-medium" title="Offline scan queue"><i class="fas fa-cloud-arrow-up text-blue-300 text-[10px]"></i><span id="syncBadgeText">0 queued</span></span>
       <span id="companyBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-medium max-w-[240px]">
         <i class="fas fa-building text-[10px] text-blue-300"></i>
         <span id="companyBadgeText" class="truncate">Set company in Settings</span>
@@ -193,6 +199,7 @@ tailwind.config={
       </div>
       <div id="imageViewer" class="image-viewer flex-1 bg-slate-100 relative flex items-center justify-center overflow-hidden">
         <img id="viewerImg" class="max-w-none" style="transform: scale(1) translate(0px, 0px) rotate(0deg);">
+        <div id="bboxOverlay" class="absolute inset-0 pointer-events-none" style="z-index:5"></div>
         <div class="absolute bottom-3 left-3 bg-slate-900/80 text-white text-[10px] px-2 py-1 rounded-full">Left: Image Viewer • Right: Data Verification</div>
       </div>
       <!-- Preprocess quick bar -->
@@ -238,8 +245,8 @@ tailwind.config={
 
         <!-- Medicines Verification -->
         <div id="medicinesVerification" class="hidden space-y-3">
-       
-            <span class="text-[10px] font-normal normal-case">Green ✓ high confidence, Yellow ⚠ needs review</span>
+          <h4 class="text-xs font-semibold tracking-widest uppercase text-slate-500 mb-1">Medicines Order &amp; Confidence Review
+            <span class="text-[10px] font-normal normal-case">Green ✓ high confidence · Orange 🤖 AI Guess &lt;80% · Hover a name to highlight it on the scan</span>
           </h4>
           <div id="medicinesVerifyGrid" class="space-y-3"></div>
         </div>
@@ -326,18 +333,18 @@ tailwind.config={
     <h2 class="font-semibold text-sm mb-3 flex items-center gap-2"><i class="fas fa-chart-line text-blue-600"></i> Top Summary KPIs</h2>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Total Captured</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1" id="kpiTotalAll">0</p><span id="kpiScansDelta" class="text-[10px] font-semibold"></span></div></div><div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-file-medical"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Total Captured</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1" id="kpiTotalAll">0</p><span id="kpiScansDelta" class="text-[10px] font-semibold"></span></div></div><div class="w-10 h-10 rounded-xl theme-icon flex items-center justify-center"><i class="fas fa-file-medical"></i></div></div>
         <div class="mt-3 flex gap-2 text-[10px]"><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Today <b id="kpiToday">0</b></span><span class="px-2 py-0.5 bg-slate-50 rounded-full border">Week <b id="kpiWeek">0</b></span><span class="px-2 py-0.5 bg-blue-50 text-blue-800 rounded-full border border-blue-200">Month <b id="kpiMonth">0</b></span></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Identified Medicines</p><p class="text-2xl font-bold mt-1" id="kpiItems">0</p><p class="text-[11px] text-slate-500 mt-1 truncate">Top: <b id="kpiTopBrand">-</b> (<span id="kpiTopBrandCount">0</span>)</p></div><div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><i class="fas fa-crown"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Identified Medicines</p><p class="text-2xl font-bold mt-1" id="kpiItems">0</p><p class="text-[11px] text-slate-500 mt-1 truncate">Top: <b id="kpiTopBrand">-</b> (<span id="kpiTopBrandCount">0</span>)</p></div><div class="w-10 h-10 rounded-xl theme-icon flex items-center justify-center"><i class="fas fa-crown"></i></div></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Target Share</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1"><span id="kpiMarketShare">0</span>%</p><span id="kpiShareDelta" class="text-[10px] font-semibold"></span></div><p class="text-[11px] text-slate-500 mt-1 truncate" id="kpiOwnCompany">Your Company</p></div><div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600"><i class="fas fa-chart-pie"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Target Share</p><div class="flex items-baseline gap-2"><p class="text-2xl font-bold mt-1"><span id="kpiMarketShare">0</span>%</p><span id="kpiShareDelta" class="text-[10px] font-semibold"></span></div><p class="text-[11px] text-slate-500 mt-1 truncate" id="kpiOwnCompany">Your Company</p></div><div class="w-10 h-10 rounded-xl theme-icon flex items-center justify-center"><i class="fas fa-chart-pie"></i></div></div>
         <div class="mt-2 w-full bg-slate-200 rounded-full h-1.5"><div id="kpiMarketBar" class="h-1.5 bg-emerald-600 rounded-full transition-all" style="width:0%"></div></div>
       </div>
       <div class="kpi-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-5">
-        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Active Doctor Coverage</p><p class="text-2xl font-bold mt-1"><span id="kpiActiveDoctors">0</span> / <span id="kpiTotalDoctors" class="text-sm text-slate-500">0</span></p><p class="text-[11px] text-slate-500 mt-1">Unique doctors</p></div><div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700"><i class="fas fa-user-doctor"></i></div></div>
+        <div class="flex items-start justify-between"><div><p class="text-[11px] text-slate-500">Active Doctor Coverage</p><p class="text-2xl font-bold mt-1"><span id="kpiActiveDoctors">0</span> / <span id="kpiTotalDoctors" class="text-sm text-slate-500">0</span></p><p class="text-[11px] text-slate-500 mt-1">Unique doctors</p></div><div class="w-10 h-10 rounded-xl theme-icon flex items-center justify-center"><i class="fas fa-user-doctor"></i></div></div>
       </div>
     </div>
   </div>
@@ -473,16 +480,18 @@ tailwind.config={
 
 <!-- ==================== TAB: PHARMA INTELLIGENCE HUB ==================== -->
 <div id="tab-database" class="tab-content hidden space-y-5">
-  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-    <div>
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-5 pt-5">
       <h2 class="text-lg font-bold text-slate-900">Pharma Intelligence Hub</h2>
-      <p class="text-xs text-slate-500 mt-0.5">25K+ drug index, industry news, field jobs and WHO health-day campaign calendar.</p>
+      <p class="text-xs text-slate-500 mt-0.5">Real-time Medex market intelligence, DGDA notifications, industry jobs &amp; WHO health campaigns</p>
     </div>
-    <div class="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl" id="hubTabBar">
-      <button type="button" data-hub-tab="index" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-white shadow-sm text-slate-900">25K+ Drug Index</button>
-      <button type="button" data-hub-tab="news" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Industry News</button>
-      <button type="button" data-hub-tab="jobs" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Job Board</button>
-      <button type="button" data-hub-tab="healthdays" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Health Days</button>
+    <div class="mt-4 px-4 pb-3">
+      <div class="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl" id="hubTabBar">
+        <button type="button" data-hub-tab="index" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold bg-white shadow-sm text-slate-900 flex items-center gap-2">💊 25K+ Drug Index</button>
+        <button type="button" data-hub-tab="news" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">📰 Industry News</button>
+        <button type="button" data-hub-tab="jobs" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">💼 Health &amp; Pharma Jobs</button>
+        <button type="button" data-hub-tab="healthdays" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">🗓️ Health Days</button>
+      </div>
     </div>
   </div>
 
@@ -499,36 +508,75 @@ tailwind.config={
     <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-6">
       <h2 class="font-semibold text-sm mb-4 flex items-center gap-2"><i class="fas fa-database text-blue-700"></i> 25K+ Drug Index &amp; Search</h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="medexStats"></div>
-      <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
+      <!-- Quick filter pills -->
+      <div class="flex flex-wrap gap-2 mb-4" id="medexFilterBar">
+        <button type="button" class="medex-filter px-3.5 py-1.5 rounded-full text-[11px] font-semibold border transition bg-slate-900 text-white border-slate-900" data-cat="top10">🏆 Top 10 Pharma</button>
+        <button type="button" class="medex-filter px-3.5 py-1.5 rounded-full text-[11px] font-semibold border transition bg-white text-slate-600 border-slate-200 hover:border-blue-300" data-cat="cardiology">🫀 Cardiology</button>
+        <button type="button" class="medex-filter px-3.5 py-1.5 rounded-full text-[11px] font-semibold border transition bg-white text-slate-600 border-slate-200 hover:border-blue-300" data-cat="antibiotics">🦠 Antibiotics</button>
+        <button type="button" class="medex-filter px-3.5 py-1.5 rounded-full text-[11px] font-semibold border transition bg-white text-slate-600 border-slate-200 hover:border-blue-300" data-cat="otc">💊 OTC</button>
+      </div>
+      <div class="relative mb-4">
+        <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fas fa-search text-xs"></i></div>
+        <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
+      </div>
+      <div id="medexBrowseInfo" class="hidden mb-3 text-[11px] text-slate-500"><i class="fas fa-filter text-blue-600 mr-1"></i>Showing curated <b id="medexBrowseLabel">Top 10 Pharma</b> slice — <span id="medexBrowseCount">0</span> results from the 25K catalogue. Every product is DGDA-registered.</div>
       <div id="medexResults" class="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto"></div>
+      <div id="medexBrowseResults" class="grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto"></div>
     </div>
   </div>
 
   <div id="hub-news" class="hub-pane hidden space-y-4">
     <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-      <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center justify-between mb-4">
         <div>
           <h3 class="font-semibold text-sm">Industry News &amp; Market Trends</h3>
-          <p class="text-[11px] text-slate-500">Medex catalogue, DGDA regulatory desk, WHO live RSS.</p>
+          <p class="text-[11px] text-slate-500">Medex market board, DGDA regulatory desk, WHO live RSS &amp; Bangladeshi pharma reports.</p>
         </div>
         <button type="button" id="newsRefresh" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><i class="fas fa-rotate mr-1"></i>Refresh</button>
       </div>
-      <div id="newsFeed" class="space-y-3"></div>
+      <div class="grid md:grid-cols-5 gap-4">
+        <!-- Featured story column -->
+        <div class="md:col-span-2">
+          <h4 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2"><i class="fas fa-star text-amber-500"></i> Featured story</h4>
+          <div id="newsFeatured" class="space-y-3"></div>
+        </div>
+        <!-- Timeline column -->
+        <div class="md:col-span-3">
+          <h4 class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2"><i class="fas fa-stream text-blue-500"></i> Market place timeline</h4>
+          <div id="newsTimeline" class="space-y-2 max-h-[520px] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <div id="hub-jobs" class="hub-pane hidden space-y-4">
+    <div class="bg-gradient-to-r from-slate-900 to-blue-800 rounded-2xl p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center gap-4">
+      <div class="flex-1">
+        <h3 class="font-semibold text-sm">Health &amp; Pharma Job Board</h3>
+        <p class="text-[11px] text-white/70 mt-0.5">Curated MPO, Senior Territory Manager, Executive Product Management (PMD) &amp; Regulatory Affairs vacancies with direct apply links.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="bg-white/10 rounded-xl px-3 py-2"><p class="text-[10px] text-white/60">Open roles</p><p class="text-lg font-bold" id="jobCount">0</p></div>
+        <div class="bg-white/10 rounded-xl px-3 py-2"><p class="text-[10px] text-white/60">Fresh today</p><p class="text-lg font-bold" id="jobFreshCount">0</p></div>
+      </div>
+    </div>
     <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
       <div class="flex flex-wrap items-center gap-2 mb-4">
-        <h3 class="font-semibold text-sm mr-auto">Pharma &amp; Health Job Board</h3>
-        <select id="jobCategory" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+        <select id="jobCategory" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
           <option value="">All roles</option>
           <option value="MPO">MPO</option>
           <option value="RSO">RSO / RSM</option>
           <option value="Product Management">Product Management</option>
           <option value="Sales Ops">Sales Ops</option>
+          <option value="Regulatory Affairs">Regulatory Affairs</option>
         </select>
-        <input id="jobSearch" placeholder="Company, city, keyword..." class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 w-44">
+        <select id="jobDept" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
+          <option value="">All departments</option>
+        </select>
+        <select id="jobTerritory" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
+          <option value="">All territories</option>
+        </select>
+        <input id="jobSearch" placeholder="Company, city, keyword..." class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 w-44 bg-white">
       </div>
       <div id="jobBoard" class="grid md:grid-cols-2 gap-3"></div>
     </div>
@@ -537,9 +585,35 @@ tailwind.config={
   <div id="hub-healthdays" class="hub-pane hidden space-y-4">
     <div id="healthDayNext" class="bg-gradient-to-r from-blue-700 to-slate-900 rounded-2xl p-5 text-white shadow-sm"></div>
     <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-      <h3 class="font-semibold text-sm mb-3">International Health Days calendar</h3>
-      <p class="text-[11px] text-slate-500 mb-4">Plan targeted doctor visits and promotional collateral around WHO / global observances.</p>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="font-semibold text-sm">International Health Days calendar</h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">Click any WHO / global health day to pull a pre-generated promotional script &amp; campaign brand focus for your doctor visits.</p>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" id="hdPrev" class="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs"><i class="fas fa-chevron-left"></i></button>
+          <span id="hdMonthLabel" class="text-xs font-bold w-28 text-center">—</span>
+          <button type="button" id="hdNext" class="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs"><i class="fas fa-chevron-right"></i></button>
+        </div>
+      </div>
       <div id="healthDayCalendar" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- Health day campaign-card modal -->
+  <div id="healthDayModal" class="fixed inset-0 z-[9999] hidden items-center justify-center modal-backdrop p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200" style="background:linear-gradient(90deg,#0F172A,#1E40AF);color:#fff">
+        <div>
+          <h3 id="hdModalTitle" class="font-bold">Health day campaign card</h3>
+          <p id="hdModalSubtitle" class="text-[11px] text-white/70 mt-0.5"></p>
+        </div>
+        <button id="hdModalClose" class="w-8 h-8 rounded-lg hover:bg-white/10 text-white"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div id="hdModalBody" class="p-5 overflow-y-auto"></div>
+      <div class="p-4 border-t border-slate-100 bg-slate-50 text-[11px] text-slate-500">
+        <i class="fas fa-lightbulb text-amber-500 mr-1"></i>Use the script to open the conversation, then tailor the brand focus to the specialty of the day.
+      </div>
     </div>
   </div>
 </div>
@@ -547,11 +621,75 @@ tailwind.config={
 <!-- ==================== TAB: RSM COMMAND ==================== -->
 <div id="tab-rsm" class="tab-content hidden space-y-6">
   <div class="bg-gradient-to-r from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg">
-    <p class="text-[11px] uppercase tracking-widest text-white/70 font-semibold">Multi-tenant org hierarchy</p>
-    <h2 class="text-xl font-bold mt-1">Territory Manager / RSM Command</h2>
-    <p class="text-sm text-white/80 mt-1">Aggregated prescription audits across a 50+ MPO field team, with competitive Share of Voice.</p>
+    <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-widest text-white/70 font-semibold">Multi-tenant org hierarchy</p>
+        <h2 class="text-xl font-bold mt-1">Territory Manager / RSM Command</h2>
+        <p class="text-sm text-white/80 mt-1">Aggregated prescription audits across a 50+ MPO field team, with competitive Share of Voice.</p>
+      </div>
+      <button type="button" id="rsmReportPdf" class="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-900 rounded-xl text-sm font-bold shadow hover:bg-blue-50">
+        <i class="fas fa-file-pdf text-red-600"></i> Generate DGDA / Compliance Audit PDF
+      </button>
+    </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5" id="rsmKpis"></div>
   </div>
+
+  <!-- Territory penetration heatmap -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="mr-auto">
+        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-map-location-dot text-blue-600"></i> Territory Penetration Heatmap</h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Live scan locations mapped across Bangladesh — bubble size = volume, colour = your company's market penetration (green = dominant, red = competitor-heavy).</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="hmDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+        </select>
+        <button type="button" id="hmRefresh" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><i class="fas fa-rotate"></i></button>
+      </div>
+    </div>
+    <div id="heatmapStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+    <div id="rsmHeatmap" class="w-full h-[420px] rounded-xl border border-slate-200 bg-slate-50 overflow-hidden"></div>
+    <div id="heatmapLegend" class="flex items-center gap-4 mt-2 text-[10px] text-slate-500">
+      <span><span class="inline-block w-3 h-3 rounded-full bg-emerald-500 mr-1"></span>Own-company dominant</span>
+      <span><span class="inline-block w-3 h-3 rounded-full bg-amber-500 mr-1"></span>Competitive / mixed</span>
+      <span><span class="inline-block w-3 h-3 rounded-full bg-red-500 mr-1"></span>Competitor-heavy</span>
+      <span class="ml-auto">Bubble size = prescription volume</span>
+    </div>
+  </div>
+
+  <!-- Doctor prescribing tiering matrix -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="mr-auto">
+        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-user-doctor text-violet-600"></i> Doctor Prescribing Tiering Matrix (A/B/C)</h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Auto-classified from audit volume — Tier A &gt;10 Rx, B 4–9 Rx, C ≤3 Rx/month. <b class="text-red-600">At-risk</b> = high-volume doctors with low own-brand share.</p>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-slate-900 text-white border-slate-900" data-tier="">All</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="A">Tier A</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="B">Tier B</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="C">Tier C</button>
+        <select id="tierSpecialty" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
+          <option value="">All specialties</option>
+        </select>
+      </div>
+    </div>
+    <div id="tierSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs min-w-[900px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b">
+            <th class="py-2">Tier</th><th>Doctor</th><th>Specialty</th><th>Territory</th><th>Rx/mo</th><th>Items</th><th>Own</th><th>Competitor</th><th>SoV</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tierBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-semibold text-sm">Team leaderboard</h3>
@@ -562,10 +700,10 @@ tailwind.config={
       </select>
     </div>
     <div class="overflow-x-auto">
-      <table class="w-full text-xs min-w-[720px]">
+      <table class="w-full text-xs min-w-[880px]">
         <thead>
           <tr class="text-left text-slate-500 border-b">
-            <th class="py-2">MPO</th><th>Role</th><th>Territory</th><th>Rx</th><th>Items</th><th>Own</th><th>Competitor</th><th>SoV</th>
+            <th class="py-2">MPO</th><th>Role</th><th>Territory</th><th>Rx</th><th>Items</th><th>Own</th><th>Competitor</th><th>SoV</th><th>SoV trend (WoW)</th><th>WoW</th>
           </tr>
         </thead>
         <tbody id="rsmTeamBody"></tbody>
@@ -843,6 +981,18 @@ document.getElementById('installPwaBtn').addEventListener('click', async () => {
 });
 
 // Online status
+async function refreshPendingCount(){
+  const badge=document.getElementById('syncBadge');
+  const text=document.getElementById('syncBadgeText');
+  let n=0;
+  try{ if(window.MedLenXOffline) n=(await window.MedLenXOffline.pendingOfflineScans()).length; }catch(e){}
+  if(text) text.textContent=n?`${n} queued`:'0 queued';
+  if(badge){
+    badge.className='hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full '+(n?'bg-amber-600 text-white':'bg-slate-900 text-white')+' text-[11px] font-medium';
+  }
+  if(window.MedLenXOffline) window.MedLenXOffline.renderOfflineBar(n);
+}
+
 function updateOnlineStatus(){
   const el=document.getElementById('onlineStatus');
   const sidebarEl=document.getElementById('sidebarOnlineStatus');
@@ -853,6 +1003,7 @@ function updateOnlineStatus(){
     if(el){el.className='hidden md:flex px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-medium border border-amber-200';el.innerHTML='<i class="fas fa-wifi"></i> Offline';}
     if(sidebarEl) sidebarEl.textContent='Offline • IndexedDB';
   }
+  refreshPendingCount();
 }
 window.addEventListener('online',updateOnlineStatus);
 window.addEventListener('offline',updateOnlineStatus);
@@ -881,9 +1032,10 @@ document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn=>{
       else{b.classList.add('bg-slate-900','text-white');b.classList.remove('text-slate-500');}
     });
     if(tab==='dashboard'){loadKpis();loadCharts();loadHistoryDash();loadRecentMedicines();}
-    if(tab==='database'){loadMedexStats();searchMedex();loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();}
+    if(tab==='database'){loadMedexStats();loadMedexBrowse(medexActiveFilter);loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();}
     if(tab==='rsm'){loadRsmDashboard();}
     if(tab==='settings'){loadOfficerForm();}
+    if(tab==='rsm'){initRsmExtras();}
   });
 });
 
@@ -1034,6 +1186,7 @@ function clearWorkspace(){
   document.getElementById('verificationWorkspace').classList.add('hidden');
   document.getElementById('skeletonLoader').classList.add('hidden');
   document.getElementById('progressArea').classList.add('hidden');
+  if(typeof clearMedBBox==='function') clearMedBBox();
   fileInput.value='';
 }
 
@@ -1084,6 +1237,105 @@ async function scanPrescription(){
 }
 
 // Verification Workspace Right Column with green check / yellow warning
+/** Competitor → own-brand substitution card (side-by-side) + MPO smart pitch. */
+function substitutionCard(med, idx){
+  const s=med.substitution;
+  if(!s || !s.own_brand) return '';
+  const c=s.competitor, o=s.own_brand;
+  const diffClass = s.unit_difference && s.unit_difference < 0 ? 'text-emerald-600' : 'text-amber-600';
+  const diffTxt = s.unit_difference_label || '';
+  return `<div class="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-[10px] font-bold uppercase tracking-widest text-blue-700"><i class="fas fa-right-left mr-1"></i>Generic substitution</span>
+      <span class="ml-auto text-[9px] text-blue-500 font-semibold">MPO Smart Pitch ready</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="bg-white rounded-lg border border-slate-200 p-2 text-center">
+        <img src="${c.image_url||'https://placehold.co/80x80'}" class="w-12 h-12 mx-auto object-contain rounded-lg bg-white" onerror="this.src='https://placehold.co/80x80'">
+        <p class="text-[12px] font-bold text-slate-900 truncate mt-1">${c.brand}</p>
+        <p class="text-[9px] text-slate-500 truncate">${c.company ? c.company.split(' ')[0] : ''}</p>
+        <p class="text-[9px] text-slate-400">${c.strength} ${c.type}</p>
+        <p class="text-[9px] font-semibold text-slate-600 mt-0.5">${c.mrp!=null?('BDT '+c.mrp.toFixed(2)):''}</p>
+      </div>
+      <div class="relative bg-green-50 rounded-lg border border-emerald-300 p-2 text-center">
+        <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[8px]"><i class="fas fa-arrow-right-long"></i></div>
+        <img src="${o.image_url||'https://placehold.co/80x80'}" class="w-12 h-12 mx-auto object-contain rounded-lg bg-white" onerror="this.src='https://placehold.co/80x80'">
+        <p class="text-[12px] font-bold text-emerald-700 truncate mt-1">${o.brand}</p>
+        <p class="text-[9px] text-emerald-600 font-semibold">Our portfolio</p>
+        <p class="text-[9px] text-slate-500">${o.strength} ${o.type}</p>
+        <p class="text-[9px] font-semibold text-emerald-700 mt-0.5">${o.mrp!=null?('BDT '+o.mrp.toFixed(2)):''}</p>
+      </div>
+    </div>
+    ${diffTxt?`<p class="text-[10px] mt-2 ${diffClass} font-semibold"><i class="fas fa-coins mr-1"></i>${diffTxt}${c.mrp!=null && o.mrp!=null ? (s.unit_difference<0?' (saving)':(s.unit_difference>0?' (premium)':'')) : ''}</p>`:''}
+    <div class="mt-2 bg-white border border-blue-100 rounded-lg p-2">
+      <p class="text-[9px] font-bold uppercase tracking-widest text-blue-600 mb-1"><i class="fas fa-comment-dots mr-1"></i>Smart pitch note</p>
+      <p class="text-[10px] text-slate-700 leading-snug">${s.pitch}</p>
+      <div class="mt-1.5 flex gap-1.5">
+        <button type="button" class="copy-pitch px-2 py-1 rounded-md bg-blue-600 text-white text-[9px] font-semibold hover:bg-blue-700" data-pitch="${s.pitch.replace(/"/g,'&quot;')}"><i class="fas fa-copy mr-1"></i>Copy pitch</button>
+        <button type="button" class="train-sale px-2 py-1 rounded-md bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700" data-idx="${idx}"><i class="fas fa-bullseye mr-1"></i>Mark as won</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Red DGDA compliance flag (banned / price-adjusted). */
+function dgdaFlag(dgda){
+  const crit=dgda.status==='banned';
+  return `<div class="mt-2 flex items-start gap-2 rounded-lg border ${crit?'border-red-300 bg-red-50':'border-amber-300 bg-amber-50'} px-3 py-2">
+    <i class="fas ${crit?'fa-ban':'fa-triangle-exclamation'} ${crit?'text-red-600':'text-amber-600'} mt-0.5 text-xs"></i>
+    <div class="text-[10px] ${crit?'text-red-800':'text-amber-800'} leading-snug">${dgda.concern||''}</div>
+  </div>`;
+}
+
+/** Crop the current scan image at a medicine's line band and return base64. */
+function cropMedicineSlice(idx, total){
+  try{
+    const img=document.getElementById('viewerImg');
+    if(!img || !img.src || !img.src.startsWith('data:image')) return '';
+    const n=total||1, i=Math.max(0, idx||0);
+    const canvas=document.createElement('canvas');
+    const cw=img.naturalWidth, ch=img.naturalHeight;
+    canvas.width=cw; canvas.height=Math.max(1, Math.floor(ch/n));
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img, 0, Math.floor(ch*i/n), cw, Math.floor(ch/n), 0, 0, cw, Math.floor(ch/n));
+    return canvas.toDataURL('image/jpeg', 0.7);
+  }catch(e){ return ''; }
+}
+
+/** Post a human-in-the-loop training example to /api/training/queue. */
+async function queueTrainingItem(med, correctedBrand, correctedCompany, notes){
+  const total=(window.lastScannedData?.medicines||[]).length;
+  const idx=(med && med.line_number!=null)?(med.line_number-1):0;
+  const payload={
+    prescription_id: window.lastScannedData?.id,
+    mr_id: officerProfile?.employee_id||'MR001',
+    brand_name: med?.brand_name||'',
+    corrected_brand: correctedBrand||med?.brand_name||'',
+    corrected_company: correctedCompany||med?.company||'',
+    raw_text: med?.raw_text||'',
+    confidence: med?.confidence||0,
+    notes: notes||'',
+    image_slice: cropMedicineSlice(idx, total),
+  };
+  try{
+    await fetch('/api/training/queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }catch(e){ console.warn('training queue',e); }
+}
+
+function attachFieldIntelligenceActions(){
+  document.querySelectorAll('.copy-pitch').forEach(btn=>{
+    btn.addEventListener('click',()=>{ navigator.clipboard?.writeText(btn.dataset.pitch||''); toast.success('Pitch note copied'); });
+  });
+  document.querySelectorAll('.train-sale').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
+      queueTrainingItem(med, med?.brand_name, med?.company, 'Marked as won conversion on substitution pitch');
+      toast.success('Logged as a conversion win — queued for learning');
+    });
+  });
+}
+
 function renderVerification(data){
   const doc=data.doctor||{};
   
@@ -1158,16 +1410,21 @@ function renderVerification(data){
     const pct=Math.round(conf*100);
     const isHigh=pct>85;
     const isLow=pct<70;
-    const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':(isLow?'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-flag"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>');
+    // AI-Guess band: below the 80% auto-accept threshold the row becomes soft
+    // orange and flips into a one-tap verification state against Medex.
+    const isGuess = pct < 80;
+    const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':(isGuess?'<span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px]"><i class="fas fa-robot"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>');
     // Anything the matcher could not confirm is highlighted for review
     const needsReview = med.needs_review || med.company_ambiguous || med.company_conflict
                         || isLow || (med.company && !med.company_verified);
-    const borderClass=(isHigh && !needsReview)?'border-slate-200':'border-amber-200 bg-amber-50/50';
+    const borderClass=(isHigh && !needsReview)?'border-slate-200':(isGuess?'border-orange-200 bg-orange-50/60':'border-amber-200 bg-amber-50/50');
     const confBadge=isHigh
       ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">${pct}%</span>`
-      : (isLow
-        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold"><i class="fas fa-flag mr-1"></i>${pct}% manual flag</span>`
-        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">${pct}%</span>`);
+      : (isGuess
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-300 font-semibold"><i class="fas fa-robot mr-1"></i>${pct}% AI Guess</span>`
+        : (isLow
+          ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold"><i class="fas fa-flag mr-1"></i>${pct}% manual flag</span>`
+          : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">${pct}%</span>`));
     // Company badge. Colour encodes trust:
     //   verified against the MedEx catalogue -> indigo + check
     //   unverified model guess / ambiguous brand -> amber + warning
@@ -1209,7 +1466,7 @@ function renderVerification(data){
          </details>`
       : '';
     return `
-      <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border ${borderClass} p-3">
+      <div class="med-card bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border ${borderClass} p-3" data-med-idx="${idx}" data-med-count="${(data.medicines||[]).length}" bbox-hover>
         <div class="flex items-start gap-3">
           <div class="relative flex-shrink-0">
             <img src="${med.image_url}" class="w-20 h-20 rounded-xl object-contain bg-slate-50 border-2 border-slate-100 shadow-sm" onerror="this.src='https://placehold.co/100x100'">
@@ -1222,8 +1479,13 @@ function renderVerification(data){
                 <div id="autocomplete-${idx}" class="autocomplete-dropdown hidden absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-50"></div>
               </div>
               ${icon}
-              <span class="text-[10px] px-2 py-0.5 rounded-full ${isHigh?'bg-emerald-50 text-emerald-700 border border-emerald-200':'bg-amber-50 text-amber-700 border border-amber-200'}">${(conf*100).toFixed(0)}%</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full ${isHigh?'bg-emerald-50 text-emerald-700 border border-emerald-200':(isGuess?'bg-orange-50 text-orange-700 border border-orange-300':'bg-amber-50 text-amber-700 border border-amber-200')}">${(conf*100).toFixed(0)}%</span>
             </div>
+            ${isGuess?`<div class="mt-1.5 flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+                <i class="fas fa-robot text-orange-500 text-xs"></i>
+                <span class="text-[10px] text-orange-800 font-medium">AI Guess — </span>
+                <button type="button" class="ai-verify text-[10px] text-orange-700 font-bold underline decoration-dotted hover:text-orange-900" data-idx="${idx}">Tap to verify against Medex</button>
+              </div>`:''}
             <!-- Only required fields: type, ingredient, mg, dosage, company -->
             <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
               <div class="bg-blue-50 border border-blue-100 rounded-xl p-2.5">
@@ -1246,6 +1508,8 @@ function renderVerification(data){
             ${companyEmphasis}
             ${conflictNote}
             ${altOptions}
+            ${med.substitution ? substitutionCard(med, idx) : ''}
+            ${med.dgda && (med.dgda.status==='banned' || med.dgda.status==='price_adjusted') ? dgdaFlag(med.dgda) : ''}
             <div class="mt-2 flex items-center justify-between gap-2">
               <p class="text-[10px] text-slate-400 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
               <button type="button" class="report-misid shrink-0 text-[10px] text-amber-700 hover:underline" data-idx="${idx}" data-brand="${med.brand_name||''}" data-raw="${(med.raw_text||'').replace(/"/g,'')}">Report mis-ID</button>
@@ -1260,15 +1524,78 @@ function renderVerification(data){
   attachMedicineAutocomplete();
   attachAlternativePickers();
   attachMisidReporters();
+  attachMedCardBBox();
+  attachAiVerify();
+  attachFieldIntelligenceActions();
 
   window.lastScannedData=data;
+}
+
+/**
+ * Bounding-box heatmap overlay.
+ *
+ * The VL model returns line-based detections without pixel coordinates, so we
+ * map each medicine's `line_number` (1-based, top→bottom) onto a vertical band
+ * of the scan. Hovering a medicine name on the right panel draws the matching
+ * box on the left image so the MPO can eyeball the region before saving.
+ */
+function showMedBBox(idx, total){
+  const overlay=document.getElementById('bboxOverlay');
+  if(!overlay) return;
+  const n=total||1;
+  const i=Math.max(0, idx);
+  const top=(i/n)*100;
+  const height=(1/n)*100;
+  const label=(window.lastScannedData?.medicines?.[i])?.brand_name || `Item ${i+1}`;
+  overlay.innerHTML=`<div class="absolute left-[6%] right-[6%] border-[3px] border-orange-400 rounded-lg bg-orange-400/15 shadow-[0_0_0_9999px_rgba(15,23,42,0.08)] transition-all duration-200"
+        style="top:${top}%;height:${height}%;animation:bboxPulse 1s ease-in-out infinite">
+        <span class="absolute -top-6 left-1 bg-slate-900 text-white text-[9px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap">
+          <i class="fas fa-crosshair mr-1 text-orange-300"></i>${label}
+        </span>
+      </div>`;
+}
+function clearMedBBox(){
+  const overlay=document.getElementById('bboxOverlay');
+  if(overlay) overlay.innerHTML='';
+}
+function attachMedCardBBox(){
+  document.querySelectorAll('.med-card').forEach(card=>{
+    const idx=parseInt(card.dataset.medIdx,10);
+    const total=parseInt(card.dataset.medCount,10)||0;
+    card.addEventListener('mouseenter',()=>showMedBBox(idx,total));
+    card.addEventListener('mouseleave',clearMedBBox);
+  });
+}
+
+/** AI Guess — tap to verify against Medex: focus the brand input which opens
+ *  the live MedEx autocomplete so the MPO can confirm a hand-picked row. */
+function attachAiVerify(){
+  document.querySelectorAll('.ai-verify').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
+      const input=document.querySelector(`.medicine-autocomplete[data-idx="${idx}"]`);
+      if(input){
+        input.focus();
+        input.dispatchEvent(new Event('input'));
+        input.scrollIntoView({behavior:'smooth', block:'center'});
+      }
+      toast.info('Verify this brand against the MedEx 25K catalogue');
+      // Capture the AI guess for the retraining queue once verified/saved.
+      if(med && (med.confidence||0) < 0.8){
+        queueTrainingItem(med, med?.brand_name, med?.company, 'AI Guess <80% reviewed');
+      }
+    });
+  });
 }
 
 function attachMisidReporters(){
   document.querySelectorAll('.report-misid').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      const brand=btn.dataset.brand||'';
-      const raw=btn.dataset.raw||'';
+      const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
+      const brand=btn.dataset.brand||med?.brand_name||'';
+      const raw=btn.dataset.raw||med?.raw_text||'';
       const correction=prompt('Correct brand / company for "'+brand+'":','');
       if(correction===null) return;
       fetch('/api/error-reports',{
@@ -1283,6 +1610,8 @@ function attachMisidReporters(){
         })
       }).then(r=>r.json()).then(d=>toast.success(d.message||'Queued for training'))
         .catch(()=>toast.error('Could not queue the report'));
+      // Human-in-the-loop: send the cropped slice + correction to the retraining queue.
+      queueTrainingItem(med, correction, '', 'Manual mis-ID correction');
     });
   });
 }
@@ -1992,12 +2321,22 @@ async function loadPopularMedicinesLive(){
 }
 async function searchMedex(){
   const q=document.getElementById('medexSearch')?.value.trim();
-  if(!q){const el=document.getElementById('medexResults');if(el)el.innerHTML='';return;}
+  const div=document.getElementById('medexResults');
+  const info=document.getElementById('medexBrowseInfo');
+  const browse=document.getElementById('medexBrowseResults');
+  if(!q){
+    if(div) div.innerHTML='';
+    if(info) info.classList.remove('hidden');
+    if(browse){ browse.classList.remove('hidden'); if(!browse.innerHTML.trim()) loadMedexBrowse(medexActiveFilter); }
+    return;
+  }
+  if(info) info.classList.add('hidden');
+  if(browse) browse.classList.add('hidden');
   try{
     const res=await fetch('/api/medex?q='+encodeURIComponent(q)+'&limit=8');
     const data=await res.json();
-    const div=document.getElementById('medexResults');
     if(!div) return;
+    div.classList.remove('hidden');
     div.innerHTML=data.results.map(r=>`
       <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-3 flex gap-3">
         <img src="${r.image_url||r.pack_image||'https://placehold.co/100x100'}" class="w-14 h-14 object-contain bg-slate-50 rounded-xl border">
@@ -2008,6 +2347,61 @@ async function searchMedex(){
 }
 document.getElementById('medexSearch')?.addEventListener('input',()=>{clearTimeout(window.medexTimer);window.medexTimer=setTimeout(searchMedex,400);});
 document.getElementById('refreshMedex')?.addEventListener('click',loadMedexStats);
+
+/* ---- Drug-index quick-filter browse ---- */
+let medexActiveFilter='top10';
+const MEDEX_CAT_LABELS={top10:'Top 10 Pharma',cardiology:'Cardiology',antibiotics:'Antibiotics',otc:'OTC'};
+
+async function loadMedexBrowse(category){
+  const div=document.getElementById('medexBrowseResults');
+  const info=document.getElementById('medexBrowseInfo');
+  const searchRes=document.getElementById('medexResults');
+  if(!div) return;
+  if(category) medexActiveFilter=category;
+  if(searchRes) searchRes.innerHTML='';
+  const label=document.getElementById('medexBrowseLabel');
+  const count=document.getElementById('medexBrowseCount');
+  if(label) label.textContent=MEDEX_CAT_LABELS[medexActiveFilter]||medexActiveFilter;
+  if(info) info.classList.remove('hidden');
+  div.classList.remove('hidden');
+  div.innerHTML='<div class="col-span-full py-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin"></i> Loading catalogue…</div>';
+  try{
+    const d=await (await fetch('/api/medex/browse?category='+encodeURIComponent(medexActiveFilter)+'&limit=24')).json();
+    const results=d.results||[];
+    if(count) count.textContent=d.total;
+    div.innerHTML=results.map(r=>`
+      <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-3 flex gap-3">
+        <img src="${r.pack_image||r.image_url||'https://placehold.co/100x100'}" class="w-16 h-16 rounded-xl object-contain bg-slate-50 border" onerror="this.src='https://placehold.co/100x100'">
+        <div class="min-w-0 flex-1">
+          <p class="text-[12px] font-bold truncate">${r.brand_name}</p>
+          <p class="text-[10px] text-slate-500">${r.type} ${r.strength}</p>
+          <p class="text-[10px] text-slate-500 truncate">${r.generic}</p>
+          <div class="flex items-center gap-1 mt-1">
+            ${r.company_logo?`<img src="${r.company_logo}" class="w-4 h-4 rounded object-contain bg-white" onerror="this.style.display='none'">`:''}
+            <span class="text-[9px] font-medium text-slate-600 truncate" title="${r.company}">${r.company}</span>
+          </div>
+          <span class="inline-block mt-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-semibold rounded-full border border-emerald-200"><i class="fas fa-shield-halved mr-0.5"></i>${r.dgda_status||'DGDA Registered'}</span>
+        </div>
+      </div>`).join('')||'<div class="col-span-full text-xs text-slate-500 text-center py-8">No products in this slice.</div>';
+  }catch(e){ div.innerHTML='<div class="col-span-full text-xs text-red-600 text-center py-8">Could not load the catalogue slice.</div>'; }
+}
+
+function selectMedexFilter(cat){
+  document.querySelectorAll('.medex-filter').forEach(b=>{
+    const on=b.dataset.cat===cat;
+    b.classList.toggle('bg-slate-900',on); b.classList.toggle('text-white',on); b.classList.toggle('border-slate-900',on);
+    b.classList.toggle('bg-white',!on); b.classList.toggle('text-slate-600',!on); b.classList.toggle('border-slate-200',!on);
+    b.classList.toggle('hover:border-blue-300',!on);
+  });
+  loadMedexBrowse(cat);
+}
+
+function initMedexFilters(){
+  document.getElementById('medexFilterBar')?.addEventListener('click',e=>{
+    const btn=e.target.closest('.medex-filter');
+    if(btn) selectMedexFilter(btn.dataset.cat);
+  });
+}
 
 // Pick a different manufacturer / strength variant of the same brand.
 // Whatever the user picks is authoritative: mark it verified so it is never
@@ -2153,6 +2547,28 @@ function renderCompanyBadge(){
   if(el) el.textContent=label;
   const side=document.getElementById('sidebarOfficerLabel');
   if(side) side.textContent=`${p.employee_id||'MR001'} • ${region||'Territory'}`;
+  applyCompanyTheme(p.company_name);
+}
+
+/** Inject the employer's brand accent into the header + KPI cards so the app
+ *  feels natively tailored (Square Blue, Beximco Navy, Incepta Sky, …). */
+function hexToRgba(hex, alpha=0.16){
+  const m=String(hex||'').match(/^#?([a-f0-9]{2})([a-f0-9]{2})([a-f0-9]{2})/i);
+  if(m) return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${alpha})`;
+  return 'rgba(37,99,235,'+alpha+')';
+}
+
+function applyCompanyTheme(company){
+  const color=getCompanyColor(company);
+  const root=document.documentElement;
+  root.style.setProperty('--brand-accent', color||'#1E40AF');
+  root.style.setProperty('--brand-accent-soft', hexToRgba(color||'#1E40AF'));
+  const header=document.querySelector('header');
+  if(header) header.classList.add('theme-accent-top');
+  const badge=document.getElementById('companyBadge');
+  if(badge) badge.style.background=color||'#1E40AF';
+  // KPI icon chips + dashboard hero accent use the brand variable
+  document.documentElement.style.setProperty('--brand-accent-strong', color||'#1E40AF');
 }
 
 async function pingLatency(){
@@ -2192,11 +2608,20 @@ function renderTargetProgress(progress){
   if(!brands.length){box.innerHTML='';return;}
   box.innerHTML=brands.map(b=>{
     const pct=Math.min(100,b.percent||0);
+    const pctCls=pct>=100?'text-emerald-600':pct>=40?'text-blue-600':'text-amber-600';
     return `<div>
-      <div class="flex justify-between text-[11px]"><span class="font-semibold">${b.brand_name}</span><span>${b.captured}/${b.monthly_target} Rx</span></div>
-      <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-0.5"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
+      <div class="flex justify-between items-center text-[11px]">
+        <span class="font-semibold">${b.brand_name} <span class="text-slate-400 font-normal">(${b.captured}/${b.monthly_target} Rx)</span></span>
+        <span class="font-bold ${pctCls}">${pct}%</span>
+      </div>
+      <div class="h-2 bg-slate-100 rounded-full overflow-hidden mt-1">
+        <div class="target-bar h-full rounded-full" data-tpct="${pct}" style="width:0%;background:linear-gradient(90deg,var(--brand-accent,#059669),var(--brand-accent-strong,#059669));transition:width .9s cubic-bezier(.4,0,.2,1)"></div>
+      </div>
     </div>`;
   }).join('');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    box.querySelectorAll('.target-bar').forEach(bar=>{ bar.style.width=(bar.dataset.tpct||0)+'%'; });
+  }));
 }
 
 function addTargetRow(brand='', tgt=''){
@@ -2262,6 +2687,7 @@ async function searchCompanies(q){
       document.getElementById('companyName').value=b.dataset.name;
       document.getElementById('companySearch').value=b.dataset.name;
       document.getElementById('companyPicked').textContent='Selected: '+b.dataset.name;
+      applyCompanyTheme(b.dataset.name);
       box.classList.add('hidden');
     }));
   }catch(e){box.classList.add('hidden');}
@@ -2328,97 +2754,279 @@ function initHubTabs(){
     });
   });
   document.getElementById('newsRefresh')?.addEventListener('click',()=>loadHubNews(true));
-  document.getElementById('jobCategory')?.addEventListener('change',()=>loadHubJobs());
+  ['jobCategory','jobDept','jobTerritory'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('change',()=>loadHubJobs());
+  });
   let jt=null;
   document.getElementById('jobSearch')?.addEventListener('input',()=>{
     clearTimeout(jt); jt=setTimeout(loadHubJobs,300);
   });
+  document.getElementById('hdPrev')?.addEventListener('click',()=>{hdMonth--; if(hdMonth<1){hdMonth=12;hdYear--;} hdMonthLabel(); loadHealthDays();});
+  document.getElementById('hdNext')?.addEventListener('click',()=>{hdMonth++; if(hdMonth>12){hdMonth=1;hdYear++;} hdMonthLabel(); loadHealthDays();});
+  document.getElementById('hdModalClose')?.addEventListener('click',closeHealthDayModal);
+  document.getElementById('healthDayModal')?.addEventListener('click',e=>{ if(e.target.id==='healthDayModal') closeHealthDayModal(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeHealthDayModal(); });
 }
 
-async function loadHubNews(){
-  const feed=document.getElementById('newsFeed');
-  if(!feed) return;
-  feed.innerHTML='<p class="text-xs text-slate-400">Loading news…</p>';
+function newsCard(n, featured=false){
+  const srcCls=n.source_type==='regulatory'?'bg-amber-50 text-amber-800':'bg-blue-50 text-blue-800';
+  const date=(n.published_at||'').slice(0,10);
+  if(featured){
+    return `<article class="bg-gradient-to-br from-slate-900 to-blue-800 rounded-2xl p-5 text-white">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${srcCls}">${n.source}</span>
+        ${n.live?'<span class="text-[10px] text-emerald-300 font-semibold"><i class="fas fa-circle-dot mr-1"></i>LIVE</span>':''}
+        <span class="text-[10px] text-white/60 ml-auto">${date}</span>
+      </div>
+      <h4 class="text-sm font-bold leading-snug">${n.title}</h4>
+      <p class="text-[11px] text-white/80 mt-2">${n.summary||''}</p>
+      ${n.url?`<a href="${n.url}" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-1.5 text-[11px] text-blue-100 font-semibold"><i class="fas fa-arrow-up-right-from-square"></i>Open source</a>`:''}
+    </article>`;
+  }
+  return `<article class="p-3 rounded-xl border border-slate-200 hover:border-blue-200 bg-white shadow-sm flex gap-3">
+    <div class="w-1 self-stretch rounded-full ${n.source_type==='regulatory'?'bg-amber-400':'bg-blue-400'}"></div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${srcCls}">${n.source}</span>
+        ${n.live?'<span class="text-[9px] text-emerald-600 font-semibold">LIVE</span>':''}
+        <span class="text-[9px] text-slate-400 ml-auto">${date}</span>
+      </div>
+      <h4 class="text-[12px] font-semibold text-slate-900 leading-snug">${n.title}</h4>
+      <p class="text-[10px] text-slate-500 mt-0.5 line-clamp-2">${n.summary||''}</p>
+      ${n.url?`<a href="${n.url}" target="_blank" rel="noopener" class="text-[10px] text-blue-700 mt-1 inline-block font-medium">Open source</a>`:''}
+    </div>
+  </article>`;
+}
+
+async function loadHubNews(force){
+  const fe=document.getElementById('newsFeatured');
+  const tl=document.getElementById('newsTimeline');
+  if(!fe||!tl) return;
+  tl.innerHTML='<p class="text-xs text-slate-400">Loading news…</p>';
+  fe.innerHTML='';
   try{
-    const d=await (await fetch('/api/pharma/news')).json();
-    feed.innerHTML=(d.items||[]).map(n=>`
-      <article class="p-3 rounded-xl border border-slate-200 hover:border-blue-200">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${n.source_type==='regulatory'?'bg-amber-50 text-amber-800':'bg-blue-50 text-blue-800'}">${n.source}</span>
-          ${n.live?'<span class="text-[10px] text-emerald-600 font-semibold">LIVE</span>':''}
-          <span class="text-[10px] text-slate-400 ml-auto">${(n.published_at||'').slice(0,10)}</span>
-        </div>
-        <h4 class="text-sm font-semibold text-slate-900">${n.title}</h4>
-        <p class="text-[11px] text-slate-600 mt-1">${n.summary||''}</p>
-        ${n.url?`<a href="${n.url}" target="_blank" rel="noopener" class="text-[11px] text-blue-700 mt-1 inline-block">Open source</a>`:''}
-      </article>`).join('')||'<p class="text-xs text-slate-500">No stories yet.</p>';
-  }catch(e){ feed.innerHTML='<p class="text-xs text-red-600">News feed unavailable.</p>'; }
+    const d=await (await fetch('/api/pharma/news'+(force?'?live=1':''))).json();
+    const items=d.items||[];
+    if(!items.length){
+      fe.innerHTML='<p class="text-xs text-slate-500">No stories yet.</p>';
+      tl.innerHTML='';
+      return;
+    }
+    fe.innerHTML=newsCard(items[0], true);
+    tl.innerHTML=items.slice(1).map(n=>newsCard(n)).join('')||
+      `<p class="text-xs text-slate-500">Follow the featured story for the latest market insight.</p>`;
+  }catch(e){ tl.innerHTML='<p class="text-xs text-red-600">News feed unavailable.</p>'; fe.innerHTML=''; }
 }
 
 async function loadHubJobs(){
   const box=document.getElementById('jobBoard');
   if(!box) return;
   const cat=document.getElementById('jobCategory')?.value||'';
+  const dept=document.getElementById('jobDept')?.value||'';
+  const terr=document.getElementById('jobTerritory')?.value||'';
   const q=document.getElementById('jobSearch')?.value||'';
+  const qs=new URLSearchParams();
+  if(cat) qs.set('category',cat);
+  if(dept) qs.set('department',dept);
+  if(terr) qs.set('territory',terr);
+  if(q) qs.set('q',q);
   try{
-    const d=await (await fetch('/api/pharma/jobs?category='+encodeURIComponent(cat)+'&q='+encodeURIComponent(q))).json();
-    box.innerHTML=(d.jobs||[]).map(j=>`
-      <div class="p-3 rounded-xl border border-slate-200 bg-white">
+    const d=await (await fetch('/api/pharma/jobs?'+qs.toString())).json();
+    const jobs=d.jobs||[];
+    const cnt=document.getElementById('jobCount');
+    const fresh=document.getElementById('jobFreshCount');
+    if(cnt) cnt.textContent=jobs.length;
+    if(fresh) fresh.textContent=jobs.filter(j=>j.fresh).length;
+    // populate department + territory filters once
+    fillFilterSelect('jobDept', d.departments||[], 'All departments', dept);
+    fillFilterSelect('jobTerritory', d.locations||[], 'All territories', terr);
+    box.innerHTML=jobs.map(j=>{
+      const tags=(j.tags||[]).map(t=>`<span class="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[9px] font-semibold">${t}</span>`).join('');
+      return `<div class="p-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <p class="text-xs font-bold text-slate-900">${j.title}</p>
-            <p class="text-[11px] text-slate-600">${j.company}</p>
+            <p class="text-xs font-bold text-slate-900 leading-snug">${j.title}</p>
+            <p class="text-[11px] text-slate-600 mt-0.5">${j.company}</p>
           </div>
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 font-semibold">${j.category}</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold shrink-0">${j.category}</span>
         </div>
         <p class="text-[11px] text-slate-500 mt-1"><i class="fas fa-location-dot mr-1"></i>${j.location} • ${j.experience}</p>
-        <p class="text-[11px] text-slate-600 mt-1">${j.description}</p>
-        <div class="flex items-center justify-between mt-2 text-[10px] text-slate-500">
+        <p class="text-[11px] text-slate-600 mt-1 flex-1 line-clamp-2">${j.description}</p>
+        <div class="flex flex-wrap gap-1 mt-2">${tags}</div>
+        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
           <span>${j.salary}</span>
           <span class="${j.fresh?'text-emerald-600 font-semibold':''}">${j.fresh?'Posted today':'Posted '+j.posted_on}</span>
         </div>
-      </div>`).join('')||'<p class="text-xs text-slate-500">No matching vacancies.</p>';
+        <a href="${j.apply_url}" target="_blank" rel="noopener" class="mt-2 text-center flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800">
+          <i class="fas fa-paper-plane"></i> Apply now
+        </a>
+      </div>`;}).join('')||'<p class="text-xs text-slate-500">No matching vacancies.</p>';
   }catch(e){ box.innerHTML='<p class="text-xs text-red-600">Job board unavailable.</p>'; }
 }
 
+function fillFilterSelect(id, options, placeholder, cur){
+  const sel=document.getElementById(id);
+  if(!sel) return;
+  sel.innerHTML=`<option value="">${placeholder}</option>`+
+    options.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+}
+
 const MONTH_NAMES=['','January','February','March','April','May','June','July','August','September','October','November','December'];
+let hdYear=new Date().getFullYear();
+let hdMonth=new Date().getMonth()+1; // 1-12
+const hdWeekdays=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function hdMonthLabel(){
+  const el=document.getElementById('hdMonthLabel');
+  if(el) el.textContent=`${MONTH_NAMES[hdMonth]} ${hdYear}`;
+}
 
 async function loadHealthDays(){
   const cal=document.getElementById('healthDayCalendar');
   const next=document.getElementById('healthDayNext');
   if(!cal) return;
+  hdMonthLabel();
   try{
-    const d=await (await fetch('/api/pharma/health-days')).json();
+    const d=await (await fetch('/api/pharma/health-days?year='+hdYear)).json();
+    // build the "next campaign" banner from all days in year
     if(next){
-      const n=d.next;
+      const upcom=d.days.filter(x=>x.status!=='past');
+      const n=upcom[0];
       next.innerHTML=n?`<p class="text-[11px] uppercase tracking-widest text-white/70">Next campaign window</p>
         <h3 class="text-lg font-bold mt-1">${n.name} — ${n.date}</h3>
         <p class="text-sm text-white/85 mt-1">${n.mpo_tip}</p>
         <p class="text-[11px] mt-2 text-blue-100">${n.days_until===0?'Today':n.days_until+' days out'} • Focus: ${(n.focus||[]).join(', ')}</p>`
         :'<p>Calendar loaded.</p>';
     }
-    const months=d.by_month||{};
-    cal.innerHTML=Object.keys(months).map(m=>`
-      <div>
-        <h4 class="text-xs font-bold text-slate-700 mb-2">${MONTH_NAMES[parseInt(m,10)]||m}</h4>
-        <div class="grid md:grid-cols-2 gap-2">
-          ${months[m].map(day=>`
-            <div class="p-3 rounded-xl border ${day.status==='today'?'border-blue-400 bg-blue-50':day.status==='upcoming'?'border-slate-200 bg-white':'border-slate-100 bg-slate-50'}">
-              <div class="flex items-center justify-between">
-                <p class="text-xs font-semibold text-slate-900">${day.name}</p>
-                <span class="text-[10px] text-slate-500">${String(day.day).padStart(2,'0')} ${MONTH_NAMES[day.month].slice(0,3)}</span>
-              </div>
-              <p class="text-[11px] text-slate-600 mt-1">${day.mpo_tip}</p>
-            </div>`).join('')}
-        </div>
-      </div>`).join('');
+    // month grid
+    const daysInMonth=new Date(hdYear, hdMonth, 0).getDate();
+    const firstDow=new Date(hdYear, hdMonth-1, 1).getDay();
+    const monthDays=(d.days||[]).filter(x=>x.month===hdMonth);
+    const byDay={};
+    monthDays.forEach(x=>byDay[x.day]=x);
+    let cells='';
+    for(let i=0;i<firstDow;i++) cells+=`<div></div>`;
+    for(let day=1; day<=daysInMonth; day++){
+      const hd=byDay[day];
+      const isToday=(hdYear===new Date().getFullYear() && hdMonth===new Date().getMonth()+1 && day===new Date().getDate());
+      cells+=hd?`
+        <button type="button" class="hd-day group relative min-h-[74px] rounded-xl border ${isToday?'border-blue-400 bg-blue-50':'border-slate-200 bg-white'} hover:shadow-md transition text-left p-1.5 flex flex-col" data-hd-id="${hd.id}" style="border-top:3px solid ${hd.color}">
+          <span class="text-[10px] font-bold text-slate-400">${day}</span>
+          <span class="text-[9px] font-semibold leading-tight mt-0.5 line-clamp-2 ${isToday?'text-blue-800':'text-slate-700'}">${hd.name}</span>
+          <span class="mt-auto text-[8px] text-blue-600 font-medium opacity-0 group-hover:opacity-100 hd-hint inline-flex items-center gap-0.5"><i class="fas fa-wand-magic-sparkles"></i>Campaign</span>
+        </button>`
+        :`<div class="min-h-[74px] rounded-xl bg-slate-50 border border-slate-100 p-1.5 text-[10px] text-slate-300">${day}</div>`;
+    }
+    cal.innerHTML=`
+      <div class="grid grid-cols-7 gap-1.5 mb-1.5">
+        ${hdWeekdays.map(w=>`<div class="text-center text-[10px] font-bold text-slate-400 uppercase">${w}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7 gap-1.5">
+        ${cells}
+      </div>
+      <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
+        ${monthDays.map(hd=>`<button type="button" class="hd-day text-[10px] px-2 py-1 rounded-full border font-semibold ${hd.status==='today'?'border-blue-400 bg-blue-50 text-blue-800':hd.status==='upcoming'?'border-slate-200 bg-white text-slate-600 hover:border-blue-300':'border-slate-100 bg-slate-50 text-slate-400'}" data-hd-id="${hd.id}">
+          ${hd.name} <span class="text-slate-400 font-normal">• ${String(hd.day).padStart(2,'0')} ${MONTH_NAMES[hd.month].slice(0,3)}</span></button>`).join('')}
+      </div>`;
+    cal.querySelectorAll('.hd-day').forEach(btn=>{
+      btn.addEventListener('click',()=>openHealthDayModal(btn.dataset.hdId));
+    });
   }catch(e){ if(cal) cal.innerHTML='<p class="text-xs text-red-600">Calendar unavailable.</p>'; }
+}
+
+async function openHealthDayModal(dayId){
+  const m=document.getElementById('healthDayModal');
+  const body=document.getElementById('hdModalBody');
+  if(!m||!body) return;
+  body.innerHTML='<div class="py-10 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin"></i> Loading campaign card…</div>';
+  m.classList.remove('hidden'); m.classList.add('flex');
+  try{
+    const d=await (await fetch('/api/pharma/health-days/'+encodeURIComponent(dayId))).json();
+    if(!d.found){ body.innerHTML='<p class="text-xs text-red-600">No campaign card for that day.</p>'; return; }
+    const day=d.day;
+    document.getElementById('hdModalTitle').textContent=day.name;
+    document.getElementById('hdModalSubtitle').textContent=`${day.org||'WHO'} • ${MONTH_NAMES[day.month]} ${day.day}, ${day.year||''}`;
+    const focus=(d.focus||[]).map(f=>`<span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold">${f}</span>`).join('');
+    const brands=(d.brand_focus||[]).map(b=>`<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200">${b}</span>`).join('');
+    const collat=(d.collateral||[]).map(c=>`<span class="text-[10px] text-slate-600 flex items-center gap-1.5"><i class="fas fa-file-pdf text-amber-500"></i>${c}</span>`).join('');
+    body.innerHTML=`
+      <div class="space-y-4">
+        <div class="flex flex-wrap gap-1.5">${focus}</div>
+        <p class="text-[12px] text-slate-600">${day.summary||''}</p>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2"><i class="fas fa-robot text-orange-500 mr-1"></i>Pre-generated MPO script</p>
+          <pre class="text-[12px] text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">${d.promo_script||''}</pre>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2"><i class="fas fa-pills text-emerald-600 mr-1"></i>Campaign brand focus</p>
+          <div class="flex flex-wrap gap-1.5">${brands||'none'}</div>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2"><i class="fas fa-folder-open text-blue-600 mr-1"></i>Collateral to carry</p>
+          <div class="flex flex-wrap gap-x-4 gap-y-1.5">${collat||'none'}</div>
+        </div>
+        <p class="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"><i class="fas fa-lightbulb mr-1"></i>${day.mpo_tip||''}</p>
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <button type="button" id="hdSharePdf" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"><i class="fas fa-file-pdf text-red-300"></i> PDF chamber summary</button>
+          <button type="button" id="hdShareWa" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700"><i class="fab fa-whatsapp"></i> Share via WhatsApp</button>
+          <button type="button" id="hdCopyScript" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"><i class="fas fa-copy"></i> Copy script</button>
+        </div>
+      </div>`;
+      document.getElementById('hdSharePdf')?.addEventListener('click',()=>shareReceipt('pdf', day, d));
+      document.getElementById('hdShareWa')?.addEventListener('click',()=>shareReceipt('whatsapp', day, d));
+      document.getElementById('hdCopyScript')?.addEventListener('click',()=>{ navigator.clipboard?.writeText(d.promo_script||''); toast.success('Campaign script copied'); });
+  }catch(e){ body.innerHTML='<p class="text-xs text-red-600">Could not load the campaign card.</p>'; }
+}
+
+/** Generate a branded PDF / WhatsApp chamber summary from a health-day card. */
+async function shareReceipt(kind, day, d){
+  const focus=d.brand_focus||[];
+  const medicines=focus.map(b=>({brand_name:b, generic:'', strength:'', type:''}));
+  const params=new URLSearchParams({
+    doctor: officerProfile?.full_name||'Doctor',
+    medicines: JSON.stringify(medicines),
+    brand_focus: JSON.stringify(focus),
+  });
+  if(kind==='pdf'){
+    window.open('/api/receipt.pdf?'+params.toString(), '_blank');
+    toast.info('Generating branded PDF chamber summary…');
+  }else{
+    try{
+      const r=await (await fetch('/api/receipt/whatsapp?'+params.toString())).json();
+      window.open(r.share_url, '_blank');
+      toast.info('Opened WhatsApp share');
+    }catch(e){ toast.error('Could not open WhatsApp'); }
+  }
+}
+
+function closeHealthDayModal(){
+  const m=document.getElementById('healthDayModal');
+  if(m){ m.classList.add('hidden'); m.classList.remove('flex'); }
+}
+
+function sparklineSvg(points, color='#059669', w=72, h=22){
+  if(!points || points.length<2) return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="inline-block"><line x1="2" y1="${h/2}" x2="${w-2}" y2="${h/2}" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2" opacity="0.4"/></svg>`;
+  const max=Math.max(...points), min=Math.min(...points);
+  const range=(max-min)||1;
+  const coords=points.map((v,i)=>{
+    const x=(points.length===1?0:i/(points.length-1))*(w-4)+2;
+    const y=h-3-((v-min)/range)*(h-6);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="inline-block">
+    <polyline points="${coords}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 
 async function loadRsmDashboard(){
   const days=document.getElementById('rsmDays')?.value||'30';
   try{
-    const d=await (await fetch('/api/rsm/dashboard?days='+days)).json();
+    const [d, tr]=await Promise.all([
+      fetch('/api/rsm/dashboard?days='+days).then(r=>r.json()),
+      fetch('/api/rsm/trends?days='+days).then(r=>r.json()).catch(()=>({trends:[]})),
+    ]);
+    loadRsmHeatmap();
+    loadDoctorTiers();
     const k=d.totals||{};
     const kpis=document.getElementById('rsmKpis');
     if(kpis){
@@ -2428,10 +3036,18 @@ async function loadRsmDashboard(){
         <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Own items</p><p class="text-xl font-bold">${k.own_items||0}</p></div>
         <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Team SoV</p><p class="text-xl font-bold">${k.sov_percent||0}%</p></div>`;
     }
+    const trendMap={};
+    (tr.trends||[]).forEach(t=>{ trendMap[t.mpo_mr_id]=t; });
     const body=document.getElementById('rsmTeamBody');
     if(body){
-      body.innerHTML=(d.members||[]).slice(0,51).map(m=>`
-        <tr class="border-b border-slate-100">
+      body.innerHTML=(d.members||[]).slice(0,51).map(m=>{
+        const t=trendMap[m.mpo_mr_id];
+        const series=(t?.series||[]).map(s=>s.sov);
+        const growth=t?.own_growth||0;
+        const growUp=growth>=0;
+        const growCls=growUp?'text-emerald-600':'text-red-600';
+        const growIcon=growUp?'fa-arrow-up':'fa-arrow-down';
+        return `<tr class="border-b border-slate-100 hover:bg-slate-50/60">
           <td class="py-1.5 font-medium">${m.mpo_name}</td>
           <td>${m.role}</td>
           <td>${m.territory||''}</td>
@@ -2440,9 +3056,158 @@ async function loadRsmDashboard(){
           <td class="text-emerald-700 font-semibold">${m.own_items}</td>
           <td class="text-amber-700">${m.competitor_items}</td>
           <td>${m.sov_percent}%</td>
-        </tr>`).join('');
+          <td>${sparklineSvg(series)}</td>
+          <td class="${growCls} font-semibold ${series.length>1?'':'text-slate-400'}"><i class="fas ${growIcon} mr-0.5"></i>${growth}%</td>
+        </tr>`;
+      }).join('');
     }
   }catch(e){console.error('rsm',e);}
+}
+
+/* ---------- RSM: Territory penetration heatmap (Leaflet) ---------- */
+let heatmapInstance=null;
+
+function heatmapColor(sov){
+  if(sov>=60) return '#10B981';   // own-company dominant (green)
+  if(sov>=35) return '#F59E0B';   // competitive / mixed (amber)
+  return '#EF4444';               // competitor-heavy (red)
+}
+
+function initLeaflet(){
+  if(!window.L){
+    const el=document.getElementById('rsmHeatmap');
+    if(el) el.innerHTML='<div class="flex h-full items-center justify-center text-xs text-slate-400"><i class="fas fa-globe mr-2"></i>Map library unavailable — showing a compact list instead.</div>';
+    return null;
+  }
+  const el=document.getElementById('rsmHeatmap');
+  if(!el) return null;
+  if(heatmapInstance){ heatmapInstance.remove(); heatmapInstance=null; }
+  heatmapInstance=L.map(el,{scrollWheelZoom:false}).setView([23.685,90.3563],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:10, attribution:'© OpenStreetMap'
+  }).addTo(heatmapInstance);
+  return heatmapInstance;
+}
+
+async function loadRsmHeatmap(){
+  const days=document.getElementById('hmDays')?.value||'30';
+  const stats=document.getElementById('heatmapStats');
+  try{
+    const d=await (await fetch('/api/rsm/heatmap?days='+days)).json();
+    const rows=d.districts||[];
+    if(stats){
+      const totalItems=rows.reduce((a,b)=>a+(b.items||0),0);
+      const ownItems=rows.reduce((a,b)=>a+(b.own_items||0),0);
+      const sov=totalItems?(ownItems/totalItems*100).toFixed(1):0;
+      const owned=rows.filter(r=>r.sov>=60).length;
+      const compHeavy=rows.filter(r=>(r.sov||0)<35).length;
+      stats.innerHTML=`
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Districts covered</p><p class="text-xl font-bold">${rows.length}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Total items</p><p class="text-xl font-bold">${totalItems}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Market penetration (own SoV)</p><p class="text-xl font-bold ${sov>=50?'text-emerald-600':'text-amber-600'}">${sov}%</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Owned vs competitor-heavy</p><p class="text-xl font-bold"><span class="text-emerald-600">${owned}</span> / <span class="text-red-600">${compHeavy}</span></p></div>`;
+    }
+    const map=initLeaflet();
+    if(!map){
+      if(rows.length){
+        const el=document.getElementById('rsmHeatmap');
+        el.innerHTML='<div class="p-3 space-y-1.5 max-h-[420px] overflow-y-auto">'+rows.map(r=>`
+          <div class="flex items-center gap-2 text-[11px] border border-slate-100 rounded-lg px-2 py-1.5">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${heatmapColor(r.sov||0)}"></span>
+            <span class="font-semibold min-w-[90px]">${r.district}</span>
+            <span class="text-slate-500">${r.items} items · own ${r.own_items}</span>
+            <span class="ml-auto font-bold">${r.sov}%</span>
+          </div>`).join('')+'</div>';
+      }
+      return;
+    }
+    if(!rows.length){
+      map.setView([23.685,90.3563],7);
+      L.marker([23.685,90.3563]).addTo(map).bindPopup('<b>No scan data yet</b><br>Scan prescriptions to populate the penetration map.');
+      return;
+    }
+    rows.forEach(r=>{
+      if(r.lat==null || r.lng==null) return;
+      const radius=Math.max(6, Math.min(34, Math.sqrt(r.items||1)*6));
+      const col=heatmapColor(r.sov||0);
+      const marker=L.circleMarker([r.lat,r.lng],{
+        radius, color:col, weight:2, fillColor:col, fillOpacity:0.5,
+        opacity:0.9
+      }).addTo(map);
+      marker.bindPopup(
+        `<div class="text-[12px]"><b>${r.district}</b>${r.territory?' · '+r.territory:''}<br>`+
+        `Items: <b>${r.items}</b> (own ${r.own_items} / comp ${r.competitor_items})<br>`+
+        `SoV: <b>${r.sov}%</b><br>Rx: ${r.rx}</div>`);
+    });
+    // fit bounds
+    const pts=rows.filter(r=>r.lat!=null&&r.lng!=null).map(r=>[r.lat,r.lng]);
+    if(pts.length) map.fitBounds(pts,{padding:[30,30]});
+  }catch(e){ if(stats) stats.innerHTML='<p class="text-xs text-red-600">Heatmap unavailable.</p>'; }
+}
+
+/* ---------- RSM: Doctor prescribing tiering (A/B/C) ---------- */
+let tierFilter='';
+
+async function loadDoctorTiers(){
+  const body=document.getElementById('tierBody');
+  const sum=document.getElementById('tierSummary');
+  if(!body) return;
+  const spec=document.getElementById('tierSpecialty')?.value||'';
+  const days=document.getElementById('hmDays')?.value||'30';
+  const qs=new URLSearchParams({days, min_rx:1});
+  if(tierFilter) qs.set('tier',tierFilter);
+  if(spec) qs.set('specialty',spec);
+  try{
+    const d=await (await fetch('/api/rsm/doctors?'+qs.toString())).json();
+    const docs=d.doctors||[];
+    const count=t=>docs.filter(x=>x.tier===t).length;
+    if(sum){
+      sum.innerHTML=`
+        <div class="rounded-xl border border-violet-200 bg-violet-50 p-3"><p class="text-[10px] text-violet-600">Tier A · High prescriber</p><p class="text-xl font-bold text-violet-700">${count('A')}</p></div>
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-3"><p class="text-[10px] text-blue-600">Tier B · Medium</p><p class="text-xl font-bold text-blue-700">${count('B')}</p></div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><p class="text-[10px] text-slate-500">Tier C · Occasional</p><p class="text-xl font-bold text-slate-700">${count('C')}</p></div>
+        <div class="rounded-xl border border-red-200 bg-red-50 p-3"><p class="text-[10px] text-red-600">At-risk switchers</p><p class="text-xl font-bold text-red-700">${docs.filter(x=>x.at_risk).length}</p></div>`;
+    }
+    const tierCls={A:'bg-violet-100 text-violet-700 border-violet-200',B:'bg-blue-100 text-blue-700 border-blue-200',C:'bg-slate-100 text-slate-600 border-slate-200'};
+    body.innerHTML=docs.map(x=>`
+      <tr class="border-b border-slate-100 hover:bg-slate-50/60">
+        <td><span class="px-2 py-0.5 rounded-md border text-[10px] font-bold ${tierCls[x.tier]}">${x.tier}</span></td>
+        <td class="font-medium">${x.doctor_name}</td>
+        <td class="text-slate-500">${x.specialty}</td>
+        <td class="text-slate-500">${x.territory||'—'}</td>
+        <td>${x.rx}</td>
+        <td>${x.items}</td>
+        <td class="text-emerald-700 font-semibold">${x.own_items}</td>
+        <td class="text-amber-700">${x.competitor_items}</td>
+        <td>${x.sov}%</td>
+        <td>${x.at_risk?`<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">⚠ At risk</span>`:`<span class="text-[10px] text-slate-400">—</span>`}</td>
+      </tr>`).join('')||'<tr><td colspan="10" class="text-center py-6 text-xs text-slate-500">No doctors match this filter yet.</td></tr>';
+    // populate specialty filter once
+    const specSel=document.getElementById('tierSpecialty');
+    if(specSel && !specSel.dataset.bound){
+      specSel.dataset.bound='1';
+      const specs=[...new Set(docs.map(x=>x.specialty).filter(Boolean))];
+      specSel.innerHTML=`<option value="">All specialties</option>`+specs.map(s=>`<option value="${s}">${s}</option>`).join('');
+    }
+  }catch(e){ body.innerHTML='<tr><td colspan="10" class="text-center py-6 text-xs text-red-600">Tier data unavailable.</td></tr>'; }
+}
+
+function initRsmExtras(){
+  document.getElementById('hmDays')?.addEventListener('change',()=>{loadRsmHeatmap(); loadDoctorTiers();});
+  document.getElementById('hmRefresh')?.addEventListener('click',()=>{loadRsmHeatmap(); loadDoctorTiers(); toast.info('RSM analytics refreshed');});
+  document.getElementById('tierSpecialty')?.addEventListener('change',loadDoctorTiers);
+  document.getElementById('tierFilterBar')?.addEventListener('click',e=>{});
+  document.querySelectorAll('.tier-filter').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tierFilter=btn.dataset.tier;
+      document.querySelectorAll('.tier-filter').forEach(b=>{
+        const on=b===btn;
+        b.classList.toggle('bg-slate-900',on); b.classList.toggle('text-white',on); b.classList.toggle('border-slate-900',on);
+        b.classList.toggle('bg-white',!on); b.classList.toggle('text-slate-600',!on); b.classList.toggle('border-slate-200',!on);
+      });
+      loadDoctorTiers();
+    });
+  });
 }
 
 function initInlineTags(){
@@ -2483,25 +3248,27 @@ function paintDynamicTags(options){
 async function drainOfflineQueue(){
   if(!navigator.onLine) return;
   try{
-    const req=indexedDB.open(dbName,1);
-    req.onsuccess=e=>{
-      const db=e.target.result;
-      if(!db.objectStoreNames.contains('prescriptions')) return;
-      const tx=db.transaction('prescriptions','readonly');
-      const store=tx.objectStore('prescriptions');
-      const getAll=store.getAll();
-      getAll.onsuccess=async()=>{
-        const pending=(getAll.result||[]).filter(x=>!x.synced);
-        if(!pending.length) return;
-        toast.info(`Syncing ${pending.length} offline scan(s)…`);
-        await fetch('/api/offline/sync',{method:'POST'});
-      };
-    };
-  }catch(e){}
+    const pending=await window.MedLenXOffline.pendingOfflineScans();
+    if(!pending.length){ refreshPendingCount(); return; }
+    toast.loading(`Syncing ${pending.length} offline scan(s)…`,{id:'offline-sync'});
+    const n=await window.MedLenXOffline.flushOfflineQueue();
+    toast.success(n?`Synced ${n} offline scan(s)`:'Offline queue is clear',{id:'offline-sync'});
+    refreshPendingCount();
+    if(n) { loadKpis(); loadCharts(); loadRecentMedicines(); }
+  }catch(e){ console.warn('drainOfflineQueue',e); refreshPendingCount(); }
 }
 
 document.getElementById('rsmDays')?.addEventListener('change',loadRsmDashboard);
+document.getElementById('rsmReportPdf')?.addEventListener('click',()=>{
+  const days=document.getElementById('rsmDays')?.value||'30';
+  const q=document.getElementById('rsmReportPdf').getAttribute('data-rsm');
+  window.open('/api/rsm/report.pdf?days='+days+(q?('&rsm_id='+q):''), '_blank');
+  toast.info('Generating DGDA / Compliance Audit PDF…');
+});
 window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
+navigator.serviceWorker?.addEventListener('message',e=>{
+  if(e.data && e.data.type==='OFFLINE_SYNC') drainOfflineQueue();
+});
 
 /* ---------- Bootstrap ---------- */
 (async function initApp(){
@@ -2512,6 +3279,8 @@ window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
   initHubTabs();
   initOfficerForm();
   initInlineTags();
+  initMedexFilters();
+  initRsmExtras();
   await loadFilterOptions();
   await loadOfficerProfile();
   loadHistory();
@@ -2521,6 +3290,7 @@ window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
   loadMedexStats();
   pingLatency();
   setInterval(pingLatency, 30000);
+  refreshPendingCount();
   drainOfflineQueue();
 })();
 
