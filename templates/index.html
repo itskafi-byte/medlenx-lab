@@ -8,6 +8,8 @@
 <meta name="theme-color" content="#0F172A">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
@@ -131,6 +133,7 @@ tailwind.config={
 
     <div class="flex items-center gap-2">
       <span id="onlineStatus" class="hidden md:flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-200"><i class="fas fa-circle text-[6px] mr-1"></i>Online</span>
+      <span id="syncBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-medium" title="Offline scan queue"><i class="fas fa-cloud-arrow-up text-blue-300 text-[10px]"></i><span id="syncBadgeText">0 queued</span></span>
       <span id="companyBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-medium max-w-[240px]">
         <i class="fas fa-building text-[10px] text-blue-300"></i>
         <span id="companyBadgeText" class="truncate">Set company in Settings</span>
@@ -630,6 +633,63 @@ tailwind.config={
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5" id="rsmKpis"></div>
   </div>
+
+  <!-- Territory penetration heatmap -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="mr-auto">
+        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-map-location-dot text-blue-600"></i> Territory Penetration Heatmap</h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Live scan locations mapped across Bangladesh — bubble size = volume, colour = your company's market penetration (green = dominant, red = competitor-heavy).</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="hmDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+        </select>
+        <button type="button" id="hmRefresh" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><i class="fas fa-rotate"></i></button>
+      </div>
+    </div>
+    <div id="heatmapStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+    <div id="rsmHeatmap" class="w-full h-[420px] rounded-xl border border-slate-200 bg-slate-50 overflow-hidden"></div>
+    <div id="heatmapLegend" class="flex items-center gap-4 mt-2 text-[10px] text-slate-500">
+      <span><span class="inline-block w-3 h-3 rounded-full bg-emerald-500 mr-1"></span>Own-company dominant</span>
+      <span><span class="inline-block w-3 h-3 rounded-full bg-amber-500 mr-1"></span>Competitive / mixed</span>
+      <span><span class="inline-block w-3 h-3 rounded-full bg-red-500 mr-1"></span>Competitor-heavy</span>
+      <span class="ml-auto">Bubble size = prescription volume</span>
+    </div>
+  </div>
+
+  <!-- Doctor prescribing tiering matrix -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="mr-auto">
+        <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-user-doctor text-violet-600"></i> Doctor Prescribing Tiering Matrix (A/B/C)</h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Auto-classified from audit volume — Tier A &gt;10 Rx, B 4–9 Rx, C ≤3 Rx/month. <b class="text-red-600">At-risk</b> = high-volume doctors with low own-brand share.</p>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-slate-900 text-white border-slate-900" data-tier="">All</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="A">Tier A</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="B">Tier B</button>
+        <button type="button" class="tier-filter px-3 py-1.5 rounded-lg border text-[11px] font-semibold bg-white text-slate-600 border-slate-200" data-tier="C">Tier C</button>
+        <select id="tierSpecialty" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white">
+          <option value="">All specialties</option>
+        </select>
+      </div>
+    </div>
+    <div id="tierSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs min-w-[900px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b">
+            <th class="py-2">Tier</th><th>Doctor</th><th>Specialty</th><th>Territory</th><th>Rx/mo</th><th>Items</th><th>Own</th><th>Competitor</th><th>SoV</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tierBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-semibold text-sm">Team leaderboard</h3>
@@ -921,6 +981,18 @@ document.getElementById('installPwaBtn').addEventListener('click', async () => {
 });
 
 // Online status
+async function refreshPendingCount(){
+  const badge=document.getElementById('syncBadge');
+  const text=document.getElementById('syncBadgeText');
+  let n=0;
+  try{ if(window.MedLenXOffline) n=(await window.MedLenXOffline.pendingOfflineScans()).length; }catch(e){}
+  if(text) text.textContent=n?`${n} queued`:'0 queued';
+  if(badge){
+    badge.className='hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full '+(n?'bg-amber-600 text-white':'bg-slate-900 text-white')+' text-[11px] font-medium';
+  }
+  if(window.MedLenXOffline) window.MedLenXOffline.renderOfflineBar(n);
+}
+
 function updateOnlineStatus(){
   const el=document.getElementById('onlineStatus');
   const sidebarEl=document.getElementById('sidebarOnlineStatus');
@@ -931,6 +1003,7 @@ function updateOnlineStatus(){
     if(el){el.className='hidden md:flex px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-medium border border-amber-200';el.innerHTML='<i class="fas fa-wifi"></i> Offline';}
     if(sidebarEl) sidebarEl.textContent='Offline • IndexedDB';
   }
+  refreshPendingCount();
 }
 window.addEventListener('online',updateOnlineStatus);
 window.addEventListener('offline',updateOnlineStatus);
@@ -962,6 +1035,7 @@ document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn=>{
     if(tab==='database'){loadMedexStats();loadMedexBrowse(medexActiveFilter);loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();}
     if(tab==='rsm'){loadRsmDashboard();}
     if(tab==='settings'){loadOfficerForm();}
+    if(tab==='rsm'){initRsmExtras();}
   });
 });
 
@@ -1163,6 +1237,105 @@ async function scanPrescription(){
 }
 
 // Verification Workspace Right Column with green check / yellow warning
+/** Competitor → own-brand substitution card (side-by-side) + MPO smart pitch. */
+function substitutionCard(med, idx){
+  const s=med.substitution;
+  if(!s || !s.own_brand) return '';
+  const c=s.competitor, o=s.own_brand;
+  const diffClass = s.unit_difference && s.unit_difference < 0 ? 'text-emerald-600' : 'text-amber-600';
+  const diffTxt = s.unit_difference_label || '';
+  return `<div class="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-[10px] font-bold uppercase tracking-widest text-blue-700"><i class="fas fa-right-left mr-1"></i>Generic substitution</span>
+      <span class="ml-auto text-[9px] text-blue-500 font-semibold">MPO Smart Pitch ready</span>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="bg-white rounded-lg border border-slate-200 p-2 text-center">
+        <img src="${c.image_url||'https://placehold.co/80x80'}" class="w-12 h-12 mx-auto object-contain rounded-lg bg-white" onerror="this.src='https://placehold.co/80x80'">
+        <p class="text-[12px] font-bold text-slate-900 truncate mt-1">${c.brand}</p>
+        <p class="text-[9px] text-slate-500 truncate">${c.company ? c.company.split(' ')[0] : ''}</p>
+        <p class="text-[9px] text-slate-400">${c.strength} ${c.type}</p>
+        <p class="text-[9px] font-semibold text-slate-600 mt-0.5">${c.mrp!=null?('BDT '+c.mrp.toFixed(2)):''}</p>
+      </div>
+      <div class="relative bg-green-50 rounded-lg border border-emerald-300 p-2 text-center">
+        <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-600 text-white rounded-full flex items-center justify-center text-[8px]"><i class="fas fa-arrow-right-long"></i></div>
+        <img src="${o.image_url||'https://placehold.co/80x80'}" class="w-12 h-12 mx-auto object-contain rounded-lg bg-white" onerror="this.src='https://placehold.co/80x80'">
+        <p class="text-[12px] font-bold text-emerald-700 truncate mt-1">${o.brand}</p>
+        <p class="text-[9px] text-emerald-600 font-semibold">Our portfolio</p>
+        <p class="text-[9px] text-slate-500">${o.strength} ${o.type}</p>
+        <p class="text-[9px] font-semibold text-emerald-700 mt-0.5">${o.mrp!=null?('BDT '+o.mrp.toFixed(2)):''}</p>
+      </div>
+    </div>
+    ${diffTxt?`<p class="text-[10px] mt-2 ${diffClass} font-semibold"><i class="fas fa-coins mr-1"></i>${diffTxt}${c.mrp!=null && o.mrp!=null ? (s.unit_difference<0?' (saving)':(s.unit_difference>0?' (premium)':'')) : ''}</p>`:''}
+    <div class="mt-2 bg-white border border-blue-100 rounded-lg p-2">
+      <p class="text-[9px] font-bold uppercase tracking-widest text-blue-600 mb-1"><i class="fas fa-comment-dots mr-1"></i>Smart pitch note</p>
+      <p class="text-[10px] text-slate-700 leading-snug">${s.pitch}</p>
+      <div class="mt-1.5 flex gap-1.5">
+        <button type="button" class="copy-pitch px-2 py-1 rounded-md bg-blue-600 text-white text-[9px] font-semibold hover:bg-blue-700" data-pitch="${s.pitch.replace(/"/g,'&quot;')}"><i class="fas fa-copy mr-1"></i>Copy pitch</button>
+        <button type="button" class="train-sale px-2 py-1 rounded-md bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700" data-idx="${idx}"><i class="fas fa-bullseye mr-1"></i>Mark as won</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Red DGDA compliance flag (banned / price-adjusted). */
+function dgdaFlag(dgda){
+  const crit=dgda.status==='banned';
+  return `<div class="mt-2 flex items-start gap-2 rounded-lg border ${crit?'border-red-300 bg-red-50':'border-amber-300 bg-amber-50'} px-3 py-2">
+    <i class="fas ${crit?'fa-ban':'fa-triangle-exclamation'} ${crit?'text-red-600':'text-amber-600'} mt-0.5 text-xs"></i>
+    <div class="text-[10px] ${crit?'text-red-800':'text-amber-800'} leading-snug">${dgda.concern||''}</div>
+  </div>`;
+}
+
+/** Crop the current scan image at a medicine's line band and return base64. */
+function cropMedicineSlice(idx, total){
+  try{
+    const img=document.getElementById('viewerImg');
+    if(!img || !img.src || !img.src.startsWith('data:image')) return '';
+    const n=total||1, i=Math.max(0, idx||0);
+    const canvas=document.createElement('canvas');
+    const cw=img.naturalWidth, ch=img.naturalHeight;
+    canvas.width=cw; canvas.height=Math.max(1, Math.floor(ch/n));
+    const ctx=canvas.getContext('2d');
+    ctx.drawImage(img, 0, Math.floor(ch*i/n), cw, Math.floor(ch/n), 0, 0, cw, Math.floor(ch/n));
+    return canvas.toDataURL('image/jpeg', 0.7);
+  }catch(e){ return ''; }
+}
+
+/** Post a human-in-the-loop training example to /api/training/queue. */
+async function queueTrainingItem(med, correctedBrand, correctedCompany, notes){
+  const total=(window.lastScannedData?.medicines||[]).length;
+  const idx=(med && med.line_number!=null)?(med.line_number-1):0;
+  const payload={
+    prescription_id: window.lastScannedData?.id,
+    mr_id: officerProfile?.employee_id||'MR001',
+    brand_name: med?.brand_name||'',
+    corrected_brand: correctedBrand||med?.brand_name||'',
+    corrected_company: correctedCompany||med?.company||'',
+    raw_text: med?.raw_text||'',
+    confidence: med?.confidence||0,
+    notes: notes||'',
+    image_slice: cropMedicineSlice(idx, total),
+  };
+  try{
+    await fetch('/api/training/queue',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }catch(e){ console.warn('training queue',e); }
+}
+
+function attachFieldIntelligenceActions(){
+  document.querySelectorAll('.copy-pitch').forEach(btn=>{
+    btn.addEventListener('click',()=>{ navigator.clipboard?.writeText(btn.dataset.pitch||''); toast.success('Pitch note copied'); });
+  });
+  document.querySelectorAll('.train-sale').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
+      queueTrainingItem(med, med?.brand_name, med?.company, 'Marked as won conversion on substitution pitch');
+      toast.success('Logged as a conversion win — queued for learning');
+    });
+  });
+}
+
 function renderVerification(data){
   const doc=data.doctor||{};
   
@@ -1335,6 +1508,8 @@ function renderVerification(data){
             ${companyEmphasis}
             ${conflictNote}
             ${altOptions}
+            ${med.substitution ? substitutionCard(med, idx) : ''}
+            ${med.dgda && (med.dgda.status==='banned' || med.dgda.status==='price_adjusted') ? dgdaFlag(med.dgda) : ''}
             <div class="mt-2 flex items-center justify-between gap-2">
               <p class="text-[10px] text-slate-400 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
               <button type="button" class="report-misid shrink-0 text-[10px] text-amber-700 hover:underline" data-idx="${idx}" data-brand="${med.brand_name||''}" data-raw="${(med.raw_text||'').replace(/"/g,'')}">Report mis-ID</button>
@@ -1351,6 +1526,7 @@ function renderVerification(data){
   attachMisidReporters();
   attachMedCardBBox();
   attachAiVerify();
+  attachFieldIntelligenceActions();
 
   window.lastScannedData=data;
 }
@@ -1397,6 +1573,7 @@ function attachAiVerify(){
   document.querySelectorAll('.ai-verify').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
       const input=document.querySelector(`.medicine-autocomplete[data-idx="${idx}"]`);
       if(input){
         input.focus();
@@ -1404,6 +1581,10 @@ function attachAiVerify(){
         input.scrollIntoView({behavior:'smooth', block:'center'});
       }
       toast.info('Verify this brand against the MedEx 25K catalogue');
+      // Capture the AI guess for the retraining queue once verified/saved.
+      if(med && (med.confidence||0) < 0.8){
+        queueTrainingItem(med, med?.brand_name, med?.company, 'AI Guess <80% reviewed');
+      }
     });
   });
 }
@@ -1411,8 +1592,10 @@ function attachAiVerify(){
 function attachMisidReporters(){
   document.querySelectorAll('.report-misid').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      const brand=btn.dataset.brand||'';
-      const raw=btn.dataset.raw||'';
+      const idx=parseInt(btn.dataset.idx,10);
+      const med=(window.lastScannedData?.medicines||[])[idx];
+      const brand=btn.dataset.brand||med?.brand_name||'';
+      const raw=btn.dataset.raw||med?.raw_text||'';
       const correction=prompt('Correct brand / company for "'+brand+'":','');
       if(correction===null) return;
       fetch('/api/error-reports',{
@@ -1427,6 +1610,8 @@ function attachMisidReporters(){
         })
       }).then(r=>r.json()).then(d=>toast.success(d.message||'Queued for training'))
         .catch(()=>toast.error('Could not queue the report'));
+      // Human-in-the-loop: send the cropped slice + correction to the retraining queue.
+      queueTrainingItem(med, correction, '', 'Manual mis-ID correction');
     });
   });
 }
@@ -2781,8 +2966,37 @@ async function openHealthDayModal(dayId){
           <div class="flex flex-wrap gap-x-4 gap-y-1.5">${collat||'none'}</div>
         </div>
         <p class="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"><i class="fas fa-lightbulb mr-1"></i>${day.mpo_tip||''}</p>
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+          <button type="button" id="hdSharePdf" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"><i class="fas fa-file-pdf text-red-300"></i> PDF chamber summary</button>
+          <button type="button" id="hdShareWa" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700"><i class="fab fa-whatsapp"></i> Share via WhatsApp</button>
+          <button type="button" id="hdCopyScript" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"><i class="fas fa-copy"></i> Copy script</button>
+        </div>
       </div>`;
+      document.getElementById('hdSharePdf')?.addEventListener('click',()=>shareReceipt('pdf', day, d));
+      document.getElementById('hdShareWa')?.addEventListener('click',()=>shareReceipt('whatsapp', day, d));
+      document.getElementById('hdCopyScript')?.addEventListener('click',()=>{ navigator.clipboard?.writeText(d.promo_script||''); toast.success('Campaign script copied'); });
   }catch(e){ body.innerHTML='<p class="text-xs text-red-600">Could not load the campaign card.</p>'; }
+}
+
+/** Generate a branded PDF / WhatsApp chamber summary from a health-day card. */
+async function shareReceipt(kind, day, d){
+  const focus=d.brand_focus||[];
+  const medicines=focus.map(b=>({brand_name:b, generic:'', strength:'', type:''}));
+  const params=new URLSearchParams({
+    doctor: officerProfile?.full_name||'Doctor',
+    medicines: JSON.stringify(medicines),
+    brand_focus: JSON.stringify(focus),
+  });
+  if(kind==='pdf'){
+    window.open('/api/receipt.pdf?'+params.toString(), '_blank');
+    toast.info('Generating branded PDF chamber summary…');
+  }else{
+    try{
+      const r=await (await fetch('/api/receipt/whatsapp?'+params.toString())).json();
+      window.open(r.share_url, '_blank');
+      toast.info('Opened WhatsApp share');
+    }catch(e){ toast.error('Could not open WhatsApp'); }
+  }
 }
 
 function closeHealthDayModal(){
@@ -2811,6 +3025,8 @@ async function loadRsmDashboard(){
       fetch('/api/rsm/dashboard?days='+days).then(r=>r.json()),
       fetch('/api/rsm/trends?days='+days).then(r=>r.json()).catch(()=>({trends:[]})),
     ]);
+    loadRsmHeatmap();
+    loadDoctorTiers();
     const k=d.totals||{};
     const kpis=document.getElementById('rsmKpis');
     if(kpis){
@@ -2846,6 +3062,152 @@ async function loadRsmDashboard(){
       }).join('');
     }
   }catch(e){console.error('rsm',e);}
+}
+
+/* ---------- RSM: Territory penetration heatmap (Leaflet) ---------- */
+let heatmapInstance=null;
+
+function heatmapColor(sov){
+  if(sov>=60) return '#10B981';   // own-company dominant (green)
+  if(sov>=35) return '#F59E0B';   // competitive / mixed (amber)
+  return '#EF4444';               // competitor-heavy (red)
+}
+
+function initLeaflet(){
+  if(!window.L){
+    const el=document.getElementById('rsmHeatmap');
+    if(el) el.innerHTML='<div class="flex h-full items-center justify-center text-xs text-slate-400"><i class="fas fa-globe mr-2"></i>Map library unavailable — showing a compact list instead.</div>';
+    return null;
+  }
+  const el=document.getElementById('rsmHeatmap');
+  if(!el) return null;
+  if(heatmapInstance){ heatmapInstance.remove(); heatmapInstance=null; }
+  heatmapInstance=L.map(el,{scrollWheelZoom:false}).setView([23.685,90.3563],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:10, attribution:'© OpenStreetMap'
+  }).addTo(heatmapInstance);
+  return heatmapInstance;
+}
+
+async function loadRsmHeatmap(){
+  const days=document.getElementById('hmDays')?.value||'30';
+  const stats=document.getElementById('heatmapStats');
+  try{
+    const d=await (await fetch('/api/rsm/heatmap?days='+days)).json();
+    const rows=d.districts||[];
+    if(stats){
+      const totalItems=rows.reduce((a,b)=>a+(b.items||0),0);
+      const ownItems=rows.reduce((a,b)=>a+(b.own_items||0),0);
+      const sov=totalItems?(ownItems/totalItems*100).toFixed(1):0;
+      const owned=rows.filter(r=>r.sov>=60).length;
+      const compHeavy=rows.filter(r=>(r.sov||0)<35).length;
+      stats.innerHTML=`
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Districts covered</p><p class="text-xl font-bold">${rows.length}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Total items</p><p class="text-xl font-bold">${totalItems}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Market penetration (own SoV)</p><p class="text-xl font-bold ${sov>=50?'text-emerald-600':'text-amber-600'}">${sov}%</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Owned vs competitor-heavy</p><p class="text-xl font-bold"><span class="text-emerald-600">${owned}</span> / <span class="text-red-600">${compHeavy}</span></p></div>`;
+    }
+    const map=initLeaflet();
+    if(!map){
+      if(rows.length){
+        const el=document.getElementById('rsmHeatmap');
+        el.innerHTML='<div class="p-3 space-y-1.5 max-h-[420px] overflow-y-auto">'+rows.map(r=>`
+          <div class="flex items-center gap-2 text-[11px] border border-slate-100 rounded-lg px-2 py-1.5">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${heatmapColor(r.sov||0)}"></span>
+            <span class="font-semibold min-w-[90px]">${r.district}</span>
+            <span class="text-slate-500">${r.items} items · own ${r.own_items}</span>
+            <span class="ml-auto font-bold">${r.sov}%</span>
+          </div>`).join('')+'</div>';
+      }
+      return;
+    }
+    if(!rows.length){
+      map.setView([23.685,90.3563],7);
+      L.marker([23.685,90.3563]).addTo(map).bindPopup('<b>No scan data yet</b><br>Scan prescriptions to populate the penetration map.');
+      return;
+    }
+    rows.forEach(r=>{
+      if(r.lat==null || r.lng==null) return;
+      const radius=Math.max(6, Math.min(34, Math.sqrt(r.items||1)*6));
+      const col=heatmapColor(r.sov||0);
+      const marker=L.circleMarker([r.lat,r.lng],{
+        radius, color:col, weight:2, fillColor:col, fillOpacity:0.5,
+        opacity:0.9
+      }).addTo(map);
+      marker.bindPopup(
+        `<div class="text-[12px]"><b>${r.district}</b>${r.territory?' · '+r.territory:''}<br>`+
+        `Items: <b>${r.items}</b> (own ${r.own_items} / comp ${r.competitor_items})<br>`+
+        `SoV: <b>${r.sov}%</b><br>Rx: ${r.rx}</div>`);
+    });
+    // fit bounds
+    const pts=rows.filter(r=>r.lat!=null&&r.lng!=null).map(r=>[r.lat,r.lng]);
+    if(pts.length) map.fitBounds(pts,{padding:[30,30]});
+  }catch(e){ if(stats) stats.innerHTML='<p class="text-xs text-red-600">Heatmap unavailable.</p>'; }
+}
+
+/* ---------- RSM: Doctor prescribing tiering (A/B/C) ---------- */
+let tierFilter='';
+
+async function loadDoctorTiers(){
+  const body=document.getElementById('tierBody');
+  const sum=document.getElementById('tierSummary');
+  if(!body) return;
+  const spec=document.getElementById('tierSpecialty')?.value||'';
+  const days=document.getElementById('hmDays')?.value||'30';
+  const qs=new URLSearchParams({days, min_rx:1});
+  if(tierFilter) qs.set('tier',tierFilter);
+  if(spec) qs.set('specialty',spec);
+  try{
+    const d=await (await fetch('/api/rsm/doctors?'+qs.toString())).json();
+    const docs=d.doctors||[];
+    const count=t=>docs.filter(x=>x.tier===t).length;
+    if(sum){
+      sum.innerHTML=`
+        <div class="rounded-xl border border-violet-200 bg-violet-50 p-3"><p class="text-[10px] text-violet-600">Tier A · High prescriber</p><p class="text-xl font-bold text-violet-700">${count('A')}</p></div>
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-3"><p class="text-[10px] text-blue-600">Tier B · Medium</p><p class="text-xl font-bold text-blue-700">${count('B')}</p></div>
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><p class="text-[10px] text-slate-500">Tier C · Occasional</p><p class="text-xl font-bold text-slate-700">${count('C')}</p></div>
+        <div class="rounded-xl border border-red-200 bg-red-50 p-3"><p class="text-[10px] text-red-600">At-risk switchers</p><p class="text-xl font-bold text-red-700">${docs.filter(x=>x.at_risk).length}</p></div>`;
+    }
+    const tierCls={A:'bg-violet-100 text-violet-700 border-violet-200',B:'bg-blue-100 text-blue-700 border-blue-200',C:'bg-slate-100 text-slate-600 border-slate-200'};
+    body.innerHTML=docs.map(x=>`
+      <tr class="border-b border-slate-100 hover:bg-slate-50/60">
+        <td><span class="px-2 py-0.5 rounded-md border text-[10px] font-bold ${tierCls[x.tier]}">${x.tier}</span></td>
+        <td class="font-medium">${x.doctor_name}</td>
+        <td class="text-slate-500">${x.specialty}</td>
+        <td class="text-slate-500">${x.territory||'—'}</td>
+        <td>${x.rx}</td>
+        <td>${x.items}</td>
+        <td class="text-emerald-700 font-semibold">${x.own_items}</td>
+        <td class="text-amber-700">${x.competitor_items}</td>
+        <td>${x.sov}%</td>
+        <td>${x.at_risk?`<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold border border-red-200">⚠ At risk</span>`:`<span class="text-[10px] text-slate-400">—</span>`}</td>
+      </tr>`).join('')||'<tr><td colspan="10" class="text-center py-6 text-xs text-slate-500">No doctors match this filter yet.</td></tr>';
+    // populate specialty filter once
+    const specSel=document.getElementById('tierSpecialty');
+    if(specSel && !specSel.dataset.bound){
+      specSel.dataset.bound='1';
+      const specs=[...new Set(docs.map(x=>x.specialty).filter(Boolean))];
+      specSel.innerHTML=`<option value="">All specialties</option>`+specs.map(s=>`<option value="${s}">${s}</option>`).join('');
+    }
+  }catch(e){ body.innerHTML='<tr><td colspan="10" class="text-center py-6 text-xs text-red-600">Tier data unavailable.</td></tr>'; }
+}
+
+function initRsmExtras(){
+  document.getElementById('hmDays')?.addEventListener('change',()=>{loadRsmHeatmap(); loadDoctorTiers();});
+  document.getElementById('hmRefresh')?.addEventListener('click',()=>{loadRsmHeatmap(); loadDoctorTiers(); toast.info('RSM analytics refreshed');});
+  document.getElementById('tierSpecialty')?.addEventListener('change',loadDoctorTiers);
+  document.getElementById('tierFilterBar')?.addEventListener('click',e=>{});
+  document.querySelectorAll('.tier-filter').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      tierFilter=btn.dataset.tier;
+      document.querySelectorAll('.tier-filter').forEach(b=>{
+        const on=b===btn;
+        b.classList.toggle('bg-slate-900',on); b.classList.toggle('text-white',on); b.classList.toggle('border-slate-900',on);
+        b.classList.toggle('bg-white',!on); b.classList.toggle('text-slate-600',!on); b.classList.toggle('border-slate-200',!on);
+      });
+      loadDoctorTiers();
+    });
+  });
 }
 
 function initInlineTags(){
@@ -2886,21 +3248,14 @@ function paintDynamicTags(options){
 async function drainOfflineQueue(){
   if(!navigator.onLine) return;
   try{
-    const req=indexedDB.open(dbName,1);
-    req.onsuccess=e=>{
-      const db=e.target.result;
-      if(!db.objectStoreNames.contains('prescriptions')) return;
-      const tx=db.transaction('prescriptions','readonly');
-      const store=tx.objectStore('prescriptions');
-      const getAll=store.getAll();
-      getAll.onsuccess=async()=>{
-        const pending=(getAll.result||[]).filter(x=>!x.synced);
-        if(!pending.length) return;
-        toast.info(`Syncing ${pending.length} offline scan(s)…`);
-        await fetch('/api/offline/sync',{method:'POST'});
-      };
-    };
-  }catch(e){}
+    const pending=await window.MedLenXOffline.pendingOfflineScans();
+    if(!pending.length){ refreshPendingCount(); return; }
+    toast.loading(`Syncing ${pending.length} offline scan(s)…`,{id:'offline-sync'});
+    const n=await window.MedLenXOffline.flushOfflineQueue();
+    toast.success(n?`Synced ${n} offline scan(s)`:'Offline queue is clear',{id:'offline-sync'});
+    refreshPendingCount();
+    if(n) { loadKpis(); loadCharts(); loadRecentMedicines(); }
+  }catch(e){ console.warn('drainOfflineQueue',e); refreshPendingCount(); }
 }
 
 document.getElementById('rsmDays')?.addEventListener('change',loadRsmDashboard);
@@ -2911,6 +3266,9 @@ document.getElementById('rsmReportPdf')?.addEventListener('click',()=>{
   toast.info('Generating DGDA / Compliance Audit PDF…');
 });
 window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
+navigator.serviceWorker?.addEventListener('message',e=>{
+  if(e.data && e.data.type==='OFFLINE_SYNC') drainOfflineQueue();
+});
 
 /* ---------- Bootstrap ---------- */
 (async function initApp(){
@@ -2922,6 +3280,7 @@ window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
   initOfficerForm();
   initInlineTags();
   initMedexFilters();
+  initRsmExtras();
   await loadFilterOptions();
   await loadOfficerProfile();
   loadHistory();
@@ -2931,6 +3290,7 @@ window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
   loadMedexStats();
   pingLatency();
   setInterval(pingLatency, 30000);
+  refreshPendingCount();
   drainOfflineQueue();
 })();
 

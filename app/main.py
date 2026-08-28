@@ -27,6 +27,9 @@ from .medlenx_client import MedLenXVLClient
 from .medicine_matcher import (
     MedexIndex, normalize_brand, resolve_company, same_company,
 )
+from .intelligence import (
+    generic_substitution, dgda_check, smart_pitch_note,
+)
 
 init_db()
 
@@ -81,6 +84,42 @@ def load_medex_db():
     medex_index = MedexIndex()
 
 load_medex_db()
+
+# Cache the current officer's company (the "own" brand for substitution).
+_own_company_cache = {"val": None, "ts": 0.0}
+
+
+def get_current_own_company(force: bool = False) -> str:
+    """Return the officer's company name (substitution 'own brand' basis).
+
+    Prefers the officer profile; falls back to the is_own_company pharma row.
+    Cached for 30s so scan enrichment doesn't hit the DB on every medicine.
+    """
+    import time as _t
+    now = _t.time()
+    if not force and _own_company_cache["val"] and now - _own_company_cache["ts"] < 30:
+        return _own_company_cache["val"]
+    val = ""
+    try:
+        from .database import get_officer_profile, get_db
+        prof = get_officer_profile(None)
+        if prof and prof.get("company_name"):
+            val = prof["company_name"]
+        else:
+            conn = get_db()
+            cur = conn.cursor()
+            r = cur.execute(
+                "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+            ).fetchone()
+            conn.close()
+            val = r["name"] if r else ""
+    except Exception as exc:
+        print(f"⚠️  own company resolve: {exc}")
+    if not val:
+        val = "Healthcare Pharmaceuticals Ltd."
+    _own_company_cache.update({"val": val, "ts": now})
+    return val
+
 
 # ---- Cascading location reference data (District -> Upazila -> Territory) ----
 _locations_cache = None
@@ -372,6 +411,34 @@ def _alternatives_payload(entries, chosen, limit=6):
     return alts
 
 
+def _attach_field_intelligence(enriched_meds, own_company="", doctor=""):
+    """Attach enterprise field intelligence to each detected medicine.
+
+    For every medicine that is NOT the officer's own brand, compute a
+    generic-substitution card (competitor → own brand + pitch note) and a DGDA
+    compliance flag. Medicines already sold by the officer's company get only
+    the DGDA flag. Nothing here can fail a scan.
+    """
+    if not own_company:
+        return enriched_meds
+    for med in enriched_meds:
+        try:
+            sub = generic_substitution(med, own_company, medex_db)
+            if sub:
+                med["substitution"] = sub
+            dgda = dgda_check(
+                brand=med.get("brand_name", ""),
+                generic=med.get("generic") or med.get("generic_name", ""),
+                company=med.get("company", ""),
+            )
+            med["dgda"] = dgda
+            if dgda.get("status") in ("banned", "price_adjusted"):
+                med["needs_review"] = True
+        except Exception as exc:
+            print(f"⚠️  field intelligence failed for {med.get('brand_name')}: {exc}")
+    return enriched_meds
+
+
 def enrich_medicine_with_medex(med):
     """
     Attach authoritative MedEx data (company, generic, strength, image) to a
@@ -524,6 +591,10 @@ async def scan_prescription(
         enriched = enrich_medicine_with_medex(med)
         enriched_meds.append(enriched)
 
+    # Enterprise field intelligence (substitution + DGDA compliance flags)
+    _attach_field_intelligence(enriched_meds, own_company=get_current_own_company(),
+                               doctor=doctor)
+
     total_time = time.time() - start_time
     avg_conf = sum(m.get("confidence",0) for m in enriched_meds)/len(enriched_meds) if enriched_meds else 0
 
@@ -583,6 +654,10 @@ async def verify_prescription(pid: int, verified_data: dict):
 
     doctor = verified_data.get('doctor', {}) or {}
     medicines = verified_data.get('medicines', []) or []
+    # Recompute field intelligence (substitution + DGDA) against the verified
+    # medicine set so an MPO's brand/company edits update the cards.
+    _attach_field_intelligence(medicines, own_company=get_current_own_company(),
+                               doctor=doctor)
 
     conn = get_db()
     cur = conn.cursor()
@@ -1178,6 +1253,246 @@ async def rsm_report_pdf(team_id: str = "", rsm_id: str = "", days: int = 30):
     )
 
 
+# ---------------------------------------------------------------------------
+# Enterprise intelligence: substitution, DGDA monitor, training loop
+# ---------------------------------------------------------------------------
+
+@app.get("/api/medex/substitution")
+async def medex_substitution(brand: str = "", generic: str = "", company: str = "",
+                             own_company: str = ""):
+    """Competitor → own-brand substitution card + MPO pitch note.
+
+    When an officer detects a competitor brand (e.g. Seclo/Square) scan, this
+    returns the client company's equivalent brand (e.g. Pantonix/Incepta) with
+    price / pack / unit difference and a 2-sentence smart pitch note.
+    """
+    own = own_company or get_current_own_company()
+    detected = {
+        "brand_name": brand or "",
+        "generic": generic or "",
+        "generic_name": generic or "",
+        "ingredient": generic or "",
+        "company": company or "",
+        "strength": "",
+        "type": "Tablet",
+        "image_url": "",
+        "pack_image": "",
+    }
+    if brand or generic:
+        # try to hydrate from the catalogue for a richer card
+        hit = None
+        if brand:
+            hit = medex_index.exact(brand)
+        if not hit and generic:
+            g = (generic or "").lower()
+            for row in medex_db:
+                blob = " ".join([row.get("generic") or "", row.get("ingredient") or "",
+                                 row.get("category") or ""]).lower()
+                if g in blob:
+                    hit = [row]
+                    break
+        if hit:
+            chosen = hit[0]
+            detected["strength"] = chosen.get("strength", "")
+            detected["type"] = chosen.get("type", "Tablet")
+            detected["image_url"] = chosen.get("image_url") or chosen.get("pack_image", "")
+            detected["generic"] = detected["generic"] or chosen.get("generic", "")
+            detected["generic_name"] = detected["generic_name"] or chosen.get("generic", "")
+            detected["ingredient"] = detected["ingredient"] or chosen.get("ingredient", "")
+            if not company:
+                detected["company"] = chosen.get("company", "")
+    sub = generic_substitution(detected, own, medex_db)
+    return {"own_company": own, "substitution": sub}
+
+
+@app.get("/api/dgda/check")
+async def dgda_check_endpoint(brand: str = "", generic: str = "", company: str = ""):
+    """DGDA price & registration compliance lookup for a scanned brand."""
+    return dgda_check(brand=brand, generic=generic, company=company)
+
+
+@app.get("/api/dgda/monitor")
+async def dgda_monitor(q: str = "", status: str = ""):
+    """Full gazette for the compliance monitor (banned / price-adjusted lists)."""
+    from .intelligence import _load_dgda
+    data = _load_dgda()
+    return {
+        "updated_at": data.get("updated_at"),
+        "gazette": data.get("gazette"),
+        "banned": data.get("banned", []),
+        "price_adjusted": data.get("price_adjusted", []),
+        "prices": data.get("prices", []),
+    }
+
+
+@app.post("/api/training/queue")
+async def training_queue_create(payload: dict):
+    """Save a human-in-the-loop training example.
+
+    When an officer corrects a low-confidence / misidentified brand, the client
+    posts the cropped prescription slice (base64) + the corrected text. The
+    server persists the image and queues it for the vision-retraining pipeline.
+    """
+    import base64
+    image_b64 = payload.get("image_slice") or payload.get("image_base64") or ""
+    image_path = ""
+    if image_b64:
+        try:
+            raw = base64.b64decode(image_b64.split(",")[-1])
+            training_dir = os.path.join(UPLOAD_DIR, "training")
+            os.makedirs(training_dir, exist_ok=True)
+            fname = f"train_{uuid.uuid4().hex}.jpg"
+            with open(os.path.join(training_dir, fname), "wb") as f:
+                f.write(raw)
+            image_path = f"training/{fname}"
+        except Exception as exc:
+            print(f"⚠️  training image decode failed: {exc}")
+
+    from .database import save_training_item
+    rid = save_training_item(payload or {}, image_path=image_path)
+    return {
+        "success": True,
+        "id": rid,
+        "message": "Correction captured and queued for the handwriting retraining pipeline.",
+        "image_path": image_path or None,
+    }
+
+
+@app.get("/api/training/queue")
+async def training_queue_list(limit: int = 100, status: str = "", mr_id: str = ""):
+    from .database import list_training_queue
+    return list_training_queue(limit=limit, status=status, mr_id=mr_id)
+
+
+@app.get("/api/training/queue/stats")
+async def training_queue_stats_endpoint():
+    from .database import training_queue_stats
+    return training_queue_stats()
+
+
+@app.get("/api/rsm/heatmap")
+async def rsm_heatmap(own_company: str = "", days: int = 30, division: str = "",
+                      district: str = ""):
+    """Geo prescription heatmap + territory penetration for the RSM view."""
+    from .database import get_geo_heatmap
+    return get_geo_heatmap(own_company_name=own_company, days=days,
+                           division=division, district=district)
+
+
+@app.get("/api/rsm/doctors")
+async def rsm_doctors(own_company: str = "", territory: str = "", district: str = "",
+                      specialty: str = "", days: int = 30, tier: str = "",
+                      min_rx: int = 1):
+    """Doctor prescribing tier matrix (A/B/C) + at-risk switchers."""
+    from .database import get_doctor_tiers
+    return get_doctor_tiers(own_company_name=own_company, territory=territory,
+                            district=district, specialty=specialty,
+                            days=days, tier=tier, min_rx=min_rx)
+
+
+# ---------------------------------------------------------------------------
+# Sample receipt generator (PDF / WhatsApp)
+# ---------------------------------------------------------------------------
+
+def _build_receipt_lines(doctor, medicines, brand_focus):
+    """Assemble a plain-text chamber summary (shared by PDF + WhatsApp)."""
+    doc_name = doctor or "the doctor"
+    lines = [
+        f"Dear {doc_name},",
+        "",
+        "Thank you for your time today. Please find a summary of the detailing "
+        "for our portfolio:",
+        "",
+    ]
+    if medicines:
+        lines.append("Key products discussed:")
+        for m in medicines:
+            name = (m.get("brand_name") or "").strip()
+            if not name:
+                continue
+            lines.append(f"  • {name} — {m.get('strength', '')} {m.get('type', '')}"
+                         f" ({m.get('generic_name') or m.get('generic', '')})")
+    if brand_focus:
+        lines.append("")
+        lines.append("Suggested areas to explore further:")
+        for b in brand_focus:
+            lines.append(f"  · {b}")
+    lines += [
+        "",
+        "We'd be glad to walk you through any safety, efficacy or pricing detail "
+        "at your convenience.",
+        "",
+        "Warm regards,",
+        "Your MedLenX Field Officer",
+    ]
+    return "\n".join(lines)
+
+
+@app.get("/api/receipt.pdf")
+async def receipt_pdf(doctor: str = "", medicines: str = "", brand_focus: str = ""):
+    """Branded one-page sample/chamber summary receipt (PDF)."""
+    from io import BytesIO
+    own = get_current_own_company()
+    meds = json.loads(medicines) if medicines else []
+    focus = json.loads(brand_focus) if brand_focus else []
+    text = _build_receipt_lines(doctor, meds, focus)
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import inch
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=0.7 * inch, rightMargin=0.7 * inch,
+                            topMargin=0.7 * inch, bottomMargin=0.7 * inch,
+                            title="Chamber Detail Summary", author="MedLenX Lab")
+    styles = getSampleStyleSheet()
+    brand_color = None
+    for key, c in {"square": "#1E40AF", "incepta": "#0284C7", "beximco": "#0D9488",
+                   "renata": "#D97706", "aci": "#DC2626", "healthcare": "#7C3AED",
+                   "opsonin": "#0891B2", "eskayef": "#4F46E5"}.items():
+        if key in own.lower():
+            brand_color = c
+            break
+    brand_color = brand_color or "#1E40AF"
+    h1 = ParagraphStyle("h1", parent=styles["Title"], fontSize=18, spaceAfter=4,
+                        textColor=colors.HexColor(brand_color))
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9,
+                         textColor=colors.HexColor("#475569"), spaceAfter=12)
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=11,
+                          leading=16, textColor=colors.HexColor("#0F172A"))
+
+    story = []
+    story.append(Paragraph("Chamber Detailing Summary", h1))
+    story.append(Paragraph(f"{own} · Prepared by MedLenX Lab Sample Receipt",
+                           sub))
+    for part in text.split("\n"):
+        if part.strip():
+            story.append(Paragraph(part.replace("&", "&amp;").replace("<", "&lt;"), body))
+        else:
+            story.append(Spacer(1, 6))
+    doc.build(story)
+    pdf = buf.getvalue()
+    buf.close()
+    filename = f"Chamber_Summary_{datetime.now().strftime('%Y%m%d%H%M')}.pdf"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/api/receipt/whatsapp")
+async def receipt_whatsapp(doctor: str = "", medicines: str = "", brand_focus: str = ""):
+    """Build a wa.me share link with a prefilled chamber-summary message."""
+    meds = json.loads(medicines) if medicines else []
+    focus = json.loads(brand_focus) if brand_focus else []
+    text = _build_receipt_lines(doctor, meds, focus)
+    import urllib.parse
+    msg = urllib.parse.quote(text)
+    # wa.me/ without a number opens the share screen; keep it demo-friendly.
+    return {"message": text, "share_url": f"https://wa.me/?text={msg}"}
+
+
 @app.post("/api/offline/sync")
 async def offline_sync():
     """
@@ -1186,6 +1501,7 @@ async def offline_sync():
     queue as drained after replaying pending uploads.
     """
     return {"success": True, "message": "Offline queue accepted", "ts": time.time()}
+
 
 @app.get("/sw.js")
 async def serve_sw_root():

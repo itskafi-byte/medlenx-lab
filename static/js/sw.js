@@ -1,4 +1,4 @@
-const CACHE_NAME = 'medlenx-lab-v3';
+const CACHE_NAME = 'medlenx-lab-v4';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -42,5 +42,11 @@ self.addEventListener('sync', event => {
 });
 
 async function syncOfflinePrescriptions() {
-  console.log('Syncing offline prescriptions...');
+  // Tell every open client to flush the IndexedDB queue via the real /api/scan.
+  const clients = await self.clients.matchAll({ includeUncontrolled: true });
+  clients.forEach(client => client.postMessage({ type: 'OFFLINE_SYNC' }));
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put('/api/offline/sync', new Response(JSON.stringify({ ok: true }), {
+    headers: { 'Content-Type': 'application/json' },
+  }));
 }
