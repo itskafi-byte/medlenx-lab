@@ -310,6 +310,8 @@ def init_db():
         ("prescriptions", "prescription_source", "TEXT"),
         ("prescriptions", "image_phash", "TEXT"),
         ("prescriptions", "duplicate_of", "INTEGER"),
+        ("prescriptions", "off_territory", "INTEGER DEFAULT 0"),
+        ("prescriptions", "territory_note", "TEXT"),
         ("recent_scanned_medicines", "prescription_source", "TEXT"),
         ("recent_scanned_medicines", "specialty", "TEXT"),
     ]:
@@ -794,7 +796,7 @@ def find_duplicate_prescription(cur, image_phash, exclude_id=None,
     return dict(best) if best else None
 
 
-def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0, image_phash=None):
+def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0, image_phash=None, off_territory=0, territory_note=""):
     """
     Save prescription with relational links
     result contains doctor + medicines from MedLenX VL
@@ -830,8 +832,8 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
 
     cur.execute("""
     INSERT INTO prescriptions 
-    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified, prescription_source, image_phash, duplicate_of)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified, prescription_source, image_phash, duplicate_of, off_territory, territory_note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         # Always store a real ISO-8601 timestamp. The scan meta uses
         # "%Y-%m-%d %H:%M:%S" (space separator); a space sorts BEFORE 'T', so
@@ -864,6 +866,8 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
         source,
         image_phash or "",
         dup["id"] if (dup := find_duplicate_prescription(cur, image_phash)) else None,
+        1 if off_territory else 0,
+        territory_note or "",
     ))
     prescription_id = cur.lastrowid
     
@@ -1765,6 +1769,85 @@ def get_recent_target_visits(limit=25, mpo_id=""):
     rows = cur.execute(sql, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ============ Geofenced audit verification (off-territory) ============
+
+def find_off_territory_audits(days=30, limit=50, mr_id=""):
+    """Scans flagged outside the officer's assigned territory, newest first."""
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    sql = """
+        SELECT id, timestamp, mr_id, doctor_name, doctor_specialty,
+               upazila, district, territory, geo_lat, geo_lng,
+               territory_note, off_territory, image_path, total_medicines
+        FROM prescriptions
+        WHERE off_territory=1 AND timestamp >= ?
+    """
+    params = [since]
+    if mr_id:
+        sql += " AND mr_id=?"
+        params.append(mr_id)
+    sql += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+    rows = cur.execute(sql, params).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("image_path"):
+            d["image_url"] = f"/uploads/prescriptions/{os.path.basename(d['image_path'])}"
+        out.append(d)
+    return out
+
+
+def get_scan_points(days=30, limit=2000):
+    """Point-level scan locations for the density-clustering map.
+
+    Falls back to the district centroid (data/bd_geo.json) with a small
+    deterministic jitter when the scan has no GPS pin, so district-level
+    audits still cluster.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    rows = cur.execute("""
+        SELECT p.id, p.timestamp, p.mr_id, p.doctor_name, p.district,
+               p.territory, p.geo_lat, p.geo_lng, p.off_territory,
+               p.duplicate_of,
+               (SELECT COUNT(*) FROM prescribed_medicines pm
+                  WHERE pm.prescription_id = p.id) AS items
+        FROM prescriptions p
+        WHERE p.timestamp >= ?
+        ORDER BY p.id DESC LIMIT ?
+    """, (since, limit)).fetchall()
+    conn.close()
+
+    geo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "data", "bd_geo.json")
+    centroids = {}
+    try:
+        with open(geo_path, "r", encoding="utf-8") as f:
+            centroids = json.load(f).get("districts", {}) or {}
+    except Exception:
+        pass
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        lat, lng = d.pop("geo_lat", None), d.pop("geo_lng", None)
+        if lat is None or lng is None:
+            c = centroids.get(d.get("district") or "", {})
+            lat, lng = c.get("lat"), c.get("lng")
+            if lat is not None and lng is not None:
+                # deterministic jitter so same-district audits don't stack
+                seed = d.get("id") or 0
+                lat += ((seed % 13) - 6) * 0.008
+                lng += ((seed % 7) - 3) * 0.008
+        d["lat"], d["lng"] = lat, lng
+        out.append(d)
+    return [d for d in out if d.get("lat") is not None and d.get("lng") is not None]
 
 
 def save_error_report(payload):

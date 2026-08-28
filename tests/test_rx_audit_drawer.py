@@ -95,11 +95,13 @@ TEAL_RX = _png_bytes((13, 148, 136), seed=3, style="grid")
 PURPLE_RX = _png_bytes((109, 40, 217), seed=4, style="waves")
 
 
-def _scan(image_bytes, mr_id="MR001"):
+def _scan(image_bytes, mr_id="MR001", **fields):
+    data = {"mr_id": mr_id}
+    data.update(fields)
     resp = client.post(
         "/api/scan",
         files={"file": ("rx.png", image_bytes, "image/png")},
-        data={"mr_id": mr_id},
+        data=data,
     )
     assert resp.status_code == 200, resp.text
     return resp.json()

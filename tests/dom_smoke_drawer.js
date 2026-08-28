@@ -102,6 +102,38 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok('tracker form exists', doc.getElementById('doctorTargetForm') !== null);
   ok('tracker table exists', doc.getElementById('dtBody') !== null);
 
+  console.log('\n=== Upgrade: compliance pills + clinical strip + pitch card ===');
+  ok('NEML Listed pill rendered', doc.getElementById('rxAuditItems').innerHTML.includes('NEML Listed'),
+     'pill missing');
+  ok('DGDA Price Alert pill rendered', doc.getElementById('rxAuditItems').innerHTML.includes('DGDA Price Alert'));
+  ok('ABX stewardship pill rendered', doc.getElementById('rxAuditItems').innerHTML.includes('ABX'));
+  ok('clinical strip visible', !doc.getElementById('rxDrawerClinical').classList.contains('hidden'));
+  ok('polypharmacy badge rendered', doc.getElementById('rxPolyBadge').textContent.length > 3,
+     doc.getElementById('rxPolyBadge').textContent);
+  ok('therapy breakdown bar rendered', doc.getElementById('rxTherapyBar').children.length > 0);
+  ok('Generate Doctor Pitch Card button present',
+     doc.getElementById('rxAuditItems').innerHTML.includes('Generate Doctor Pitch Card'));
+  // open the pitch modal
+  const pitchBtn = doc.querySelector('.rx-pitch-btn');
+  if (pitchBtn) {
+    pitchBtn.dispatchEvent(new win.Event('click', { bubbles: true }));
+    await sleep(200);
+    ok('pitch modal opens', !doc.getElementById('rxPitchModal').classList.contains('hidden'));
+    ok('pitch modal shows comparison table', doc.getElementById('rxPitchBody').innerHTML.includes('Your Brand'));
+    doc.getElementById('rxPitchClose').dispatchEvent(new win.Event('click', { bubbles: true }));
+    await sleep(100);
+    ok('pitch modal closes', doc.getElementById('rxPitchModal').classList.contains('hidden'));
+  } else { ok('pitch button clickable', false, 'no .rx-pitch-btn found'); }
+
+  console.log('\n=== Upgrade: geofence + density clusters ===');
+  ok('off-territory card exists', doc.getElementById('otBody') !== null);
+  ok('cluster toggle exists', doc.getElementById('hmViewClusters') !== null);
+  const otResp = await fetch(BASE + '/api/rsm/off-territory');
+  ok('off-territory endpoint live', otResp.ok);
+  const spResp = await fetch(BASE + '/api/rsm/scan-points?days=30');
+  const sp = await spResp.json();
+  ok('scan-points endpoint returns coords', Array.isArray(sp) && sp.length > 0 && sp[0].lat != null);
+
   if (errors.length) {
     console.log('\nJS errors during run:');
     errors.slice(0, 5).forEach(e => console.log('  !', e));

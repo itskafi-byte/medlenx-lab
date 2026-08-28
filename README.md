@@ -86,6 +86,34 @@ Output JSON example:
   doctor lists to MPOs; every scan whose doctor matches a target auto-logs a
   visit (deduped per prescription), with progress bars and a live visit log.
 
+## DGDA NEML & Price Ceiling Monitor, Prescribing Analytics, Pitch Cards, Geofencing
+
+- **NEML Compliance Badge** — drawer rows show a blue `NEML Listed` pill for
+  molecules on the DGDA National Essential Medicines List (`data/neml_list.json`,
+  ~295-molecule NEML alignment: Omeprazole, Metformin, Amlodipine, Azithromycin...).
+- **MRP Ceiling Violation Warning** — red `DGDA Price Alert` flag when a brand is
+  banned, its MRP was ceiling-adjusted by gazette, or a captured price exceeds
+  the DGDA ceiling; unverified pricing gets a muted note instead of false alarms.
+- **Polypharmacy Risk Counter** — `⚠️ 8+ Meds Prescribed — High Polypharmacy`
+  top-level drawer badge (5-7 = moderate).
+- **Therapeutic Class Breakdown** — stacked percentage bar (Cardiology /
+  Gastroenterology / Antibiotics / ...) from NEML classes + MedEx categories.
+- **Antibiotic Stewardship Tag** — `ABX` pill per row; broad-spectrum molecules
+  (Azithromycin, Cefixime, fluoroquinolones...) get a red `ABX ★` watch-list tag
+  and a stewardship summary badge.
+- **MPO Detailing Action Cards** — every Own Portfolio Match row has a
+  **Generate Doctor Pitch Card** button: a mobile-friendly modal (MRP delta,
+  pack, strength/type, compliance evidence, smart pitch script) plus a
+  one-page **PDF** download (`/api/prescriptions/{pid}/pitch-card.pdf?idx=`).
+- **Geofenced Audit Verification** — the workspace has a **GPS** pin button;
+  scans are geofenced against the officer's assigned territory using
+  `data/bd_geo.json` district centroids, and mismatches surface as an
+  **Off-Territory Audit** flag in the drawer and a red RSM Command card
+  (`/api/rsm/off-territory`).
+- **Density Clustering Map** — the RSM heatmap gains a *Density clusters* view:
+  zoom-aware grid clusters of audit pins with counts, chamber hotspots and
+  off-territory/duplicate counters (`/api/rsm/scan-points`).
+
 ## API
 
 - `POST /api/scan` - upload image, returns doctor + medicines with MedEx images (+ `duplicate` fraud alert when the same Rx was scanned before)
@@ -95,6 +123,9 @@ Output JSON example:
 - `GET|POST /api/rsm/doctor-targets` - doctor detailing target list / attach target (retro-counts this month's scans)
 - `DELETE /api/rsm/doctor-targets/{id}` - remove a doctor target
 - `GET /api/rsm/doctor-targets/visits` - auto-logged visit feed from prescription scans
+- `GET /api/prescriptions/{pid}/pitch-card.pdf?idx=` - one-page MPO Doctor Pitch Card (PDF) for a matched competitor row
+- `GET /api/rsm/off-territory` - geofenced audits captured outside the officer's assigned territory
+- `GET /api/rsm/scan-points` - point-level audit locations for the density-clustering map
 - `GET /api/medex?q=Napa&form=Tablet&limit=20` - search scraped DB
 - `GET /api/health` - model + DB count
 

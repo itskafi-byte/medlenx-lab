@@ -207,6 +207,10 @@ tailwind.config={
         <input id="geoUpazila" placeholder="Upazila" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
         <input id="geoDistrict" placeholder="District" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
         <input id="geoTerritory" placeholder="Territory" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
+        <button type="button" id="geoPinBtn" class="shrink-0 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-100" title="Embed GPS coordinates with this audit for territory verification">
+          <i class="fas fa-location-dot text-emerald-600 mr-1"></i>GPS
+        </button>
+        <input type="hidden" id="geoLat"><input type="hidden" id="geoLng">
       </div>
     </div>
 
@@ -509,6 +513,21 @@ tailwind.config={
         <button type="button" data-filter="low" class="rx-filter px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600">&lt;80% (0)</button>
       </div>
     </div>
+    <!-- Clinical & regulatory analytics strip -->
+    <div id="rxDrawerClinical" class="px-5 py-3 bg-white border-b border-slate-200 hidden">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span id="rxPolyBadge" class="hidden"></span>
+        <span id="rxAbxBadge" class="hidden"></span>
+        <span id="rxOffTerritoryBadge" class="hidden"></span>
+      </div>
+      <div id="rxTherapyBarWrap" class="hidden">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[9px] font-bold uppercase tracking-widest text-slate-500"><i class="fas fa-chart-pie mr-1"></i>Therapeutic class breakdown</span>
+        </div>
+        <div id="rxTherapyBar" class="flex h-3 w-full rounded-full overflow-hidden bg-slate-100"></div>
+        <div id="rxTherapyLegend" class="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[9px] text-slate-600"></div>
+      </div>
+    </div>
     <!-- Items table -->
     <div class="flex-1 overflow-y-auto px-5 py-4">
       <p id="rxDrawerDupNote" class="hidden mb-3 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
@@ -551,6 +570,29 @@ tailwind.config={
   <div class="bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 w-52">
     <img id="rxCropImg" class="w-full h-40 object-contain rounded-lg bg-slate-50" alt="Prescription crop preview">
     <p id="rxCropCaption" class="text-[9px] text-slate-500 text-center mt-1 px-1"></p>
+  </div>
+</div>
+
+<!-- MPO Doctor Pitch Card modal (mobile-friendly) -->
+<div id="rxPitchModal" class="fixed inset-0 z-[10001] hidden items-center justify-center modal-backdrop p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] overflow-hidden flex flex-col">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
+      <div>
+        <h3 class="font-bold text-sm">🩺 Doctor Pitch Card</h3>
+        <p id="rxPitchSub" class="text-[10px] text-white/80 mt-0.5"></p>
+      </div>
+      <button id="rxPitchClose" class="w-8 h-8 rounded-lg hover:bg-white/20 text-white" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div id="rxPitchBody" class="p-5 overflow-y-auto space-y-3 text-xs"></div>
+    <div class="px-5 py-4 border-t border-slate-200 flex flex-wrap items-center gap-2 bg-slate-50">
+      <button id="rxPitchPdfBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        <i class="fas fa-file-pdf text-red-400 mr-1.5"></i>Download PDF
+      </button>
+      <button id="rxPitchCopyBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
+        <i class="fas fa-clipboard text-blue-600 mr-1.5"></i>Copy pitch script
+      </button>
+      <span class="ml-auto text-[9px] text-slate-400">Show during chamber visit</span>
+    </div>
   </div>
 </div>
 
@@ -718,6 +760,10 @@ tailwind.config={
         <p class="text-[11px] text-slate-500 mt-0.5">Live scan locations mapped across Bangladesh — bubble size = volume, colour = your company's market penetration (green = dominant, red = competitor-heavy).</p>
       </div>
       <div class="flex items-center gap-2">
+        <div class="flex items-center rounded-lg border border-slate-200 overflow-hidden text-[11px] font-semibold">
+          <button type="button" id="hmViewSov" class="hm-view px-2.5 py-1.5 bg-slate-900 text-white">SoV</button>
+          <button type="button" id="hmViewClusters" class="hm-view px-2.5 py-1.5 bg-white text-slate-600 border-l border-slate-200">Density clusters</button>
+        </div>
         <select id="hmDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
           <option value="7">7 days</option>
           <option value="30" selected>30 days</option>
@@ -823,6 +869,19 @@ tailwind.config={
     <div class="mt-4">
       <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2"><i class="fas fa-route text-emerald-600 mr-1"></i>Auto-visit log (from prescription scans)</p>
       <div id="dtVisits" class="space-y-1 max-h-44 overflow-y-auto text-[11px]"><p class="text-slate-400">No auto-logged visits yet.</p></div>
+    </div>
+  </div>
+
+  <!-- Geofenced audit verification: uploads captured outside the MPO's assigned territory -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-location-crosshairs text-red-600"></i> Off-Territory Audit Verification</h3>
+      <span id="otCount" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0 flagged</span>
+      <button type="button" id="otRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">GPS-pinned and location-resolved audits are geofenced against each MPO's assigned territory &mdash; <b>Off-Territory Audit</b> uploads (e.g. a Dhaka South MR scanning in Khulna) are listed here alongside the pHash duplicate guard.</p>
+    <div id="otBody" class="space-y-2 max-h-72 overflow-y-auto">
+      <p class="text-slate-400 text-xs">No off-territory audits flagged — every scan matches its assigned zone.</p>
     </div>
   </div>
 </div>
@@ -1201,6 +1260,25 @@ document.querySelectorAll('.viewer-control').forEach(btn=>{
   });
 });
 
+// GPS territory pinpoint — embeds coordinates with the audit record so the
+// backend can geofence the upload against the officer's assigned territory.
+document.getElementById('geoPinBtn')?.addEventListener('click',()=>{
+  if(!navigator.geolocation){ toast.error('Geolocation not supported on this device'); return; }
+  const btn=document.getElementById('geoPinBtn');
+  btn.disabled=true; btn.innerHTML='<i class="fas fa-circle-notch fa-spin text-emerald-600 mr-1"></i>Pinning…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById('geoLat').value=pos.coords.latitude.toFixed(6);
+    document.getElementById('geoLng').value=pos.coords.longitude.toFixed(6);
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-location-dot text-emerald-600 mr-1"></i>Pinned ✓';
+    toast.success('GPS pinned — coordinates will be embedded with this audit');
+  },err=>{
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-location-dot text-emerald-600 mr-1"></i>GPS';
+    toast.error('GPS unavailable: '+err.message);
+  },{enableHighAccuracy:true,timeout:10000});
+});
+
 // Camera
 let stream=null;
 const video=document.getElementById('cameraPreview');
@@ -1325,6 +1403,10 @@ async function scanPrescription(){
     fd.append('upazila',document.getElementById('geoUpazila').value);
     fd.append('district',document.getElementById('geoDistrict').value);
     fd.append('territory',document.getElementById('geoTerritory').value);
+    if(document.getElementById('geoLat').value){
+      fd.append('geo_lat',document.getElementById('geoLat').value);
+      fd.append('geo_lng',document.getElementById('geoLng').value);
+    }
 
     if(!navigator.onLine){
       const reader=new FileReader();
@@ -1344,6 +1426,9 @@ async function scanPrescription(){
     renderVerification(data);
     if(data.duplicate){
       toast.error(`<b>Duplicate Rx Detected</b> — ${data.duplicate.message||'This prescription was scanned before.'} <button class="underline font-bold ml-1" onclick="openRxAuditDrawer(${data.duplicate.duplicate_of||data.id})">Review</button>`,{duration:9000});
+    }
+    if(data.territory_check?.off_territory){
+      toast.error(`<b>Off-Territory Audit</b> — ${data.territory_check.reason||'Scan location is outside your assigned territory.'} Flagged for RSM review.`,{duration:9000});
     }
     loadKpis();loadCharts();loadHistory();loadHistoryDash();
   }catch(e){
@@ -2517,6 +2602,51 @@ function renderRxAuditDrawer(){
 
   renderRxAuditItems();
 
+  // Clinical & regulatory analytics strip (polypharmacy, stewardship, therapy mix)
+  const clinical=d.clinical||{};
+  const strip=document.getElementById('rxDrawerClinical');
+  if(strip){
+    strip.classList.remove('hidden');
+    const poly=clinical.polypharmacy||{level:'normal',label:items.length+' Meds Prescribed'};
+    const polyEl=document.getElementById('rxPolyBadge');
+    polyEl.classList.remove('hidden');
+    if(poly.level==='high'){
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-triangle-exclamation"></i> ${esc(poly.label)}`;
+    }else if(poly.level==='moderate'){
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-triangle-exclamation"></i> ${esc(poly.label)}`;
+    }else{
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-prescription"></i> ${esc(poly.label)}`;
+    }
+    const abx=clinical.antibiotics||{count:0,broad_spectrum:0};
+    const abxEl=document.getElementById('rxAbxBadge');
+    if(abx.count>0){
+      abxEl.classList.remove('hidden');
+      abxEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full';
+      abxEl.innerHTML=`<i class="fas fa-bacterium"></i> Antibiotic Stewardship: ${abx.count} in Rx${abx.broad_spectrum?` · ${abx.broad_spectrum} broad-spectrum`:''}`;
+      abxEl.title='Broad-spectrum antibiotics flagged for regional stewardship tracking';
+    }else{ abxEl.classList.add('hidden'); }
+    const offEl=document.getElementById('rxOffTerritoryBadge');
+    if(p.off_territory){
+      offEl.classList.remove('hidden');
+      offEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full';
+      offEl.innerHTML='<i class="fas fa-location-dot"></i> Off-Territory Audit';
+      offEl.title=p.territory_note||'Scan location outside the assigned territory';
+    }else{ offEl.classList.add('hidden'); }
+
+    const segs=clinical.therapy_breakdown||[];
+    const wrap=document.getElementById('rxTherapyBarWrap');
+    if(segs.length){
+      wrap.classList.remove('hidden');
+      document.getElementById('rxTherapyBar').innerHTML=segs.map(sg=>
+        `<div style="width:${sg.pct}%;background:${sg.color}" title="${esc(sg.class)}: ${sg.count} of ${items.length} (${sg.pct}%)"></div>`).join('');
+      document.getElementById('rxTherapyLegend').innerHTML=segs.map(sg=>
+        `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-sm inline-block" style="background:${sg.color}"></span>${esc(sg.class)}: ${sg.pct}%</span>`).join('');
+    }else{ wrap.classList.add('hidden'); }
+  }
+
   const s=d.market_share;
   document.getElementById('rxAuditShare').innerHTML=`
     <p class="font-bold text-slate-700"><i class="fas fa-briefcase text-slate-400 mr-1"></i>Market Share Summary for this Rx:</p>
@@ -2538,11 +2668,28 @@ function renderRxAuditItems(){
       ?'bg-orange-100 text-orange-700 border-orange-300'
       :(m.confidence_pct>=90?'bg-emerald-100 text-emerald-700 border-emerald-300':'bg-slate-100 text-slate-600 border-slate-200');
     const logoSrc=m.company_logo || `/static/images/companies/${(m.company||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,50)}.png`;
+    // Regulatory + stewardship row badges
+    const nemlPill=(m.neml&&m.neml.listed)
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-px rounded-full" title="Listed on the DGDA National Essential Medicines List (${esc(m.neml.molecule||m.generic)}${m.neml.class?' — '+esc(m.neml.class):''})">
+           <i class="fas fa-certificate"></i> NEML Listed</span>` : '';
+    const alertPill=(m.dgda_price_alert&&m.dgda_price_alert.flagged)
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-px rounded-full cursor-help" title="${esc(m.dgda_price_alert.reason||'DGDA price ceiling issue')}">
+           <i class="fas fa-ban"></i> DGDA Price Alert</span>` : '';
+    const abxPill=m.is_antibiotic
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold ${m.broad_spectrum?'text-red-700 bg-red-50 border-red-300':'text-amber-800 bg-amber-50 border-amber-300'} border px-1.5 py-px rounded-full" title="${m.broad_spectrum?'Broad-spectrum antibiotic — stewardship watch list':'Antibiotic — stewardship tracking'}">
+           <i class="fas fa-bacterium"></i> ABX${m.broad_spectrum?' ★':''}</span>` : '';
+    const classChip=m.therapeutic_class
+      ? `<span class="inline-flex items-center gap-1 mt-1 text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-px rounded-full">${esc(m.therapeutic_class)}</span>` : '';
     const portfolio=m.portfolio_match && m.portfolio_match.own_brand
-      ? `<button type="button" class="rx-portfolio-pill mt-1 inline-flex items-center gap-1 text-[9px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 border border-violet-300 px-2 py-0.5 rounded-full transition"
+      ? `<div class="mt-1 flex flex-wrap items-center gap-1">
+         <button type="button" class="rx-portfolio-pill inline-flex items-center gap-1 text-[9px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 border border-violet-300 px-2 py-0.5 rounded-full transition"
            data-idx="${origIdx}" title="Show your company's matching brand for this competitor item">
            <i class="fas fa-wand-magic-sparkles"></i> Own Portfolio Match: ${esc(m.portfolio_match.own_brand.brand||'')}
-         </button>` : '';
+         </button>
+         <button type="button" class="rx-pitch-btn inline-flex items-center gap-1 text-[9px] font-bold text-white bg-violet-600 hover:bg-violet-700 border border-violet-600 px-2 py-0.5 rounded-full transition"
+           data-idx="${origIdx}" title="Generate a one-page Doctor Pitch Card (PDF) for the chamber visit">
+           <i class="fas fa-id-card"></i> Generate Doctor Pitch Card
+         </button></div>` : '';
     const verifyBtn=m.low_confidence
       ? `<button type="button" class="rx-verify-btn mt-1 inline-flex items-center gap-1 text-[9px] font-semibold text-orange-700 hover:text-orange-900 hover:underline" data-idx="${origIdx}" title="Queue this low-confidence read for verification against the MedEx catalogue">
            <i class="fas fa-circle-question"></i> Verify against Medex
@@ -2555,9 +2702,13 @@ function renderRxAuditItems(){
           ${esc(m.brand_name)||'<span class="text-slate-400 italic">Unknown Brand</span>'} ${esc(m.strength||'')}
         </div>
         <p class="text-[10px] text-slate-400">${esc([m.type||m.form, m.dosage_normalized].filter(Boolean).join(' • '))}</p>
+        <div class="flex flex-wrap items-center gap-0.5">${alertPill}${abxPill}${classChip}</div>
         ${portfolio}${verifyBtn}
       </td>
-      <td class="py-2.5 px-3 text-slate-600">${esc(m.generic)||'<span class="text-slate-400">—</span>'}</td>
+      <td class="py-2.5 px-3 text-slate-600">
+        ${esc(m.generic)||'<span class="text-slate-400">—</span>'}
+        <div>${nemlPill}</div>
+      </td>
       <td class="py-2.5 px-3">
         <span class="inline-flex items-center gap-1.5 ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">
           <img src="${esc(logoSrc)}" class="w-4 h-4 rounded-full bg-white object-contain border border-slate-200" onerror="this.style.display='none'">
@@ -2573,6 +2724,9 @@ function renderRxAuditItems(){
 
   tbody.querySelectorAll('.rx-portfolio-pill').forEach(btn=>{
     btn.addEventListener('click',()=>toggleRxAuditPortfolio(parseInt(btn.dataset.idx,10), btn));
+  });
+  tbody.querySelectorAll('.rx-pitch-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>openRxPitchCard(parseInt(btn.dataset.idx,10)));
   });
   tbody.querySelectorAll('.rx-verify-btn').forEach(btn=>{
     btn.addEventListener('click',()=>verifyRxAuditItem(parseInt(btn.dataset.idx,10)));
@@ -2604,6 +2758,65 @@ function toggleRxAuditPortfolio(idx){
   </td>`;
   if(row) row.insertAdjacentElement('afterend', tr);
 }
+
+/** MPO Detailing Action Card — mobile-friendly modal + downloadable PDF.
+    Pulls the substitution payload (MRP delta, pack, strength/type) plus the
+    NEML/DGDA compliance badges into a card the rep presents in-chamber. */
+let rxPitchIdx=null;
+function openRxPitchCard(idx){
+  const m=rxAuditData?.items?.[idx];
+  if(!m?.portfolio_match?.own_brand){ toast.error('No portfolio match available for this item'); return; }
+  rxPitchIdx=idx;
+  const s=m.portfolio_match, o=s.own_brand||{}, c=s.competitor||{};
+  const p=rxAuditData.prescription;
+  document.getElementById('rxPitchSub').textContent=
+    `${p.doctor_name||'Doctor'} · Rx #${p.rx_no} · ${c.brand||m.brand_name} → ${o.brand}`;
+  const delta=s.unit_difference_label
+    ? `<div class="rounded-lg px-3 py-2 ${s.unit_difference<0?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}"><i class="fas fa-scale-balanced mr-1"></i><b>Price position:</b> ${esc(s.unit_difference_label)}</div>`
+    : '';
+  const neml=(m.neml&&m.neml.listed)
+    ? `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-full"><i class="fas fa-certificate"></i> NEML Listed · ${esc(m.neml.molecule||m.generic)}</span>` : '';
+  const alert=(m.dgda_price_alert&&m.dgda_price_alert.flagged)
+    ? `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full"><i class="fas fa-ban"></i> DGDA Price Alert</span>` : '';
+  const mrpRow=(c.mrp!=null||o.mrp!=null)
+    ? `<tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">MRP</td><td class="py-1.5">${c.mrp!=null?c.mrp+' BDT':'—'} <span class="text-slate-400">(${esc(c.pack||'')})</span></td><td class="py-1.5 font-bold text-violet-700">${o.mrp!=null?o.mrp+' BDT':'—'} <span class="text-slate-400">(${esc(o.pack||'')})</span></td></tr>` : '';
+  document.getElementById('rxPitchBody').innerHTML=`
+    <div class="flex flex-wrap gap-1">${neml}${alert}</div>
+    <table class="w-full text-[11px]">
+      <thead><tr class="text-left text-slate-400 border-b border-slate-200"><th class="py-1 font-semibold"></th><th class="py-1 font-semibold">Competitor</th><th class="py-1 font-semibold text-violet-700">Your Brand</th></tr></thead>
+      <tbody>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Brand</td><td class="py-1.5 font-semibold">${esc(c.brand||m.brand_name)}</td><td class="py-1.5 font-bold text-violet-700">${esc(o.brand)}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Company</td><td class="py-1.5">${esc(c.company||'')}</td><td class="py-1.5">${esc(o.company||rxAuditData.own_company||'')}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Generic</td><td colspan="2" class="py-1.5">${esc(s.generic||m.generic||'')}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Strength / Form</td><td class="py-1.5">${esc([c.strength,c.type].filter(Boolean).join(' '))}</td><td class="py-1.5">${esc([o.strength,o.type].filter(Boolean).join(' '))}</td></tr>
+        ${mrpRow}
+      </tbody>
+    </table>
+    ${delta}
+    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p class="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1"><i class="fas fa-bullhorn text-amber-500 mr-1"></i>Smart pitch script</p>
+      <p id="rxPitchScript" class="italic leading-relaxed text-slate-700">${esc(s.pitch||'')}</p>
+    </div>
+    <p class="text-[9px] text-slate-400">Bioequivalence & pack data from the MedEx-audited catalogue · verify sample stock before the visit.</p>`;
+  const modal=document.getElementById('rxPitchModal');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  document.getElementById('rxPitchPdfBtn').onclick=()=>window.open(
+    `/api/prescriptions/${p.id}/pitch-card.pdf?idx=${idx}`,'_blank');
+  document.getElementById('rxPitchCopyBtn').onclick=async()=>{
+    const text=document.getElementById('rxPitchScript')?.textContent||'';
+    try{ await navigator.clipboard.writeText(text); toast.success('Pitch script copied'); }
+    catch(_){ toast.error('Copy failed — clipboard unavailable'); }
+  };
+}
+function closeRxPitchCard(){
+  const modal=document.getElementById('rxPitchModal');
+  if(!modal||modal.classList.contains('hidden')) return;
+  modal.classList.add('hidden'); modal.classList.remove('flex');
+}
+document.getElementById('rxPitchClose')?.addEventListener('click',closeRxPitchCard);
+document.getElementById('rxPitchModal')?.addEventListener('click',e=>{
+  if(e.target.id==='rxPitchModal') closeRxPitchCard();
+});
 
 /** Low-confidence item → queue for verification against the MedEx catalogue. */
 async function verifyRxAuditItem(idx){
@@ -3447,6 +3660,7 @@ async function loadRsmDashboard(){
     loadRsmHeatmap();
     loadDoctorTiers();
     loadDoctorTargets(d.members||[]);
+    loadOffTerritory();
     const k=d.totals||{};
     const kpis=document.getElementById('rsmKpis');
     if(kpis){
@@ -3590,6 +3804,119 @@ function heatmapColor(sov){
   if(sov>=35) return '#F59E0B';   // competitive / mixed (amber)
   return '#EF4444';               // competitor-heavy (red)
 }
+
+/* ---------- RSM: density clustering of audit points ----------
+   Grid-clusters every audit pin (GPS when pinned, district centroid
+   otherwise) into zoom-aware bubbles: size + colour = audit volume, so
+   chamber hotspots and underserved zones are visible at a glance. */
+let clusterLayer=null, hmView='sov';
+
+function hmClusterColor(n){
+  if(n>=10) return '#7C3AED';   // hot cluster (high audit density)
+  if(n>=5)  return '#0284C7';
+  if(n>=2)  return '#10B981';
+  return '#94A3B8';             // isolated single audits
+}
+
+async function loadRsmClusters(){
+  const map=initLeaflet();
+  if(!map) return;
+  const days=document.getElementById('hmDays')?.value||'30';
+  if(clusterLayer){ map.removeLayer(clusterLayer); clusterLayer=null; }
+  let pts=[];
+  try{
+    pts=await fetch(`/api/rsm/scan-points?days=${days}&limit=2000`).then(r=>r.json());
+    if(!Array.isArray(pts)) pts=[];
+  }catch(e){ console.error('scan-points',e); return; }
+  // grid cluster: cell size shrinks as you zoom in
+  const zoom=map.getZoom();
+  const cell=zoom>=10?0.02:zoom>=8?0.06:zoom>=7?0.15:0.45;
+  const groups={};
+  pts.forEach(pt=>{
+    const k=`${Math.floor(pt.lat/cell)}:${Math.floor(pt.lng/cell)}`;
+    (groups[k]=groups[k]||[]).push(pt);
+  });
+  clusterLayer=L.layerGroup().addTo(map);
+  const stats=document.getElementById('heatmapStats');
+  if(stats){
+    const off=pts.filter(p=>p.off_territory).length;
+    const dup=pts.filter(p=>p.duplicate_of).length;
+    stats.innerHTML=`
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Audit clusters</p><p class="text-xl font-bold">${Object.keys(groups).length}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Total audits mapped</p><p class="text-xl font-bold">${pts.length}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Off-territory flagged</p><p class="text-xl font-bold ${off?'text-red-600':''}">${off}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Duplicates blocked</p><p class="text-xl font-bold ${dup?'text-amber-600':''}">${dup}</p></div>`;
+  }
+  Object.values(groups).forEach(g=>{
+    const lat=g.reduce((a,b)=>a+b.lat,0)/g.length;
+    const lng=g.reduce((a,b)=>a+b.lng,0)/g.length;
+    const n=g.length;
+    const col=hmClusterColor(n);
+    const radius=Math.max(9, Math.min(30, 5+Math.sqrt(n)*4));
+    const docs=[...new Set(g.slice(0,6).map(p=>p.doctor_name||'—'))];
+    const offN=g.filter(p=>p.off_territory).length;
+    const marker=L.circleMarker([lat,lng],{
+      radius, color:col, weight:2, fillColor:col, fillOpacity:0.45, opacity:0.9
+    }).addTo(clusterLayer);
+    marker.bindTooltip(`${n}`, {permanent:true, direction:'center', className:'cluster-count'});
+    marker.bindPopup(
+      `<div class="text-[12px]"><b>${n} audit${n>1?'s':''}</b> in this zone<br>`+
+      `Doctors: ${docs.map(d=>esc(d)).join(', ')}${g.length>6?' +more':''}<br>`+
+      (offN?`<span class="text-red-600 font-bold">⚠ ${offN} off-territory flagged</span><br>`:'')+
+      `Rx: ${g.map(p=>`<a href="javascript:openRxAuditDrawer(${p.id})" class="text-blue-600 underline">A-${p.id}</a>`).slice(0,8).join(' ')}${g.length>8?' …':''}</div>`);
+  });
+  if(pts.length) map.fitBounds(pts.map(p=>[p.lat,p.lng]),{padding:[30,30]});
+}
+
+function setHmView(view){
+  hmView=view;
+  document.getElementById('hmViewSov')?.classList.toggle('bg-slate-900', view==='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('text-white', view==='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('bg-white', view!=='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('text-slate-600', view!=='sov');
+  document.getElementById('hmViewClusters')?.classList.toggle('bg-slate-900', view==='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('text-white', view==='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('bg-white', view!=='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('text-slate-600', view!=='clusters');
+  if(view==='clusters') loadRsmClusters();
+  else loadRsmHeatmap();
+}
+document.getElementById('hmViewSov')?.addEventListener('click',()=>setHmView('sov'));
+document.getElementById('hmViewClusters')?.addEventListener('click',()=>setHmView('clusters'));
+
+/* ---------- RSM: Off-Territory Audit Verification list ---------- */
+async function loadOffTerritory(){
+  const body=document.getElementById('otBody');
+  const count=document.getElementById('otCount');
+  if(!body) return;
+  const days=document.getElementById('hmDays')?.value||'30';
+  try{
+    const rows=await fetch(`/api/rsm/off-territory?days=${days}&limit=50`).then(r=>r.json());
+    const list=Array.isArray(rows)?rows:[];
+    if(count){
+      count.textContent=`${list.length} flagged`;
+      count.className='text-[10px] font-bold px-2 py-0.5 rounded-full '+(list.length?'bg-red-100 text-red-700':'bg-slate-100 text-slate-600');
+    }
+    if(!list.length){
+      body.innerHTML='<p class="text-slate-400 text-xs">No off-territory audits flagged — every scan matches its assigned zone.</p>';
+      return;
+    }
+    body.innerHTML=list.map(r=>`
+      <div class="border border-red-200 bg-red-50/60 rounded-xl p-2.5 text-[11px] flex items-start gap-2">
+        <div class="w-9 h-9 rounded-lg bg-white border border-red-200 flex-shrink-0 overflow-hidden">${r.image_url?`<img src="${r.image_url}" class="w-full h-full object-cover">`:''}</div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold flex items-center gap-1.5 flex-wrap">${esc(r.doctor_name||'Unknown doctor')}
+            <span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-px rounded-full"><i class="fas fa-location-dot"></i>Off-Territory Audit</span>
+            ${r.duplicate_of?'<span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-white border border-red-300 px-1.5 py-px rounded-full"><i class="fas fa-clone"></i>also Duplicate</span>':''}
+          </p>
+          <p class="text-slate-600 truncate">${esc(r.territory_note||'Location mismatch with assigned territory')}</p>
+          <p class="text-slate-400 text-[10px]">MR ${esc(r.mr_id||'—')} · ${esc([r.upazila,r.district].filter(Boolean).join(', ')||'unknown location')} · ${esc((r.timestamp||'').slice(0,16).replace('T',' '))}</p>
+        </div>
+        <button class="text-[10px] text-blue-600 hover:underline shrink-0" onclick="openRxAuditDrawer(${r.id})">Review Rx</button>
+      </div>`).join('');
+  }catch(e){ console.error('off-territory',e); }
+}
+document.getElementById('otRefresh')?.addEventListener('click',()=>{ loadOffTerritory(); toast.info('Off-territory audits refreshed'); });
 
 function initLeaflet(){
   if(!window.L){

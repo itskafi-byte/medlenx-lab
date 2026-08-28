@@ -28,6 +28,10 @@ from .rx_audit import (
     compute_phash, hamming_distance, build_market_share, items_to_csv,
     items_to_clipboard, DUPLICATE_THRESHOLD,
 )
+from .compliance import (
+    neml_lookup, is_antibiotic, is_broad_spectrum, resolve_therapeutic_class,
+    price_ceiling_alert, clinical_summary, territory_check,
+)
 from .medlenx_client import MedLenXVLClient
 from .medicine_matcher import (
     MedexIndex, normalize_brand, resolve_company, same_company,
@@ -617,6 +621,24 @@ async def scan_prescription(
     doctor["territory"] = territory
     doctor["division"] = loc["division"]
 
+    # Geofenced audit verification: scan location vs the scanning officer's
+    # assigned territory (data/bd_geo.json resolves GPS pins to districts).
+    officer = None
+    try:
+        from .database import get_officer_profile
+        officer = get_officer_profile(mr_id) or get_officer_profile(None)
+    except Exception:
+        officer = None
+    tcheck = territory_check(
+        officer_territory=(officer or {}).get("territory", ""),
+        scan_territory=territory,
+        scan_district=district,
+        gps_lat=geo_lat, gps_lng=geo_lng,
+        locations=load_locations(),
+    )
+    if tcheck["off_territory"]:
+        print(f"📍 Off-territory audit: {mr_id} — {tcheck['reason']}")
+
     result = {
         "doctor": doctor,
         "medicines": enriched_meds,
@@ -635,9 +657,12 @@ async def scan_prescription(
     image_phash = compute_phash(save_path)
 
     try:
-        pid = save_prescription(save_path, result, mr_id=mr_id, geo_lat=geo_lat, geo_lng=geo_lng, upazila=upazila, district=district, territory=territory, is_verified=is_verified, image_phash=image_phash)
+        pid = save_prescription(save_path, result, mr_id=mr_id, geo_lat=geo_lat, geo_lng=geo_lng, upazila=upazila, district=district, territory=territory, is_verified=is_verified, image_phash=image_phash,
+                                off_territory=1 if tcheck["off_territory"] else 0,
+                                territory_note=tcheck.get("reason", ""))
         result["id"] = pid
         result["saved_image_path"] = f"/uploads/prescriptions/{unique_name}"
+        result["territory_check"] = tcheck
         saved = get_prescription_by_id(pid) if pid else None
         result["image_phash"] = (saved or {}).get("image_phash") or image_phash
         if saved and saved.get("duplicate_of"):
@@ -928,10 +953,23 @@ async def prescription_audit_detail(pid: int):
         conf_pct = round(conf * 100) if conf <= 1 else round(conf)
         company = (med.get("company") or "").strip()
         is_own = bool(own and same_company(company, own))
+        generic = med.get("generic") or med.get("generic_name", "")
+        ingredient = med.get("ingredient", "")
+        category = med.get("category", "")
+        # Regulatory + clinical intelligence for the drawer row badges.
+        neml = neml_lookup(generic, ingredient)
+        abx = is_antibiotic(generic, category, ingredient)
+        therapeutic_class = neml.get("class") if neml.get("listed") else \
+            resolve_therapeutic_class(generic, category, ingredient)
+        t_alert = price_ceiling_alert(
+            brand=med.get("brand_name", ""), generic=generic,
+            dgda=med.get("dgda") or {},
+            detected_mrp=med.get("mrp") or med.get("detected_mrp"),
+        )
         # Own Portfolio Match — reuse the scan-time substitution card, or
         # compute it now for scans saved before this field existed.
         sub = med.get("substitution")
-        if not sub and not is_own and (med.get("generic") or med.get("generic_name")):
+        if not sub and not is_own and (generic or ingredient):
             try:
                 sub = generic_substitution(med, own, medex_db)
             except Exception:
@@ -942,7 +980,7 @@ async def prescription_audit_detail(pid: int):
             "form": med.get("form", ""),
             "type": med.get("type", ""),
             "dosage_normalized": med.get("dosage_normalized", "") or med.get("dosage", ""),
-            "generic": med.get("generic") or med.get("generic_name", ""),
+            "generic": generic,
             "company": company,
             "company_logo": med.get("company_logo", ""),
             "image_url": med.get("image_url") or med.get("pack_image", ""),
@@ -953,6 +991,12 @@ async def prescription_audit_detail(pid: int):
             "needs_review": bool(med.get("needs_review")),
             "portfolio_match": sub,
             "dgda": med.get("dgda", {}),
+            # NEML 295 + DGDA price ceiling + stewardship analytics
+            "neml": neml,
+            "therapeutic_class": therapeutic_class,
+            "is_antibiotic": abx,
+            "broad_spectrum": bool(abx and is_broad_spectrum(generic, ingredient)),
+            "dgda_price_alert": t_alert,
         })
 
     market_share = build_market_share(medicines, own)
@@ -983,10 +1027,17 @@ async def prescription_audit_detail(pid: int):
             "avg_confidence": row.get("avg_confidence", 0),
             "total_medicines": row.get("total_medicines", len(items)),
             "is_verified": row.get("is_verified", 0),
+            # geofenced audit verification
+            "off_territory": bool(row.get("off_territory")),
+            "territory_note": row.get("territory_note", ""),
+            "geo_lat": row.get("geo_lat"),
+            "geo_lng": row.get("geo_lng"),
         },
         "own_company": own,
         "items": items,
         "market_share": market_share,
+        # prescribing-pattern analytics (polypharmacy, therapy mix, stewardship)
+        "clinical": clinical_summary(items),
         "is_duplicate": bool(duplicate),
         "duplicate": duplicate,
     }
@@ -1027,6 +1078,122 @@ async def prescription_audit_clipboard(pid: int):
     header = (f"Rx #A-{pid} • {row.get('doctor_name') or 'Unknown'} • "
               f"{len(medicines)} medicines • MR {row.get('mr_id') or '-'}")
     return {"header": header, "text": items_to_clipboard(medicines, header)}
+
+
+@app.get("/api/prescriptions/{pid}/pitch-card.pdf")
+async def pitch_card_pdf(pid: int, idx: int = 0):
+    """One-page MPO Doctor Pitch Card (PDF) for a competitor → own-brand match.
+
+    Pulls the substitution payload (MRP delta, pack, strength/type) plus the
+    NEML / DGDA compliance badges and the smart pitch note into a printable
+    card the rep can present during the chamber visit.
+    """
+    detail = await prescription_audit_detail(pid)
+    items = detail["items"]
+    if idx < 0 or idx >= len(items):
+        raise HTTPException(status_code=404, detail="Item index out of range")
+    item = items[idx]
+    sub = item.get("portfolio_match")
+    if not sub or not sub.get("own_brand"):
+        raise HTTPException(status_code=404,
+                            detail="No Own Portfolio Match for this item")
+    rx = detail["prescription"]
+    comp, ownb = sub.get("competitor", {}), sub.get("own_brand", {})
+
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import inch
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Table, TableStyle)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=0.65 * inch, rightMargin=0.65 * inch,
+        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
+        title=f"Doctor Pitch Card - {ownb.get('brand','')}",
+        author="MedLenX Lab")
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=styles["Title"], fontSize=17,
+                        spaceAfter=2, textColor=colors.HexColor("#7C3AED"))
+    sub_st = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9,
+                            textColor=colors.HexColor("#475569"), spaceAfter=10)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=11,
+                        spaceBefore=8, spaceAfter=4,
+                        textColor=colors.HexColor("#0F172A"))
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=10.5,
+                          leading=15, textColor=colors.HexColor("#0F172A"))
+    cell = ParagraphStyle("cell", parent=styles["Normal"], fontSize=9.5,
+                          leading=13)
+    cellb = ParagraphStyle("cellb", parent=cell, fontName="Helvetica-Bold")
+
+    story = []
+    story.append(Paragraph("Doctor Pitch Card", h1))
+    story.append(Paragraph(
+        f"Rx #A-{rx['id']} · {rx.get('doctor_name') or 'Doctor'}"
+        f"{(' · ' + rx['doctor_specialty']) if rx.get('doctor_specialty') else ''}"
+        f" · prepared by MedLenX Lab", sub_st))
+
+    def cellp(text, bold=False):
+        return Paragraph(str(text or "—").replace("&", "&amp;")
+                         .replace("<", "&lt;"), cellb if bold else cell)
+
+    rows = [[cellp("Comparison", True), cellp("Competitor", True),
+             cellp("Your Brand", True)]]
+    rows.append([cellp("Brand"), cellp(comp.get("brand")), cellp(ownb.get("brand"))])
+    rows.append([cellp("Company"), cellp(comp.get("company")), cellp(ownb.get("company"))])
+    rows.append([cellp("Generic"), cellp(sub.get("generic"))])
+    rows.append([cellp("Strength / Form"),
+                 cellp(f"{comp.get('strength','')} {comp.get('type','')}"),
+                 cellp(f"{ownb.get('strength','')} {ownb.get('type','')}")])
+    rows.append([cellp("MRP (pack)"),
+                 cellp(f"{comp.get('mrp','—')} BDT ({comp.get('pack','—')})"),
+                 cellp(f"{ownb.get('mrp','—')} BDT ({ownb.get('pack','—')})")])
+    tbl = Table(rows, colWidths=[1.15 * inch, 2.5 * inch, 2.5 * inch])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F3FF")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDD6FE")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("SPAN", (1, 3), (2, 3)),
+    ]))
+    story.append(tbl)
+
+    story.append(Paragraph("Compliance & evidence", h2))
+    neml = item.get("neml") or {}
+    alert = item.get("dgda_price_alert") or {}
+    gazette_mrp = (item.get("dgda") or {}).get("price", {}).get("mrp")
+    if neml.get("listed"):
+        story.append(Paragraph(
+            f"• NEML Listed — {neml.get('molecule')} ({neml.get('class')})", body))
+    if alert.get("flagged"):
+        story.append(Paragraph(f"• DGDA Price Alert — {alert.get('reason')}", body))
+    elif gazette_mrp is not None:
+        story.append(Paragraph(
+            f"• Gazette MRP on file — {gazette_mrp} BDT", body))
+    else:
+        story.append(Paragraph(
+            "• Pricing unverified — confirm against the DGDA gazette", body))
+    delta = sub.get("unit_difference_label")
+    if delta:
+        story.append(Paragraph(f"• Price position: {delta}", body))
+
+    story.append(Paragraph("Smart pitch script", h2))
+    story.append(Paragraph(sub.get("pitch", ""), body))
+
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(
+        "Generated from the MedEx-audited catalogue · verify sample stock "
+        "availability before the visit · MedLenX Lab", sub_st))
+    doc.build(story)
+    pdf = buf.getvalue()
+    buf.close()
+    safe_brand = (ownb.get("brand") or "pitch").replace(" ", "_")
+    filename = f"Pitch_Card_{safe_brand}_rx{pid}.pdf"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 @app.get("/api/medex")
 async def search_medex(q: str = "", form: str = "", limit: int = 50):
@@ -1299,6 +1466,21 @@ async def rsm_doctor_target_visits(limit: int = 25, mpo_id: str = ""):
     """Auto-generated visit log feed (one entry per matching scan)."""
     from .database import get_recent_target_visits
     return get_recent_target_visits(limit=limit, mpo_id=mpo_id)
+
+
+@app.get("/api/rsm/off-territory")
+async def rsm_off_territory(days: int = 30, limit: int = 50, mr_id: str = ""):
+    """Geofenced audit verification — scans captured outside the officer's
+    assigned territory (complements the pHash duplicate fraud alert)."""
+    from .database import find_off_territory_audits
+    return find_off_territory_audits(days=days, limit=limit, mr_id=mr_id)
+
+
+@app.get("/api/rsm/scan-points")
+async def rsm_scan_points(days: int = 30, limit: int = 2000):
+    """Point-level audit locations for the density-clustering map."""
+    from .database import get_scan_points
+    return get_scan_points(days=days, limit=limit)
 
 
 @app.get("/api/rsm/report.pdf")
