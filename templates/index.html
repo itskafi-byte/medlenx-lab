@@ -73,14 +73,17 @@ tailwind.config={
       <i class="fas fa-chart-line w-4"></i> Analytics Dashboard
     </button>
     <button data-tab="database" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
-      <i class="fas fa-database w-4"></i> Medicine Database
+      <i class="fas fa-flask w-4"></i> Pharma Intelligence Hub
+    </button>
+    <button data-tab="rsm" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
+      <i class="fas fa-sitemap w-4"></i> RSM Command
     </button>
 
     <p class="text-[10px] font-semibold tracking-widest text-slate-400 uppercase px-3 mt-6 mb-2">System</p>
-    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
+    <button data-tab="settings" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
       <i class="fas fa-cog w-4"></i> Settings
     </button>
-    <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
+    <button data-tab="help" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600">
       <i class="fas fa-question-circle w-4"></i> Help & Guide
     </button>
   </nav>
@@ -89,7 +92,7 @@ tailwind.config={
     <div class="bg-slate-50 rounded-xl p-3">
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-full bg-gradient-to-br from-slate-900 to-blue-700 flex items-center justify-center text-white text-xs font-bold">MR</div>
-        <div><p class="text-xs font-semibold">MR001 • Dhaka South</p><p class="text-[10px] text-slate-500" id="sidebarOnlineStatus">Online • Sync enabled</p></div>
+        <div><p class="text-xs font-semibold" id="sidebarOfficerLabel">MR001 • Dhaka South</p><p class="text-[10px] text-slate-500" id="sidebarOnlineStatus">Online • Sync enabled</p></div>
       </div>
     </div>
   </div>
@@ -97,9 +100,11 @@ tailwind.config={
 
 <!-- Mobile Sidebar Toggle -->
 <div class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 flex">
-  <button data-tab="workspace" class="nav-btn-mobile active flex-1 py-3 text-xs font-medium flex flex-col items-center gap-1 bg-slate-900 text-white"><i class="fas fa-columns"></i>Workspace</button>
-  <button data-tab="dashboard" class="nav-btn-mobile flex-1 py-3 text-xs font-medium flex flex-col items-center gap-1 text-slate-500"><i class="fas fa-chart-line"></i>Dashboard</button>
-  <button data-tab="database" class="nav-btn-mobile flex-1 py-3 text-xs font-medium flex flex-col items-center gap-1 text-slate-500"><i class="fas fa-database"></i>Database</button>
+  <button data-tab="workspace" class="nav-btn-mobile active flex-1 py-2.5 text-[10px] font-medium flex flex-col items-center gap-0.5 bg-slate-900 text-white"><i class="fas fa-columns"></i>Scan</button>
+  <button data-tab="dashboard" class="nav-btn-mobile flex-1 py-2.5 text-[10px] font-medium flex flex-col items-center gap-0.5 text-slate-500"><i class="fas fa-chart-line"></i>Analytics</button>
+  <button data-tab="database" class="nav-btn-mobile flex-1 py-2.5 text-[10px] font-medium flex flex-col items-center gap-0.5 text-slate-500"><i class="fas fa-flask"></i>Hub</button>
+  <button data-tab="rsm" class="nav-btn-mobile flex-1 py-2.5 text-[10px] font-medium flex flex-col items-center gap-0.5 text-slate-500"><i class="fas fa-sitemap"></i>Team</button>
+  <button data-tab="settings" class="nav-btn-mobile flex-1 py-2.5 text-[10px] font-medium flex flex-col items-center gap-0.5 text-slate-500"><i class="fas fa-cog"></i>Settings</button>
 </div>
 
 <!-- Main Content -->
@@ -123,7 +128,14 @@ tailwind.config={
 
     <div class="flex items-center gap-2">
       <span id="onlineStatus" class="hidden md:flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-200"><i class="fas fa-circle text-[6px] mr-1"></i>Online</span>
-      <span class="hidden md:flex px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-[11px] font-medium border border-blue-200"><i class="fas fa-bolt text-[10px] mr-1"></i>Powered By MedLenX Vision LM</span>
+      <span id="companyBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-medium max-w-[240px]">
+        <i class="fas fa-building text-[10px] text-blue-300"></i>
+        <span id="companyBadgeText" class="truncate">Set company in Settings</span>
+      </span>
+      <span id="apiLatencyMeter" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-medium border border-emerald-200" title="API round-trip">
+        <i class="fas fa-signal text-[9px]"></i>
+        <span id="apiLatency">— ms</span>
+      </span>
       <button id="installPwaBtn" class="hidden px-3 py-1 rounded-full bg-slate-900 text-white text-[11px]"><i class="fas fa-download"></i> Install</button>
       <div class="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs"><i class="fas fa-user"></i></div>
     </div>
@@ -143,10 +155,12 @@ tailwind.config={
       <h2 class="text-xl font-bold">Drop prescription image here</h2>
       <p class="text-sm text-slate-500 mt-2 max-w-md mx-auto">Drag & drop or click to upload. Supports camera capture, rotation, contrast adjustment for cursive handwriting.</p>
       <div class="mt-6 flex justify-center gap-3">
-        <button class="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-medium shadow-sm"><i class="fas fa-upload mr-2"></i>Choose File</button>
-        <button id="openCameraBtn" class="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium shadow-sm"><i class="fas fa-camera mr-2"></i>Open Camera</button>
+        <button type="button" id="chooseFileBtn" class="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-medium shadow-sm"><i class="fas fa-upload mr-2"></i>Choose File</button>
+        <button type="button" id="openCameraBtn" class="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium shadow-sm"><i class="fas fa-camera mr-2"></i>Open Camera</button>
       </div>
-      <input id="fileInput" type="file" accept="image/*" capture="environment" class="hidden">
+      <!-- Choose File must NOT use capture= — that forces the Android camera. -->
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" class="hidden">
+      <input id="cameraFileInput" type="file" accept="image/*" capture="environment" class="hidden">
       <video id="cameraPreview" class="hidden w-full max-w-lg mx-auto rounded-xl mt-6" autoplay playsinline></video>
       <canvas id="captureCanvas" class="hidden"></canvas>
       <div id="cameraControls" class="hidden mt-4 flex justify-center gap-2">
@@ -224,8 +238,7 @@ tailwind.config={
 
         <!-- Medicines Verification -->
         <div id="medicinesVerification" class="hidden space-y-3">
-          <h4 class="text-xs font-semibold tracking-widest uppercase text-slate-500 flex items-center justify-between">
-            <span>Medicine List - Visual Indicators</span>
+       
             <span class="text-[10px] font-normal normal-case">Green ✓ high confidence, Yellow ⚠ needs review</span>
           </h4>
           <div id="medicinesVerifyGrid" class="space-y-3"></div>
@@ -284,6 +297,11 @@ tailwind.config={
       </select>
       <select id="fMr" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[110px]">
         <option value="">All MRs</option>
+      </select>
+      <select id="fSource" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[140px]">
+        <option value="">All Sources</option>
+        <option value="Hospital">Hospital</option>
+        <option value="Private Chamber">Private Chamber</option>
       </select>
       <select id="fDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20">
         <option value="">All Time</option>
@@ -404,6 +422,12 @@ tailwind.config={
         </button>
       </div>
     </div>
+    <div id="rsInlineTags" class="flex flex-wrap items-center gap-1.5 mb-3">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Tags</span>
+      <button type="button" class="rs-tag px-2 py-0.5 rounded-full border text-[10px] font-medium bg-white text-slate-600 border-slate-200" data-tag-key="source" data-tag-value="Hospital">Hospital</button>
+      <button type="button" class="rs-tag px-2 py-0.5 rounded-full border text-[10px] font-medium bg-white text-slate-600 border-slate-200" data-tag-key="source" data-tag-value="Private Chamber">Private Chamber</button>
+      <span id="rsDynamicTags" class="contents"></span>
+    </div>
     <div class="overflow-x-auto -mx-1">
       <table class="w-full text-xs min-w-[820px]">
         <thead>
@@ -447,24 +471,188 @@ tailwind.config={
   </div>
 </div>
 
-<!-- ==================== TAB: DATABASE ==================== -->
-<div id="tab-database" class="tab-content hidden space-y-6">
-  <!-- Popular Medicines from Top Pharma - Live Fetch from medex.com.bd -->
-  <div class="bg-gradient-to-br from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-    <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-    <div class="relative">
-      <h2 class="text-lg font-bold flex items-center gap-2"><i class="fas fa-fire"></i> Currently Popular Medicines from Top Pharmaceutical Companies</h2>
-      <p class="text-sm text-white/80 mt-1">Live fetch from medex.com.bd - Top pharma: Square, Incepta, Beximco, Renata, ACI, Healthcare, Opsonin, Eskayef</p>
-      <div id="popularMedicinesLive" class="mt-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto"></div>
-      <div class="mt-3 text-[11px] text-white/60">Source: Live from medex.com.bd with real pack images • Updates on each load • 25k medicines DB</div>
+<!-- ==================== TAB: PHARMA INTELLIGENCE HUB ==================== -->
+<div id="tab-database" class="tab-content hidden space-y-5">
+  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-bold text-slate-900">Pharma Intelligence Hub</h2>
+      <p class="text-xs text-slate-500 mt-0.5">25K+ drug index, industry news, field jobs and WHO health-day campaign calendar.</p>
+    </div>
+    <div class="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl" id="hubTabBar">
+      <button type="button" data-hub-tab="index" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-white shadow-sm text-slate-900">25K+ Drug Index</button>
+      <button type="button" data-hub-tab="news" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Industry News</button>
+      <button type="button" data-hub-tab="jobs" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Job Board</button>
+      <button type="button" data-hub-tab="healthdays" class="hub-tab px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600">Health Days</button>
     </div>
   </div>
 
-  <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-6">
-    <h2 class="font-semibold text-sm mb-4 flex items-center gap-2"><i class="fas fa-database text-blue-700"></i> Medicine Database - Every Form Type</h2>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="medexStats"></div>
-    <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
-    <div id="medexResults" class="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto"></div>
+  <div id="hub-index" class="hub-pane space-y-6">
+    <div class="bg-gradient-to-br from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+      <div class="relative">
+        <h2 class="text-lg font-bold flex items-center gap-2"><i class="fas fa-fire"></i> Currently Popular Medicines from Top Pharmaceutical Companies</h2>
+        <p class="text-sm text-white/80 mt-1">Live fetch from medex.com.bd - Top pharma: Square, Incepta, Beximco, Renata, ACI, Healthcare, Opsonin, Eskayef</p>
+        <div id="popularMedicinesLive" class="mt-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto"></div>
+        <div class="mt-3 text-[11px] text-white/60">Source: Live from medex.com.bd with real pack images • Updates on each load • 25k medicines DB</div>
+      </div>
+    </div>
+    <div class="bg-white shadow-sm hover:shadow-md transition-shadow rounded-xl border border-slate-200 p-6">
+      <h2 class="font-semibold text-sm mb-4 flex items-center gap-2"><i class="fas fa-database text-blue-700"></i> 25K+ Drug Index &amp; Search</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="medexStats"></div>
+      <input id="medexSearch" placeholder="Search Napa, Seclo, Injection, Square, Omeprazole..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-sm">
+      <div id="medexResults" class="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <div id="hub-news" class="hub-pane hidden space-y-4">
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h3 class="font-semibold text-sm">Industry News &amp; Market Trends</h3>
+          <p class="text-[11px] text-slate-500">Medex catalogue, DGDA regulatory desk, WHO live RSS.</p>
+        </div>
+        <button type="button" id="newsRefresh" class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+      </div>
+      <div id="newsFeed" class="space-y-3"></div>
+    </div>
+  </div>
+
+  <div id="hub-jobs" class="hub-pane hidden space-y-4">
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <h3 class="font-semibold text-sm mr-auto">Pharma &amp; Health Job Board</h3>
+        <select id="jobCategory" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+          <option value="">All roles</option>
+          <option value="MPO">MPO</option>
+          <option value="RSO">RSO / RSM</option>
+          <option value="Product Management">Product Management</option>
+          <option value="Sales Ops">Sales Ops</option>
+        </select>
+        <input id="jobSearch" placeholder="Company, city, keyword..." class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 w-44">
+      </div>
+      <div id="jobBoard" class="grid md:grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+
+  <div id="hub-healthdays" class="hub-pane hidden space-y-4">
+    <div id="healthDayNext" class="bg-gradient-to-r from-blue-700 to-slate-900 rounded-2xl p-5 text-white shadow-sm"></div>
+    <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <h3 class="font-semibold text-sm mb-3">International Health Days calendar</h3>
+      <p class="text-[11px] text-slate-500 mb-4">Plan targeted doctor visits and promotional collateral around WHO / global observances.</p>
+      <div id="healthDayCalendar" class="space-y-4"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: RSM COMMAND ==================== -->
+<div id="tab-rsm" class="tab-content hidden space-y-6">
+  <div class="bg-gradient-to-r from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg">
+    <p class="text-[11px] uppercase tracking-widest text-white/70 font-semibold">Multi-tenant org hierarchy</p>
+    <h2 class="text-xl font-bold mt-1">Territory Manager / RSM Command</h2>
+    <p class="text-sm text-white/80 mt-1">Aggregated prescription audits across a 50+ MPO field team, with competitive Share of Voice.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5" id="rsmKpis"></div>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold text-sm">Team leaderboard</h3>
+      <select id="rsmDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+        <option value="7">7 days</option>
+        <option value="30" selected>30 days</option>
+        <option value="90">90 days</option>
+      </select>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs min-w-[720px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b">
+            <th class="py-2">MPO</th><th>Role</th><th>Territory</th><th>Rx</th><th>Items</th><th>Own</th><th>Competitor</th><th>SoV</th>
+          </tr>
+        </thead>
+        <tbody id="rsmTeamBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: SETTINGS ==================== -->
+<div id="tab-settings" class="tab-content hidden space-y-6">
+  <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+    <h2 class="font-bold text-sm mb-1">Enterprise Settings &amp; Officer Profile</h2>
+    <p class="text-[11px] text-slate-500 mb-5">Onboard your company, identity card and monthly brand targets. Vision-model hits on those brands become KPI progress automatically.</p>
+    <form id="officerForm" class="space-y-5" onsubmit="return false;">
+      <div>
+        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Pharmaceutical company</label>
+        <div class="relative mt-1">
+          <input id="companySearch" autocomplete="off" placeholder="Search Square, Beximco, Incepta..." class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm">
+          <input type="hidden" id="companyName">
+          <div id="companyResults" class="hidden absolute z-40 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto"></div>
+        </div>
+        <p id="companyPicked" class="text-[11px] text-slate-500 mt-1"></p>
+      </div>
+      <div class="grid md:grid-cols-2 gap-3">
+        <div><label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Employee ID</label><input id="ofEmployeeId" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm" placeholder="MR001"></div>
+        <div><label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Full name</label><input id="ofFullName" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm" placeholder="Your name"></div>
+        <div>
+          <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Role</label>
+          <select id="ofRole" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm">
+            <option>MPO</option><option>RSO</option><option>RSM</option><option>Territory Manager</option><option>Product Manager</option>
+          </select>
+        </div>
+        <div><label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Division</label><input id="ofDivision" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm" placeholder="Dhaka"></div>
+        <div><label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Designated Territory / Zone</label><input id="ofTerritory" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm" placeholder="Dhaka South, Chittagong Metro..."></div>
+        <div><label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Assigned product portfolio</label><input id="ofPortfolio" class="mt-1 w-full px-3 py-2 rounded-xl border text-sm" placeholder="Cardiology, Gastroenterology"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Monthly brand targets</label>
+          <button type="button" id="addTargetBtn" class="text-[11px] text-blue-700 font-semibold"><i class="fas fa-plus mr-1"></i>Add brand</button>
+        </div>
+        <div id="targetRows" class="space-y-2"></div>
+        <div id="targetProgress" class="mt-3 space-y-2"></div>
+      </div>
+      <button type="button" id="saveOfficerBtn" class="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-medium"><i class="fas fa-floppy-disk mr-2"></i>Save officer card</button>
+    </form>
+  </div>
+  <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 text-[11px] text-slate-600">
+    <i class="fas fa-wifi mr-1 text-emerald-600"></i> Offline-first PWA: scans cache in IndexedDB when the rural network drops, then sync on reconnect.
+  </div>
+</div>
+
+<!-- ==================== TAB: HELP ==================== -->
+<div id="tab-help" class="tab-content hidden space-y-6">
+  <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+    <h2 class="font-bold text-sm mb-1">Interactive Scan Guide</h2>
+    <p class="text-[11px] text-slate-500 mb-4">Optimal camera alignment, lighting, and cursive handwriting for maximum vision-AI confidence.</p>
+    <div id="scanGuideSteps" class="grid md:grid-cols-5 gap-3">
+      <div class="p-3 rounded-xl border border-slate-200 bg-slate-50"><div class="text-[10px] font-bold text-blue-700 mb-1">1. Surface</div><p class="text-[11px] text-slate-600">Lay the Rx flat. Avoid folded pads and wrinkled thermal paper.</p></div>
+      <div class="p-3 rounded-xl border border-slate-200 bg-slate-50"><div class="text-[10px] font-bold text-blue-700 mb-1">2. Align</div><p class="text-[11px] text-slate-600">All four corners visible. Portrait for Bengali pads, landscape for hospital sheets.</p></div>
+      <div class="p-3 rounded-xl border border-slate-200 bg-slate-50"><div class="text-[10px] font-bold text-blue-700 mb-1">3. Light</div><p class="text-[11px] text-slate-600">Even daylight. No flash glare on laminated pads. Shadow-free medicine block.</p></div>
+      <div class="p-3 rounded-xl border border-slate-200 bg-slate-50"><div class="text-[10px] font-bold text-blue-700 mb-1">4. Cursive</div><p class="text-[11px] text-slate-600">Move closer to the Rx lines. Use contrast toggle after capture for faint ink.</p></div>
+      <div class="p-3 rounded-xl border border-slate-200 bg-slate-50"><div class="text-[10px] font-bold text-blue-700 mb-1">5. Capture</div><p class="text-[11px] text-slate-600">Tap Open Camera (not Choose File) on phones. Hold still 1s. Review confidence badges.</p></div>
+    </div>
+    <button type="button" class="mt-4 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs" onclick="document.querySelector('[data-tab=workspace]').click()">Try a scan</button>
+  </div>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+      <h3 class="font-semibold text-sm mb-2">Error Escalation System</h3>
+      <p class="text-[11px] text-slate-500 mb-3">Report a misidentified drug or a novel handwritten variation. It is queued for the backend training set — you can also flag from any medicine card after a scan.</p>
+      <form id="escalationForm" class="space-y-2" onsubmit="return false;">
+        <input id="escBrand" placeholder="Detected brand" class="w-full px-3 py-2 rounded-xl border text-sm">
+        <input id="escCorrection" placeholder="Correct brand / company" class="w-full px-3 py-2 rounded-xl border text-sm">
+        <textarea id="escNotes" rows="3" placeholder="What did the handwriting look like?" class="w-full px-3 py-2 rounded-xl border text-sm"></textarea>
+        <button type="button" id="escSubmit" class="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-medium">Queue for training</button>
+      </form>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+      <h3 class="font-semibold text-sm mb-2">BMDC &amp; DGDA Reference Manual</h3>
+      <ul class="text-[12px] text-slate-600 space-y-2">
+        <li><b>BMDC number format:</b> letter prefix + hyphen + digits, e.g. <code>A-12345</code>. A = MBBS / allopathic. Always verify the printed letter matches the register.</li>
+        <li><b>Verification statuses:</b> green &gt;85% auto-accept; 70–85% review; &lt;70% manual flag required before save.</li>
+        <li><b>Qualifications:</b> MBBS, FCPS, MD, MS, MCPS are the common printed strings. Extra fellowships sit on the second line of the pad.</li>
+        <li><b>DGDA:</b> every marketed brand in the 25K index is a DGDA-registered SKU via Medex. Unmatched handwriting is never invented as a company.</li>
+        <li><b>PII:</b> patient name/age/phone are masked per BMDC compliance. Do not type them into notes.</li>
+      </ul>
+    </div>
   </div>
 </div>
 
@@ -693,7 +881,9 @@ document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn=>{
       else{b.classList.add('bg-slate-900','text-white');b.classList.remove('text-slate-500');}
     });
     if(tab==='dashboard'){loadKpis();loadCharts();loadHistoryDash();loadRecentMedicines();}
-    if(tab==='database'){loadMedexStats();searchMedex();loadPopularMedicinesLive();}
+    if(tab==='database'){loadMedexStats();searchMedex();loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();}
+    if(tab==='rsm'){loadRsmDashboard();}
+    if(tab==='settings'){loadOfficerForm();}
   });
 });
 
@@ -753,14 +943,20 @@ const closeCameraBtn=document.getElementById('closeCameraBtn');
 const captureBtn=document.getElementById('captureBtn');
 const cameraControls=document.getElementById('cameraControls');
 
-openCameraBtn.addEventListener('click', async()=>{
+openCameraBtn.addEventListener('click', async(e)=>{
+  e.preventDefault(); e.stopPropagation();
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
     video.srcObject=stream;
     video.classList.remove('hidden');
     cameraControls.classList.remove('hidden');
     openCameraBtn.classList.add('hidden');
-  }catch(err){alert('Camera error: '+err.message);}
+  }catch(err){
+    // getUserMedia blocked (HTTP, permission) — dedicated capture input, not Choose File
+    const cam=document.getElementById('cameraFileInput');
+    if(cam) cam.click();
+    else toast.error('Camera error: '+err.message);
+  }
 });
 closeCameraBtn.addEventListener('click',()=>{
   if(stream){stream.getTracks().forEach(t=>t.stop());}
@@ -788,7 +984,10 @@ const previewArea=document.getElementById('previewArea');
 
 function setupUploadZone(zone){
   if(!zone) return;
-  zone.addEventListener('click',()=>fileInput.click());
+  zone.addEventListener('click',e=>{
+    if(e.target.closest('button, input, video, a')) return;
+    fileInput.click();
+  });
   zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover');});
   zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
   zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');handleFile(e.dataTransfer.files[0]);});
@@ -796,7 +995,12 @@ function setupUploadZone(zone){
 setupUploadZone(uploadZone);
 setupUploadZone(dashboardHeroUpload);
 fileInput.addEventListener('change',e=>handleFile(e.target.files[0]));
+document.getElementById('cameraFileInput')?.addEventListener('change',e=>handleFile(e.target.files[0]));
 document.getElementById('galleryBtn')?.addEventListener('click',()=>fileInput.click());
+document.getElementById('chooseFileBtn')?.addEventListener('click',e=>{
+  e.preventDefault(); e.stopPropagation();
+  fileInput.click();
+});
 
 function handleFile(file){
   if(!file||!file.type.startsWith('image/'))return;
@@ -875,7 +1079,7 @@ async function scanPrescription(){
     clearInterval(progInt);
     document.getElementById('skeletonLoader').classList.add('hidden');
     progressText.textContent='Error: '+e.message;
-    alert(e.message);
+    toast.error(e.message);
   }
 }
 
@@ -932,6 +1136,9 @@ function renderVerification(data){
       ${selectRow('Upazila','verifyUpazila',upazilasFor(formData.location.district),formData.location.upazila,'Select district first','')}
       ${selectRow('Territory','verifyTerritory',territoriesFor(formData.location.district),formData.location.territory,'Select district first','')}
     </div>
+    <div class="flex gap-2">
+      ${selectRow('Prescription Source','verifySource',['Hospital','Private Chamber'],doc.prescription_source||'','Hospital vs chamber','Drives the source filter tag')}
+    </div>
   `;
 
   // cascade wiring
@@ -948,12 +1155,19 @@ function renderVerification(data){
 
   medicinesGrid.innerHTML = (data.medicines||[]).map((med, idx)=>{
     const conf=med.confidence||0;
-    const isHigh=conf>=0.85;
-    const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>';
+    const pct=Math.round(conf*100);
+    const isHigh=pct>85;
+    const isLow=pct<70;
+    const icon=isHigh?'<span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px]"><i class="fas fa-check"></i></span>':(isLow?'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-flag"></i></span>':'<span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[10px]"><i class="fas fa-exclamation"></i></span>');
     // Anything the matcher could not confirm is highlighted for review
     const needsReview = med.needs_review || med.company_ambiguous || med.company_conflict
-                        || (med.company && !med.company_verified);
+                        || isLow || (med.company && !med.company_verified);
     const borderClass=(isHigh && !needsReview)?'border-slate-200':'border-amber-200 bg-amber-50/50';
+    const confBadge=isHigh
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">${pct}%</span>`
+      : (isLow
+        ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold"><i class="fas fa-flag mr-1"></i>${pct}% manual flag</span>`
+        : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">${pct}%</span>`);
     // Company badge. Colour encodes trust:
     //   verified against the MedEx catalogue -> indigo + check
     //   unverified model guess / ambiguous brand -> amber + warning
@@ -1032,7 +1246,10 @@ function renderVerification(data){
             ${companyEmphasis}
             ${conflictNote}
             ${altOptions}
-            <p class="text-[10px] text-slate-400 mt-2 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <p class="text-[10px] text-slate-400 truncate">Raw: "${med.raw_text}" • ${med.match_type==='exact'?'MedEx exact match':med.match_type==='fuzzy'?`MedEx fuzzy match (${Math.round((med.match_score||0)*100)}%)`:med.match_type==='live'?'medex.com.bd live':'No catalogue match'} • #${med.line_number}</p>
+              <button type="button" class="report-misid shrink-0 text-[10px] text-amber-700 hover:underline" data-idx="${idx}" data-brand="${med.brand_name||''}" data-raw="${(med.raw_text||'').replace(/"/g,'')}">Report mis-ID</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1042,8 +1259,32 @@ function renderVerification(data){
   // Attach autocomplete for medicine names
   attachMedicineAutocomplete();
   attachAlternativePickers();
+  attachMisidReporters();
 
   window.lastScannedData=data;
+}
+
+function attachMisidReporters(){
+  document.querySelectorAll('.report-misid').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const brand=btn.dataset.brand||'';
+      const raw=btn.dataset.raw||'';
+      const correction=prompt('Correct brand / company for "'+brand+'":','');
+      if(correction===null) return;
+      fetch('/api/error-reports',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          prescription_id: window.lastScannedData?.id,
+          brand_name: brand,
+          reported_text: raw,
+          correction,
+          notes: 'Flagged from verification card',
+          mr_id: officerProfile?.employee_id||'MR001',
+        })
+      }).then(r=>r.json()).then(d=>toast.success(d.message||'Queued for training'))
+        .catch(()=>toast.error('Could not queue the report'));
+    });
+  });
 }
 
 /**
@@ -1083,6 +1324,7 @@ async function verifyAndSave(){
     upazila:document.getElementById('verifyUpazila')?.value||'',
     territory:document.getElementById('verifyTerritory')?.value||'',
     hospital:window.lastScannedData.doctor?.hospital||'',
+    prescription_source:document.getElementById('verifySource')?.value||'',
   };
 
   // client-side validation with inline focus
@@ -1157,7 +1399,7 @@ async function refreshDashboard(){
 /* ============================================================
    Global filter toolbar
    ============================================================ */
-const globalFilters={territory:'',district:'',specialty:'',mr_id:'',days:'30'};
+const globalFilters={territory:'',district:'',specialty:'',mr_id:'',days:'30',source:''};
 
 /** Query-string fragment appended to every dashboard request. */
 function filterQuery(){
@@ -1166,6 +1408,7 @@ function filterQuery(){
   if(globalFilters.district)  p.set('district',globalFilters.district);
   if(globalFilters.specialty) p.set('specialty',globalFilters.specialty);
   if(globalFilters.mr_id)     p.set('mr_id',globalFilters.mr_id);
+  if(globalFilters.source)    p.set('source',globalFilters.source);
   if(globalFilters.days)      p.set('days',globalFilters.days);
   const s=p.toString();
   return s?('&'+s):'';
@@ -1197,6 +1440,7 @@ async function loadFilterOptions(){
     fill('fDistrict', d.districts||[], 'All Districts',  globalFilters.district);
     fill('fSpecialty',d.specialties||[],'All Specialties',globalFilters.specialty);
     fill('fMr',       d.mr_ids||[],    'All MRs',        globalFilters.mr_id);
+    paintDynamicTags(d);
   }catch(e){ console.error('filters',e); }
 }
 
@@ -1219,10 +1463,11 @@ function initFilterBar(){
   });
   bind('fTerritory','territory'); bind('fDistrict','district');
   bind('fSpecialty','specialty'); bind('fMr','mr_id'); bind('fDays','days');
+  bind('fSource','source');
 
   document.getElementById('fReset')?.addEventListener('click',()=>{
-    Object.assign(globalFilters,{territory:'',district:'',specialty:'',mr_id:'',days:'30'});
-    ['fTerritory','fDistrict','fSpecialty','fMr'].forEach(id=>{
+    Object.assign(globalFilters,{territory:'',district:'',specialty:'',mr_id:'',days:'30',source:''});
+    ['fTerritory','fDistrict','fSpecialty','fMr','fSource'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';});
     const fd=document.getElementById('fDays'); if(fd) fd.value='30';
     applyFilters(); toast.info('Filters reset');
@@ -1234,6 +1479,7 @@ function initFilterBar(){
     if(globalFilters.district)  p.set('district',globalFilters.district);
     if(globalFilters.specialty) p.set('specialty',globalFilters.specialty);
     if(globalFilters.mr_id)     p.set('mr_id',globalFilters.mr_id);
+    if(globalFilters.source)    p.set('source',globalFilters.source);
     if(globalFilters.days)      p.set('days',globalFilters.days);
     if(rsState.q)               p.set('q',rsState.q);
     window.location.href='/api/export/recent-medicines.csv?'+p.toString();
@@ -1565,7 +1811,47 @@ async function loadCharts(){
     }
 
     await loadDoctorLeaderboard();
+    await loadOwnVsCompetitor();
   }catch(e){console.error('Charts error',e);}
+}
+
+async function loadOwnVsCompetitor(){
+  try{
+    const data=await (await fetch(apiUrl('/api/dashboard/own-vs-competitor',{limit:10}))).json();
+    const empty=document.getElementById('emptyOwnVsComp');
+    const wrap=document.getElementById('ownVsCompChartContainer');
+    const ctx=document.getElementById('chartOwnVsComp');
+    if(!ctx) return;
+    const docs=data.doctors||[];
+    if(!docs.length){
+      empty?.classList.remove('hidden');
+      wrap?.classList.add('hidden');
+      if(chartOwnVsComp){chartOwnVsComp.destroy();chartOwnVsComp=null;}
+      return;
+    }
+    empty?.classList.add('hidden');
+    wrap?.classList.remove('hidden');
+    if(chartOwnVsComp) chartOwnVsComp.destroy();
+    chartOwnVsComp=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels:docs.map(d=>d.doctor_name.length>22?d.doctor_name.slice(0,22)+'…':d.doctor_name),
+        datasets:[
+          {label:'Own brand', data:docs.map(d=>d.own), backgroundColor:'#059669', borderRadius:4, borderWidth:0},
+          {label:'Competitor', data:docs.map(d=>d.competitor), backgroundColor:'#D97706', borderRadius:4, borderWidth:0},
+        ]
+      },
+      options:{responsive:true, maintainAspectRatio:false,
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}}},
+                y:{stacked:true,grid:{color:'#F1F5F9'},ticks:{precision:0}}},
+        plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle',boxWidth:8}},
+          tooltip:{callbacks:{afterLabel:(c)=>{
+            const d=docs[c.dataIndex];
+            return `Own ${d.own_share}% • Competitor ${d.competitor_share}%`;
+          }}}}
+      }
+    });
+  }catch(e){console.error('own vs competitor',e);}
 }
 
 /* ---------- Doctor Conversion Leaderboard (searchable + paginated) ---------- */
@@ -1851,18 +2137,391 @@ function attachMedicineAutocomplete(){
   });
 }
 
+/* ============================================================
+   Pharma Intelligence Hub + enterprise settings / RSM / PWA
+   ============================================================ */
+let officerProfile=null;
+
+function renderCompanyBadge(){
+  const p=officerProfile||{};
+  const company=(p.company_name||'').replace(/\s+(Ltd\.?|PLC|Limited|Pharmaceuticals).*$/i,'').trim()
+    || p.company_name || '';
+  const region=p.territory||p.zone||p.division||'';
+  const label=company && region ? `${company} • ${region}`
+             : company || region || 'Set company in Settings';
+  const el=document.getElementById('companyBadgeText');
+  if(el) el.textContent=label;
+  const side=document.getElementById('sidebarOfficerLabel');
+  if(side) side.textContent=`${p.employee_id||'MR001'} • ${region||'Territory'}`;
+}
+
+async function pingLatency(){
+  const meter=document.getElementById('apiLatency');
+  const wrap=document.getElementById('apiLatencyMeter');
+  const t0=performance.now();
+  try{
+    const r=await fetch('/api/ping',{cache:'no-store'});
+    if(!r.ok) throw new Error('ping');
+    const ms=Math.round(performance.now()-t0);
+    if(meter) meter.textContent=ms+' ms';
+    if(wrap){
+      wrap.className='hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border '+
+        (ms<150?'bg-emerald-50 text-emerald-800 border-emerald-200'
+               :ms<400?'bg-amber-50 text-amber-800 border-amber-200'
+                      :'bg-red-50 text-red-700 border-red-200');
+    }
+  }catch(_){
+    if(meter) meter.textContent='offline';
+  }
+}
+
+async function loadOfficerProfile(){
+  try{
+    const r=await fetch('/api/officer-profile');
+    if(!r.ok) return;
+    officerProfile=await r.json();
+    renderCompanyBadge();
+    renderTargetProgress(officerProfile.progress);
+  }catch(e){console.error('profile',e);}
+}
+
+function renderTargetProgress(progress){
+  const box=document.getElementById('targetProgress');
+  if(!box) return;
+  const brands=progress?.brands||[];
+  if(!brands.length){box.innerHTML='';return;}
+  box.innerHTML=brands.map(b=>{
+    const pct=Math.min(100,b.percent||0);
+    return `<div>
+      <div class="flex justify-between text-[11px]"><span class="font-semibold">${b.brand_name}</span><span>${b.captured}/${b.monthly_target} Rx</span></div>
+      <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-0.5"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function addTargetRow(brand='', tgt=''){
+  const wrap=document.getElementById('targetRows');
+  if(!wrap) return;
+  const row=document.createElement('div');
+  row.className='flex gap-2 target-row';
+  row.innerHTML=`<input value="${brand}" placeholder="Brand e.g. Seclo" class="flex-1 px-3 py-2 rounded-xl border text-sm t-brand">
+    <input type="number" min="0" value="${tgt}" placeholder="Monthly Rx" class="w-28 px-3 py-2 rounded-xl border text-sm t-target">
+    <button type="button" class="px-2 text-slate-400 hover:text-red-600 t-del"><i class="fas fa-xmark"></i></button>`;
+  row.querySelector('.t-del').addEventListener('click',()=>row.remove());
+  wrap.appendChild(row);
+}
+
+async function loadOfficerForm(){
+  await loadOfficerProfile();
+  const p=officerProfile||{};
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.value=v||'';};
+  set('ofEmployeeId',p.employee_id);
+  set('ofFullName',p.full_name);
+  set('ofRole',p.role||'MPO');
+  set('ofDivision',p.division);
+  set('ofTerritory',p.territory);
+  set('ofPortfolio',Array.isArray(p.portfolio)?p.portfolio.join(', '):p.portfolio);
+  set('companySearch',p.company_name);
+  set('companyName',p.company_name);
+  const picked=document.getElementById('companyPicked');
+  if(picked) picked.textContent=p.company_name?`Selected: ${p.company_name}`:'';
+  const wrap=document.getElementById('targetRows');
+  if(wrap){
+    wrap.innerHTML='';
+    (p.targets||[]).forEach(t=>addTargetRow(t.brand_name,t.monthly_target));
+    if(!(p.targets||[]).length) addTargetRow();
+  }
+  renderTargetProgress(p.progress);
+}
+
+function initOfficerForm(){
+  document.getElementById('addTargetBtn')?.addEventListener('click',()=>addTargetRow());
+  let t=null;
+  document.getElementById('companySearch')?.addEventListener('input',e=>{
+    clearTimeout(t);
+    t=setTimeout(()=>searchCompanies(e.target.value),250);
+  });
+  document.getElementById('saveOfficerBtn')?.addEventListener('click',saveOfficerCard);
+  document.getElementById('escSubmit')?.addEventListener('click',submitEscalation);
+}
+
+async function searchCompanies(q){
+  const box=document.getElementById('companyResults');
+  if(!box) return;
+  if(!q||q.length<1){box.classList.add('hidden');return;}
+  try{
+    const d=await (await fetch('/api/companies?q='+encodeURIComponent(q)+'&limit=12')).json();
+    box.innerHTML=(d.companies||[]).map(c=>`
+      <button type="button" class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 border-b last:border-0 company-pick" data-name="${c.name}">
+        ${c.logo?`<img src="${c.logo}" class="w-6 h-6 rounded object-contain bg-white">`:''}
+        <span class="text-xs font-medium truncate">${c.name}</span>
+        <span class="ml-auto text-[10px] text-slate-400">${c.brands} SKUs</span>
+      </button>`).join('')||'<p class="p-3 text-xs text-slate-500">No match</p>';
+    box.classList.remove('hidden');
+    box.querySelectorAll('.company-pick').forEach(b=>b.addEventListener('click',()=>{
+      document.getElementById('companyName').value=b.dataset.name;
+      document.getElementById('companySearch').value=b.dataset.name;
+      document.getElementById('companyPicked').textContent='Selected: '+b.dataset.name;
+      box.classList.add('hidden');
+    }));
+  }catch(e){box.classList.add('hidden');}
+}
+
+async function saveOfficerCard(){
+  const targets=[...document.querySelectorAll('.target-row')].map(row=>({
+    brand_name: row.querySelector('.t-brand')?.value?.trim()||'',
+    monthly_target: parseInt(row.querySelector('.t-target')?.value||'0',10)||0,
+  })).filter(t=>t.brand_name);
+  const payload={
+    employee_id: document.getElementById('ofEmployeeId')?.value?.trim()||'MR001',
+    full_name: document.getElementById('ofFullName')?.value?.trim()||'',
+    role: document.getElementById('ofRole')?.value||'MPO',
+    company_name: document.getElementById('companyName')?.value||document.getElementById('companySearch')?.value||'',
+    territory: document.getElementById('ofTerritory')?.value?.trim()||'',
+    zone: document.getElementById('ofTerritory')?.value?.trim()||'',
+    division: document.getElementById('ofDivision')?.value?.trim()||'',
+    portfolio: document.getElementById('ofPortfolio')?.value||'',
+    targets,
+  };
+  toast.loading('Saving officer card...',{id:'officer'});
+  try{
+    const r=await fetch('/api/officer-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||'Save failed');
+    officerProfile=d.profile;
+    renderCompanyBadge();
+    renderTargetProgress(d.profile.progress);
+    toast.success('Officer card saved — KPI tracking is live',{id:'officer'});
+  }catch(e){ toast.error(e.message,{id:'officer'}); }
+}
+
+async function submitEscalation(){
+  const payload={
+    brand_name: document.getElementById('escBrand')?.value||'',
+    correction: document.getElementById('escCorrection')?.value||'',
+    notes: document.getElementById('escNotes')?.value||'',
+    mr_id: officerProfile?.employee_id||'MR001',
+  };
+  if(!payload.brand_name && !payload.correction){ toast.error('Enter a brand or correction'); return; }
+  try{
+    const d=await (await fetch('/api/error-reports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})).json();
+    toast.success(d.message||'Queued');
+    ['escBrand','escCorrection','escNotes'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  }catch(e){ toast.error('Could not queue report'); }
+}
+
+function initHubTabs(){
+  document.querySelectorAll('[data-hub-tab]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.dataset.hubTab;
+      document.querySelectorAll('.hub-pane').forEach(p=>p.classList.add('hidden'));
+      document.getElementById('hub-'+id)?.classList.remove('hidden');
+      document.querySelectorAll('.hub-tab').forEach(b=>{
+        b.classList.remove('bg-white','shadow-sm','text-slate-900');
+        b.classList.add('text-slate-600');
+      });
+      btn.classList.add('bg-white','shadow-sm','text-slate-900');
+      btn.classList.remove('text-slate-600');
+      if(id==='news') loadHubNews();
+      if(id==='jobs') loadHubJobs();
+      if(id==='healthdays') loadHealthDays();
+    });
+  });
+  document.getElementById('newsRefresh')?.addEventListener('click',()=>loadHubNews(true));
+  document.getElementById('jobCategory')?.addEventListener('change',()=>loadHubJobs());
+  let jt=null;
+  document.getElementById('jobSearch')?.addEventListener('input',()=>{
+    clearTimeout(jt); jt=setTimeout(loadHubJobs,300);
+  });
+}
+
+async function loadHubNews(){
+  const feed=document.getElementById('newsFeed');
+  if(!feed) return;
+  feed.innerHTML='<p class="text-xs text-slate-400">Loading news…</p>';
+  try{
+    const d=await (await fetch('/api/pharma/news')).json();
+    feed.innerHTML=(d.items||[]).map(n=>`
+      <article class="p-3 rounded-xl border border-slate-200 hover:border-blue-200">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${n.source_type==='regulatory'?'bg-amber-50 text-amber-800':'bg-blue-50 text-blue-800'}">${n.source}</span>
+          ${n.live?'<span class="text-[10px] text-emerald-600 font-semibold">LIVE</span>':''}
+          <span class="text-[10px] text-slate-400 ml-auto">${(n.published_at||'').slice(0,10)}</span>
+        </div>
+        <h4 class="text-sm font-semibold text-slate-900">${n.title}</h4>
+        <p class="text-[11px] text-slate-600 mt-1">${n.summary||''}</p>
+        ${n.url?`<a href="${n.url}" target="_blank" rel="noopener" class="text-[11px] text-blue-700 mt-1 inline-block">Open source</a>`:''}
+      </article>`).join('')||'<p class="text-xs text-slate-500">No stories yet.</p>';
+  }catch(e){ feed.innerHTML='<p class="text-xs text-red-600">News feed unavailable.</p>'; }
+}
+
+async function loadHubJobs(){
+  const box=document.getElementById('jobBoard');
+  if(!box) return;
+  const cat=document.getElementById('jobCategory')?.value||'';
+  const q=document.getElementById('jobSearch')?.value||'';
+  try{
+    const d=await (await fetch('/api/pharma/jobs?category='+encodeURIComponent(cat)+'&q='+encodeURIComponent(q))).json();
+    box.innerHTML=(d.jobs||[]).map(j=>`
+      <div class="p-3 rounded-xl border border-slate-200 bg-white">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <p class="text-xs font-bold text-slate-900">${j.title}</p>
+            <p class="text-[11px] text-slate-600">${j.company}</p>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 font-semibold">${j.category}</span>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-1"><i class="fas fa-location-dot mr-1"></i>${j.location} • ${j.experience}</p>
+        <p class="text-[11px] text-slate-600 mt-1">${j.description}</p>
+        <div class="flex items-center justify-between mt-2 text-[10px] text-slate-500">
+          <span>${j.salary}</span>
+          <span class="${j.fresh?'text-emerald-600 font-semibold':''}">${j.fresh?'Posted today':'Posted '+j.posted_on}</span>
+        </div>
+      </div>`).join('')||'<p class="text-xs text-slate-500">No matching vacancies.</p>';
+  }catch(e){ box.innerHTML='<p class="text-xs text-red-600">Job board unavailable.</p>'; }
+}
+
+const MONTH_NAMES=['','January','February','March','April','May','June','July','August','September','October','November','December'];
+
+async function loadHealthDays(){
+  const cal=document.getElementById('healthDayCalendar');
+  const next=document.getElementById('healthDayNext');
+  if(!cal) return;
+  try{
+    const d=await (await fetch('/api/pharma/health-days')).json();
+    if(next){
+      const n=d.next;
+      next.innerHTML=n?`<p class="text-[11px] uppercase tracking-widest text-white/70">Next campaign window</p>
+        <h3 class="text-lg font-bold mt-1">${n.name} — ${n.date}</h3>
+        <p class="text-sm text-white/85 mt-1">${n.mpo_tip}</p>
+        <p class="text-[11px] mt-2 text-blue-100">${n.days_until===0?'Today':n.days_until+' days out'} • Focus: ${(n.focus||[]).join(', ')}</p>`
+        :'<p>Calendar loaded.</p>';
+    }
+    const months=d.by_month||{};
+    cal.innerHTML=Object.keys(months).map(m=>`
+      <div>
+        <h4 class="text-xs font-bold text-slate-700 mb-2">${MONTH_NAMES[parseInt(m,10)]||m}</h4>
+        <div class="grid md:grid-cols-2 gap-2">
+          ${months[m].map(day=>`
+            <div class="p-3 rounded-xl border ${day.status==='today'?'border-blue-400 bg-blue-50':day.status==='upcoming'?'border-slate-200 bg-white':'border-slate-100 bg-slate-50'}">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-semibold text-slate-900">${day.name}</p>
+                <span class="text-[10px] text-slate-500">${String(day.day).padStart(2,'0')} ${MONTH_NAMES[day.month].slice(0,3)}</span>
+              </div>
+              <p class="text-[11px] text-slate-600 mt-1">${day.mpo_tip}</p>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+  }catch(e){ if(cal) cal.innerHTML='<p class="text-xs text-red-600">Calendar unavailable.</p>'; }
+}
+
+async function loadRsmDashboard(){
+  const days=document.getElementById('rsmDays')?.value||'30';
+  try{
+    const d=await (await fetch('/api/rsm/dashboard?days='+days)).json();
+    const k=d.totals||{};
+    const kpis=document.getElementById('rsmKpis');
+    if(kpis){
+      kpis.innerHTML=`
+        <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Team size</p><p class="text-xl font-bold">${d.team_size}</p></div>
+        <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Prescriptions</p><p class="text-xl font-bold">${k.prescriptions||0}</p></div>
+        <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Own items</p><p class="text-xl font-bold">${k.own_items||0}</p></div>
+        <div class="bg-white/10 rounded-xl p-3"><p class="text-[10px] text-white/70">Team SoV</p><p class="text-xl font-bold">${k.sov_percent||0}%</p></div>`;
+    }
+    const body=document.getElementById('rsmTeamBody');
+    if(body){
+      body.innerHTML=(d.members||[]).slice(0,51).map(m=>`
+        <tr class="border-b border-slate-100">
+          <td class="py-1.5 font-medium">${m.mpo_name}</td>
+          <td>${m.role}</td>
+          <td>${m.territory||''}</td>
+          <td>${m.prescriptions}</td>
+          <td>${m.items}</td>
+          <td class="text-emerald-700 font-semibold">${m.own_items}</td>
+          <td class="text-amber-700">${m.competitor_items}</td>
+          <td>${m.sov_percent}%</td>
+        </tr>`).join('');
+    }
+  }catch(e){console.error('rsm',e);}
+}
+
+function initInlineTags(){
+  const host=document.getElementById('rsInlineTags');
+  if(!host || host.dataset.bound) return;
+  host.dataset.bound='1';
+  host.addEventListener('click',e=>{
+    const btn=e.target.closest('.rs-tag');
+    if(!btn) return;
+    const key=btn.dataset.tagKey, val=btn.dataset.tagValue;
+    if(!key) return;
+    globalFilters[key]=globalFilters[key]===val?'':val;
+    const selId=key==='source'?'fSource':key==='territory'?'fTerritory':key==='specialty'?'fSpecialty':'';
+    const sel=selId?document.getElementById(selId):null;
+    if(sel) sel.value=globalFilters[key]||'';
+    host.querySelectorAll(`.rs-tag[data-tag-key="${key}"]`).forEach(b=>{
+      const on=b.dataset.tagValue===globalFilters[key];
+      b.classList.toggle('bg-slate-900',on);
+      b.classList.toggle('text-white',on);
+      b.classList.toggle('border-slate-900',on);
+      b.classList.toggle('bg-white',!on);
+      b.classList.toggle('text-slate-600',!on);
+    });
+    applyFilters();
+  });
+}
+
+function paintDynamicTags(options){
+  const host=document.getElementById('rsDynamicTags');
+  if(!host) return;
+  const terr=(options.territories||[]).slice(0,6);
+  const spec=(options.specialties||[]).slice(0,6);
+  host.innerHTML=
+    terr.map(t=>`<button type="button" class="rs-tag px-2 py-0.5 rounded-full border text-[10px] font-medium bg-white text-slate-600 border-slate-200" data-tag-key="territory" data-tag-value="${t}">${t}</button>`).join('')+
+    spec.map(s=>`<button type="button" class="rs-tag px-2 py-0.5 rounded-full border text-[10px] font-medium bg-white text-slate-600 border-slate-200" data-tag-key="specialty" data-tag-value="${s}">${s}</button>`).join('');
+}
+
+async function drainOfflineQueue(){
+  if(!navigator.onLine) return;
+  try{
+    const req=indexedDB.open(dbName,1);
+    req.onsuccess=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains('prescriptions')) return;
+      const tx=db.transaction('prescriptions','readonly');
+      const store=tx.objectStore('prescriptions');
+      const getAll=store.getAll();
+      getAll.onsuccess=async()=>{
+        const pending=(getAll.result||[]).filter(x=>!x.synced);
+        if(!pending.length) return;
+        toast.info(`Syncing ${pending.length} offline scan(s)…`);
+        await fetch('/api/offline/sync',{method:'POST'});
+      };
+    };
+  }catch(e){}
+}
+
+document.getElementById('rsmDays')?.addEventListener('change',loadRsmDashboard);
+window.addEventListener('online',()=>{ drainOfflineQueue(); pingLatency(); });
+
 /* ---------- Bootstrap ---------- */
 (async function initApp(){
   // locations must be loaded before the verification form can render selects
   await loadLocations();
   initFilterBar();
   initRecentScans();
+  initHubTabs();
+  initOfficerForm();
+  initInlineTags();
   await loadFilterOptions();
+  await loadOfficerProfile();
   loadHistory();
   loadKpis();
   loadCharts();
   loadRecentMedicines();
   loadMedexStats();
+  pingLatency();
+  setInterval(pingLatency, 30000);
+  drainOfflineQueue();
 })();
 
 if('serviceWorker' in navigator){

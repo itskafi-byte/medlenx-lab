@@ -598,6 +598,12 @@ async def verify_prescription(pid: int, verified_data: dict):
     upazila = (doctor.get('upazila') or '').strip()
     territory = (doctor.get('territory') or '').strip()
     division = (doctor.get('division') or '').strip()
+    from .database import infer_prescription_source
+    source = infer_prescription_source(
+        doctor.get('hospital', ''), doctor.get('chamber', ''),
+        doctor.get('prescription_source', ''),
+    )
+    doctor['prescription_source'] = source
 
     # validate the location triple against the cascade before persisting
     loc = resolve_location(district=district, upazila=upazila, territory=territory)
@@ -622,13 +628,13 @@ async def verify_prescription(pid: int, verified_data: dict):
             doctor_id=?, doctor_name=?, doctor_bmdc_no=?,
             doctor_qualifications=?, doctor_hospital=?, doctor_specialty=?,
             district=?, upazila=?, territory=?,
-            total_medicines=?
+            total_medicines=?, prescription_source=?
         WHERE id=?
     """, (
         json.dumps(doctor), json.dumps(medicines), doctor_id, name, bmdc_no,
         doctor.get('qualifications', ''),
         doctor.get('hospital', '') or doctor.get('chamber', ''),
-        specialty, district, upazila, territory, len(medicines), pid,
+        specialty, district, upazila, territory, len(medicines), source, pid,
     ))
 
     # rebuild analytics rows, refresh the itemized feed for this prescription
@@ -637,7 +643,7 @@ async def verify_prescription(pid: int, verified_data: dict):
     _write_medicine_rows(
         cur, pid, medicines, mr_id=mr_id, doctor_id=doctor_id, doctor_name=name,
         specialty=specialty, district=district, upazila=upazila,
-        territory=territory, write_recent=True,
+        territory=territory, prescription_source=source, write_recent=True,
     )
 
     conn.commit()
@@ -893,7 +899,120 @@ async def popular_medicines_live():
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "app": "MedLenX Lab", "model": "MedLenX VL", "medex_count": len(medex_db)}
+    return {
+        "status": "ok",
+        "app": "MedLenX Lab",
+        "model": "MedLenX VL",
+        "medex_count": len(medex_db),
+        "ts": time.time(),
+    }
+
+
+@app.get("/api/ping")
+async def ping():
+    """Tiny latency probe for the header meter."""
+    return {"ok": True, "ts": time.time()}
+
+
+@app.get("/api/companies")
+async def list_companies(q: str = "", limit: int = 25):
+    """Dynamic search dropdown for pharmaceutical company onboarding."""
+    from .pharma_hub import unique_companies_from
+    data = unique_companies_from(medex_db, q=q, limit=limit)
+    for c in data["companies"]:
+        c["logo"] = _company_logo_or_blank(c["name"])
+    return data
+
+
+@app.get("/api/officer-profile")
+async def officer_profile_get(employee_id: str = ""):
+    from .database import get_officer_profile, get_target_progress
+    profile = get_officer_profile(employee_id or None)
+    if not profile:
+        return JSONResponse({"detail": "No officer profile"}, status_code=404)
+    progress = get_target_progress(profile["employee_id"])
+    profile["progress"] = progress
+    profile["company_logo"] = _company_logo_or_blank(profile.get("company_name") or "")
+    return profile
+
+
+@app.post("/api/officer-profile")
+async def officer_profile_save(payload: dict):
+    from .database import save_officer_profile, get_target_progress
+    profile = save_officer_profile(payload or {})
+    profile["progress"] = get_target_progress(profile["employee_id"])
+    profile["company_logo"] = _company_logo_or_blank(profile.get("company_name") or "")
+    return {"success": True, "profile": profile}
+
+
+@app.get("/api/officer-targets")
+async def officer_targets(employee_id: str = "", month: str = ""):
+    from .database import get_target_progress
+    return get_target_progress(employee_id or None, month or None)
+
+
+@app.post("/api/error-reports")
+async def error_reports_create(payload: dict):
+    from .database import save_error_report
+    rid = save_error_report(payload or {})
+    return {
+        "success": True,
+        "id": rid,
+        "message": "Queued for the vision-model training pipeline. Thank you.",
+    }
+
+
+@app.get("/api/error-reports")
+async def error_reports_list(limit: int = 50, status: str = ""):
+    from .database import list_error_reports
+    return {"reports": list_error_reports(limit=limit, status=status)}
+
+
+@app.get("/api/pharma/news")
+async def pharma_news(live: int = 1):
+    from .pharma_hub import get_pharma_news
+    return get_pharma_news(live=bool(live))
+
+
+@app.get("/api/pharma/jobs")
+async def pharma_jobs(category: str = "", q: str = "", location: str = ""):
+    from .pharma_hub import get_pharma_jobs
+    return get_pharma_jobs(category=category, q=q, location=location)
+
+
+@app.get("/api/pharma/health-days")
+async def pharma_health_days(year: Optional[int] = None, upcoming: int = 0):
+    from .pharma_hub import get_health_days
+    return get_health_days(year=year, upcoming_only=bool(upcoming))
+
+
+@app.get("/api/dashboard/own-vs-competitor")
+async def own_vs_competitor(
+    own_company: Optional[str] = None, district: str = "", territory: str = "",
+    specialty: str = "", mr_id: str = "", days: Optional[int] = None,
+    limit: int = 15,
+):
+    from .database import get_own_vs_competitor
+    return get_own_vs_competitor(
+        own_company_name=own_company, district=district, territory=territory,
+        specialty=specialty, mr_id=mr_id, days=days, limit=limit,
+    )
+
+
+@app.get("/api/rsm/dashboard")
+async def rsm_dashboard(team_id: str = "", rsm_id: str = "", days: int = 30):
+    from .database import get_rsm_dashboard
+    return get_rsm_dashboard(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+
+
+@app.post("/api/offline/sync")
+async def offline_sync():
+    """
+    Acknowledge a client-side IndexedDB flush. Individual scans still go
+    through /api/scan; this endpoint is a heartbeat so the PWA can mark the
+    queue as drained after replaying pending uploads.
+    """
+    return {"success": True, "message": "Offline queue accepted", "ts": time.time()}
 
 @app.get("/sw.js")
 async def serve_sw_root():

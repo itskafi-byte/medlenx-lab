@@ -174,6 +174,66 @@ def init_db():
     )
     """)
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS officer_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id TEXT UNIQUE NOT NULL,
+        full_name TEXT,
+        role TEXT DEFAULT 'MPO',
+        company_name TEXT,
+        territory TEXT,
+        zone TEXT,
+        division TEXT,
+        portfolio TEXT,
+        team_id TEXT DEFAULT 'TEAM-DHK-S',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS brand_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id TEXT NOT NULL,
+        brand_name TEXT NOT NULL,
+        monthly_target INTEGER DEFAULT 0,
+        month TEXT NOT NULL,
+        UNIQUE(employee_id, brand_name, month)
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS error_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        prescription_id INTEGER,
+        mr_id TEXT,
+        brand_name TEXT,
+        reported_text TEXT,
+        correction TEXT,
+        notes TEXT,
+        status TEXT DEFAULT 'queued',
+        created_at TEXT NOT NULL
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS team_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id TEXT NOT NULL,
+        rsm_employee_id TEXT NOT NULL,
+        mpo_mr_id TEXT UNIQUE NOT NULL,
+        mpo_name TEXT,
+        territory TEXT,
+        zone TEXT,
+        division TEXT,
+        role TEXT DEFAULT 'MPO'
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS app_kv (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+    """)
+
     conn.commit()
 
     # ---- lightweight migrations for pre-existing databases ----
@@ -185,6 +245,9 @@ def init_db():
         ("prescribed_medicines", "company_verified", "INTEGER DEFAULT 0"),
         ("prescribed_medicines", "needs_review", "INTEGER DEFAULT 0"),
         ("doctors", "division", "TEXT"),
+        ("prescriptions", "prescription_source", "TEXT"),
+        ("recent_scanned_medicines", "prescription_source", "TEXT"),
+        ("recent_scanned_medicines", "specialty", "TEXT"),
     ]:
         try:
             if column not in _cols(table):
@@ -264,9 +327,81 @@ def init_db():
             cur.execute("INSERT OR IGNORE INTO generics (name, category) VALUES (?, ?)", (gname, cat))
         print("✅ Seeded generics")
 
+    _seed_enterprise(cur)
     conn.commit()
     conn.close()
     print(f"✅ MedLenX Relational DB initialized at {DB_PATH}")
+
+
+_TERRITORY_CYCLE = [
+    ("Dhaka South", "Dhaka South", "Dhaka"),
+    ("Dhaka North", "Dhaka North", "Dhaka"),
+    ("Chattogram Metro", "Chattogram Metro", "Chattogram"),
+    ("Chattogram North", "Chattogram North", "Chattogram"),
+    ("Rajshahi Metro", "Rajshahi", "Rajshahi"),
+    ("Khulna Metro", "Khulna", "Khulna"),
+    ("Sylhet Metro", "Sylhet", "Sylhet"),
+    ("Barishal Sadar", "Barishal", "Barishal"),
+    ("Rangpur Metro", "Rangpur", "Rangpur"),
+    ("Mymensingh Sadar", "Mymensingh", "Mymensingh"),
+    ("Gazipur", "Dhaka North", "Dhaka"),
+    ("Narayanganj", "Dhaka South", "Dhaka"),
+    ("Comilla", "Chattogram North", "Chattogram"),
+    ("Bogura", "Rajshahi", "Rajshahi"),
+    ("Jessore", "Khulna", "Khulna"),
+]
+
+
+def _seed_enterprise(cur):
+    """Idempotent seed for officer profile + a 50+ MPO field team."""
+    cur.execute("SELECT COUNT(*) AS c FROM officer_profiles")
+    if cur.fetchone()["c"] == 0:
+        now = datetime.now().isoformat()
+        cur.execute("""
+            INSERT INTO officer_profiles
+            (employee_id, full_name, role, company_name, territory, zone,
+             division, portfolio, team_id, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        """, ("MR001", "Field Officer", "MPO",
+              "Healthcare Pharmaceuticals Ltd.", "Dhaka South", "Dhaka South",
+              "Dhaka", json.dumps(["Cardiology", "Gastroenterology"]),
+              "TEAM-DHK-S", now, now))
+        cur.execute("INSERT OR REPLACE INTO app_kv (key, value) VALUES ('current_employee_id', 'MR001')")
+        print("✅ Seeded default officer profile")
+
+    cur.execute("SELECT COUNT(*) AS c FROM team_members")
+    if cur.fetchone()["c"] == 0:
+        names = [
+            "Rahim Uddin", "Fatema Khatun", "Sajid Hasan", "Nusrat Jahan",
+            "Imran Kabir", "Sharmin Akter", "Tanvir Ahmed", "Lamia Chowdhury",
+            "Mahmudul Hasan", "Rokeya Sultana", "Arif Hossain", "Mim Akter",
+            "Shahriar Kabir", "Farzana Islam", "Nayeem Khan", "Sumaiya Rahman",
+            "Jahidul Islam", "Tania Sultana", "Rashedul Karim", "Moumita Das",
+        ]
+        rows = []
+        for i in range(1, 52):
+            terr, zone, div = _TERRITORY_CYCLE[(i - 1) % len(_TERRITORY_CYCLE)]
+            mr = f"MR{i:03d}"
+            name = names[(i - 1) % len(names)] + f" {i}"
+            role = "RSM" if i == 50 else ("RSO" if i % 10 == 0 else "MPO")
+            rsm = "MR050"
+            rows.append(("TEAM-BD-1", rsm, mr, name, terr, zone, div, role))
+        cur.executemany("""
+            INSERT OR IGNORE INTO team_members
+            (team_id, rsm_employee_id, mpo_mr_id, mpo_name, territory, zone, division, role)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+        print("✅ Seeded 51-member RSM field team")
+
+    cur.execute("SELECT COUNT(*) AS c FROM brand_targets")
+    if cur.fetchone()["c"] == 0:
+        month = datetime.now().strftime("%Y-%m")
+        for brand, tgt in [("Seclo", 40), ("Histacin", 25), ("Napa", 15)]:
+            cur.execute("""
+                INSERT OR IGNORE INTO brand_targets (employee_id, brand_name, monthly_target, month)
+                VALUES ('MR001', ?, ?, ?)
+            """, (brand, tgt, month))
+        print("✅ Seeded brand targets")
 
 # ============ Helper: Get or Create ============
 
@@ -488,10 +623,28 @@ def _normalize_timestamp(value):
         return datetime.now().isoformat()
 
 
+def infer_prescription_source(hospital="", chamber="", explicit=""):
+    """Hospital vs Private Chamber — used as a first-class filter tag."""
+    explicit = (explicit or "").strip()
+    if explicit in ("Hospital", "Private Chamber"):
+        return explicit
+    chamber = (chamber or "").lower()
+    hospital = (hospital or "").lower()
+    if hospital and any(k in hospital for k in ("hospital", "medical college", "cmch", "dmch", "bsmmu")):
+        return "Hospital"
+    if "chamber" in chamber or "diagnostic" in chamber or "clinic" in chamber:
+        return "Private Chamber"
+    if chamber and not hospital:
+        return "Private Chamber"
+    if hospital:
+        return "Hospital"
+    return ""
+
+
 def _write_medicine_rows(cur, prescription_id, medicines, *, mr_id="MR001",
                          doctor_id=None, doctor_name="", specialty="",
                          district="", upazila="", territory="",
-                         write_recent=True):
+                         prescription_source="", write_recent=True):
     """
     Write every detected medicine to BOTH:
       * prescribed_medicines - analytics junction (replaced on re-verify)
@@ -539,15 +692,16 @@ def _write_medicine_rows(cur, prescription_id, medicines, *, mr_id="MR001",
             (prescription_id, mr_id, brand_name, generic_name, company_name,
              dosage_form, strength, dosage, confidence_score, company_verified,
              needs_review, doctor_id, doctor_name, specialty, district,
-             upazila, territory, image_url, medex_url, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             upazila, territory, image_url, medex_url, created_at,
+             prescription_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 prescription_id, mr_id, brand, generic, company,
                 med.get('type', '') or med.get('form', ''),
                 med.get('strength', ''), dosage, confidence, verified, review,
                 doctor_id, doctor_name, specialty, district, upazila, territory,
                 med.get('image_url', '') or med.get('pack_image', ''),
-                med.get('medex_url', ''), now,
+                med.get('medex_url', ''), now, prescription_source or "",
             ))
 
 
@@ -580,11 +734,15 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
     
     # Mask patient PII - store only doctor and prescription details
     patient_masked = json.dumps({"note": "Patient PII masked per BMDC compliance"})
-    
+    source = infer_prescription_source(
+        doctor_info.get('hospital', ''), doctor_info.get('chamber', ''),
+        doctor_info.get('prescription_source', ''),
+    )
+
     cur.execute("""
     INSERT INTO prescriptions 
-    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified, prescription_source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         # Always store a real ISO-8601 timestamp. The scan meta uses
         # "%Y-%m-%d %H:%M:%S" (space separator); a space sorts BEFORE 'T', so
@@ -613,7 +771,8 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
         district,
         territory,
         patient_masked,
-        is_verified
+        is_verified,
+        source,
     ))
     prescription_id = cur.lastrowid
     
@@ -623,7 +782,7 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
         mr_id=mr_id, doctor_id=doctor_id, doctor_name=doctor_name,
         specialty=doctor_info.get('specialty','') or doctor_info.get('department',''),
         district=district, upazila=upazila, territory=territory,
-        write_recent=True,
+        prescription_source=source, write_recent=True,
     )
 
     conn.commit()
@@ -1064,7 +1223,7 @@ def search_medex_db(q="", form="", limit=50):
 def get_recent_scanned_medicines(limit=50, offset=0, mr_id="", q="",
                                  company="", district="", territory="",
                                  specialty="", days=None, order="created_at",
-                                 direction="desc"):
+                                 direction="desc", source=""):
     """Paginated, searchable itemized feed backing the Recent Scans data grid."""
     conn = get_db()
     cur = conn.cursor()
@@ -1080,6 +1239,8 @@ def get_recent_scanned_medicines(limit=50, offset=0, mr_id="", q="",
         where.append("territory = ?"); params.append(territory)
     if specialty:
         where.append("specialty = ?"); params.append(specialty)
+    if source:
+        where.append("prescription_source = ?"); params.append(source)
     if days:
         where.append("created_at >= ?")
         params.append((datetime.now() - timedelta(days=int(days))).isoformat())
@@ -1129,6 +1290,8 @@ def get_filter_options():
             "SELECT DISTINCT company_name FROM prescribed_medicines WHERE IFNULL(company_name,'')!='' ORDER BY company_name"),
         "mr_ids": distinct(
             "SELECT DISTINCT mr_id FROM prescriptions WHERE IFNULL(mr_id,'')!='' ORDER BY mr_id"),
+        "sources": distinct(
+            "SELECT DISTINCT prescription_source FROM prescriptions WHERE IFNULL(prescription_source,'')!='' ORDER BY prescription_source"),
     }
     conn.close()
     return out
@@ -1137,7 +1300,7 @@ def get_filter_options():
 # ============ Global dashboard filtering ============
 
 def _filter_sql(district="", territory="", specialty="", mr_id="", days=None,
-                alias="p", doctor_alias="d"):
+                alias="p", doctor_alias="d", source=""):
     """Shared WHERE fragment so every widget honours the global filter bar."""
     where, params = [], []
     if district:
@@ -1148,7 +1311,324 @@ def _filter_sql(district="", territory="", specialty="", mr_id="", days=None,
         where.append(f"{alias}.mr_id = ?"); params.append(mr_id)
     if specialty:
         where.append(f"{doctor_alias}.specialty = ?"); params.append(specialty)
+    if source:
+        where.append(f"{alias}.prescription_source = ?"); params.append(source)
     if days:
         where.append(f"{alias}.timestamp >= ?")
         params.append((datetime.now() - timedelta(days=int(days))).isoformat())
     return (" AND " + " AND ".join(where)) if where else "", params
+
+
+# ============ Enterprise: officer profile, targets, reports, RSM ============
+
+def _kv_get(key, default=None):
+    conn = get_db()
+    row = conn.execute("SELECT value FROM app_kv WHERE key=?", (key,)).fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+
+def _kv_set(key, value):
+    conn = get_db()
+    conn.execute("INSERT OR REPLACE INTO app_kv (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()
+
+
+def get_current_employee_id():
+    return _kv_get("current_employee_id", "MR001") or "MR001"
+
+
+def set_own_company(name):
+    """Mark exactly one manufacturer as the officer's own company."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    cid = get_or_create_company(name)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE pharma_companies SET is_own_company=0")
+    cur.execute("UPDATE pharma_companies SET is_own_company=1 WHERE id=?", (cid,))
+    conn.commit()
+    conn.close()
+    return cid
+
+
+def get_officer_profile(employee_id=None):
+    employee_id = employee_id or get_current_employee_id()
+    conn = get_db()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT * FROM officer_profiles WHERE employee_id=?", (employee_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    profile = dict(row)
+    try:
+        profile["portfolio"] = json.loads(profile.get("portfolio") or "[]")
+    except (TypeError, json.JSONDecodeError):
+        profile["portfolio"] = []
+    month = datetime.now().strftime("%Y-%m")
+    targets = cur.execute(
+        "SELECT brand_name, monthly_target, month FROM brand_targets "
+        "WHERE employee_id=? AND month=?", (employee_id, month)
+    ).fetchall()
+    profile["targets"] = [dict(t) for t in targets]
+    profile["month"] = month
+    conn.close()
+    return profile
+
+
+def save_officer_profile(payload):
+    """Upsert the current officer identity card + company + brand targets."""
+    employee_id = (payload.get("employee_id") or "MR001").strip() or "MR001"
+    now = datetime.now().isoformat()
+    portfolio = payload.get("portfolio") or []
+    if isinstance(portfolio, str):
+        portfolio = [p.strip() for p in portfolio.split(",") if p.strip()]
+    company_name = (payload.get("company_name") or "").strip()
+    conn = get_db()
+    cur = conn.cursor()
+    existing = cur.execute(
+        "SELECT id FROM officer_profiles WHERE employee_id=?", (employee_id,)
+    ).fetchone()
+    fields = (
+        payload.get("full_name") or "Field Officer",
+        payload.get("role") or "MPO",
+        company_name,
+        payload.get("territory") or "",
+        payload.get("zone") or payload.get("territory") or "",
+        payload.get("division") or "",
+        json.dumps(portfolio),
+        payload.get("team_id") or "TEAM-BD-1",
+        now,
+    )
+    if existing:
+        cur.execute("""
+            UPDATE officer_profiles SET full_name=?, role=?, company_name=?,
+                territory=?, zone=?, division=?, portfolio=?, team_id=?, updated_at=?
+            WHERE employee_id=?
+        """, fields + (employee_id,))
+    else:
+        cur.execute("""
+            INSERT INTO officer_profiles
+            (employee_id, full_name, role, company_name, territory, zone,
+             division, portfolio, team_id, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        """, (employee_id,) + fields + (now,))
+    cur.execute(
+        "INSERT OR REPLACE INTO app_kv (key, value) VALUES ('current_employee_id', ?)",
+        (employee_id,),
+    )
+    conn.commit()
+    conn.close()
+    if company_name:
+        set_own_company(company_name)
+
+    targets = payload.get("targets") or []
+    if targets:
+        save_brand_targets(employee_id, targets, payload.get("month"))
+    return get_officer_profile(employee_id)
+
+
+def save_brand_targets(employee_id, targets, month=None):
+    month = month or datetime.now().strftime("%Y-%m")
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM brand_targets WHERE employee_id=? AND month=?",
+                (employee_id, month))
+    for t in targets:
+        brand = (t.get("brand_name") or "").strip()
+        if not brand:
+            continue
+        try:
+            tgt = int(t.get("monthly_target") or 0)
+        except (TypeError, ValueError):
+            tgt = 0
+        cur.execute("""
+            INSERT INTO brand_targets (employee_id, brand_name, monthly_target, month)
+            VALUES (?, ?, ?, ?)
+        """, (employee_id, brand, tgt, month))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_target_progress(employee_id=None, month=None):
+    """Compare this month's captured Rx against the officer's brand targets."""
+    employee_id = employee_id or get_current_employee_id()
+    month = month or datetime.now().strftime("%Y-%m")
+    conn = get_db()
+    cur = conn.cursor()
+    targets = cur.execute(
+        "SELECT brand_name, monthly_target FROM brand_targets "
+        "WHERE employee_id=? AND month=?", (employee_id, month)
+    ).fetchall()
+    start = f"{month}-01T00:00:00"
+    out = []
+    for t in targets:
+        brand = t["brand_name"]
+        captured = cur.execute("""
+            SELECT COUNT(*) AS c FROM prescribed_medicines pm
+            JOIN prescriptions p ON pm.prescription_id = p.id
+            WHERE p.mr_id=? AND p.timestamp >= ? AND pm.brand_name = ? COLLATE NOCASE
+        """, (employee_id, start, brand)).fetchone()["c"]
+        tgt = t["monthly_target"] or 0
+        pct = round(captured / tgt * 100, 1) if tgt else 0.0
+        out.append({
+            "brand_name": brand,
+            "monthly_target": tgt,
+            "captured": captured,
+            "remaining": max(tgt - captured, 0),
+            "percent": min(pct, 999.0),
+            "month": month,
+        })
+    conn.close()
+    return {"employee_id": employee_id, "month": month, "brands": out}
+
+
+def save_error_report(payload):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO error_reports
+        (prescription_id, mr_id, brand_name, reported_text, correction, notes, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
+    """, (
+        payload.get("prescription_id"),
+        payload.get("mr_id") or get_current_employee_id(),
+        payload.get("brand_name") or "",
+        payload.get("reported_text") or "",
+        payload.get("correction") or "",
+        payload.get("notes") or "",
+        datetime.now().isoformat(),
+    ))
+    rid = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return rid
+
+
+def list_error_reports(limit=50, status=""):
+    conn = get_db()
+    cur = conn.cursor()
+    if status:
+        rows = cur.execute(
+            "SELECT * FROM error_reports WHERE status=? ORDER BY id DESC LIMIT ?",
+            (status, int(limit)),
+        ).fetchall()
+    else:
+        rows = cur.execute(
+            "SELECT * FROM error_reports ORDER BY id DESC LIMIT ?", (int(limit),)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_own_vs_competitor(own_company_name=None, district="", territory="",
+                          specialty="", mr_id="", days=None, limit=15):
+    """Per-doctor Own Brand vs Competitor share — commercial conversion view."""
+    conn = get_db()
+    cur = conn.cursor()
+    if not own_company_name:
+        r = cur.execute(
+            "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+        ).fetchone()
+        own_company_name = r["name"] if r else "Healthcare Pharmaceuticals Ltd."
+    own_token = own_company_name.split()[0] if own_company_name else ""
+    fsql, fparams = _filter_sql(district, territory, specialty, mr_id, days)
+    cur.execute(f"""
+        SELECT p.doctor_name, d.specialty, d.district, d.territory,
+               COUNT(*) AS total,
+               SUM(CASE WHEN pm.company_name LIKE ? THEN 1 ELSE 0 END) AS own_cnt
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE IFNULL(p.doctor_name,'')!='' {fsql}
+        GROUP BY p.doctor_id
+        HAVING total > 0
+        ORDER BY total DESC
+        LIMIT ?
+    """, [f"%{own_token}%"] + fparams + [int(limit)])
+    doctors = []
+    for r in cur.fetchall():
+        total = r["total"] or 0
+        own = r["own_cnt"] or 0
+        comp = max(total - own, 0)
+        doctors.append({
+            "doctor_name": r["doctor_name"],
+            "specialty": r["specialty"] or "General",
+            "district": r["district"] or "",
+            "territory": r["territory"] or "",
+            "own": own,
+            "competitor": comp,
+            "total": total,
+            "own_share": round(own / total * 100, 1) if total else 0.0,
+            "competitor_share": round(comp / total * 100, 1) if total else 0.0,
+        })
+    conn.close()
+    return {"own_company": own_company_name, "doctors": doctors}
+
+
+def get_rsm_dashboard(team_id="", rsm_employee_id="", days=30):
+    """Aggregated prescription audits across the RSM's MPO team (50+)."""
+    conn = get_db()
+    cur = conn.cursor()
+    where, params = ["1=1"], []
+    if team_id:
+        where.append("team_id=?"); params.append(team_id)
+    if rsm_employee_id:
+        where.append("rsm_employee_id=?"); params.append(rsm_employee_id)
+    members = [dict(r) for r in cur.execute(
+        f"SELECT * FROM team_members WHERE {' AND '.join(where)} ORDER BY mpo_mr_id",
+        params,
+    ).fetchall()]
+    since = (datetime.now() - timedelta(days=int(days or 30))).isoformat()
+    own_row = cur.execute(
+        "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+    ).fetchone()
+    own_company = own_row["name"] if own_row else "Healthcare Pharmaceuticals Ltd."
+    own_token = own_company.split()[0]
+
+    team = []
+    tot_rx = tot_items = tot_own = 0
+    for m in members:
+        mr = m["mpo_mr_id"]
+        stats = cur.execute("""
+            SELECT COUNT(DISTINCT p.id) AS rx,
+                   COUNT(pm.id) AS items,
+                   SUM(CASE WHEN pm.company_name LIKE ? THEN 1 ELSE 0 END) AS own_items
+            FROM prescriptions p
+            LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+            WHERE p.mr_id=? AND p.timestamp >= ?
+        """, (f"%{own_token}%", mr, since)).fetchone()
+        rx = stats["rx"] or 0
+        items = stats["items"] or 0
+        own_items = stats["own_items"] or 0
+        tot_rx += rx
+        tot_items += items
+        tot_own += own_items
+        team.append({
+            **m,
+            "prescriptions": rx,
+            "items": items,
+            "own_items": own_items,
+            "competitor_items": max(items - own_items, 0),
+            "sov_percent": round(own_items / items * 100, 1) if items else 0.0,
+        })
+    team.sort(key=lambda x: x["prescriptions"], reverse=True)
+    conn.close()
+    return {
+        "team_size": len(members),
+        "days": int(days or 30),
+        "own_company": own_company,
+        "totals": {
+            "prescriptions": tot_rx,
+            "items": tot_items,
+            "own_items": tot_own,
+            "competitor_items": max(tot_items - tot_own, 0),
+            "sov_percent": round(tot_own / tot_items * 100, 1) if tot_items else 0.0,
+        },
+        "members": team,
+    }
