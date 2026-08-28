@@ -1632,3 +1632,95 @@ def get_rsm_dashboard(team_id="", rsm_employee_id="", days=30):
         },
         "members": team,
     }
+
+
+def get_rsm_trends(team_id="", rsm_employee_id="", days=30):
+    """Week-over-week Share-of-Voice series per team member.
+
+    Buckets the `days` window into ~7-day bins and returns per-MPO a list of
+    `{week, own, competitor, rx, sov}` points so the RSM can render a sparkline
+    showing whether the team is gaining ground on competitors.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    where, params = ["1=1"], []
+    if team_id:
+        where.append("team_id=?"); params.append(team_id)
+    if rsm_employee_id:
+        where.append("rsm_employee_id=?"); params.append(rsm_employee_id)
+    members = [dict(r) for r in cur.execute(
+        f"SELECT * FROM team_members WHERE {' AND '.join(where)} ORDER BY mpo_mr_id",
+        params,
+    ).fetchall()]
+    days = int(days or 30)
+    base = datetime.now() - timedelta(days=days)
+    since = base.isoformat()
+    bucket_count = max(1, (days + 6) // 7)
+    own_row = cur.execute(
+        "SELECT name FROM pharma_companies WHERE is_own_company=1 LIMIT 1"
+    ).fetchone()
+    own_company = own_row["name"] if own_row else "Healthcare Pharmaceuticals Ltd."
+    own_token = own_company.split()[0]
+
+    def _bucket(iso):
+        try:
+            dt = datetime.fromisoformat(str(iso))
+        except Exception:
+            return -1
+        diff = (dt - base).days
+        return int(diff // 7) if diff >= 0 else -1
+
+    trends = []
+    for m in members:
+        mr = m["mpo_mr_id"]
+        rows = cur.execute("""
+            SELECT p.timestamp, pm.company_name
+            FROM prescriptions p
+            LEFT JOIN prescribed_medicines pm ON pm.prescription_id = p.id
+            WHERE p.mr_id=? AND p.timestamp >= ?
+        """, (mr, since)).fetchall()
+        own = [0] * bucket_count
+        comp = [0] * bucket_count
+        rx = [0] * bucket_count
+        for r in rows:
+            b = _bucket(r["timestamp"])
+            if b < 0 or b >= bucket_count:
+                continue
+            rx[b] += 1
+            if own_token and own_token.lower() in (r["company_name"] or "").lower():
+                own[b] += 1
+            else:
+                comp[b] += 1
+        series = []
+        for b in range(bucket_count):
+            total = own[b] + comp[b]
+            series.append({
+                "week": b + 1,
+                "label": f"W{b + 1}",
+                "own": own[b],
+                "competitor": comp[b],
+                "rx": rx[b],
+                "sov": round(own[b] / total * 100, 1) if total else 0.0,
+            })
+        # week-over-week growth of own prescriptions (last full vs previous)
+        growth = 0.0
+        prev = None
+        for s in series:
+            if prev is None:
+                prev = s["own"]
+                continue
+            if prev > 0:
+                growth = round((s["own"] - prev) / prev * 100, 1)
+            prev = s["own"]
+        trends.append({
+            **m,
+            "series": series,
+            "own_growth": growth,
+        })
+    conn.close()
+    return {
+        "own_company": own_company,
+        "days": days,
+        "bucket_count": bucket_count,
+        "trends": trends,
+    }

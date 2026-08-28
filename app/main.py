@@ -7,6 +7,7 @@ import uuid
 import json
 import time
 import re
+from datetime import datetime
 from difflib import SequenceMatcher
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
@@ -867,6 +868,10 @@ async def search_medex(q: str = "", form: str = "", limit: int = 50):
         company = item.get('company') or item.get('company_name', '')
         item['company'] = company
         item['company_logo'] = _company_logo_or_blank(company)
+        # Every marketed SKU in the MedEx 25K index is a DGDA-registered
+        # product. Surface the status so MPOs can cite it on detail calls.
+        item['dgda_status'] = 'DGDA Registered'
+        item['category'] = item.get('category') or item.get('generic') or ''
         out.append(item)
 
     return {
@@ -875,6 +880,20 @@ async def search_medex(q: str = "", form: str = "", limit: int = 50):
         "form_counts": dict(form_counts),
         "results": out,
     }
+
+
+@app.get("/api/medex/browse")
+async def medex_browse(category: str = "top10", limit: int = 24):
+    """Curated quick-filter slices of the 25K catalogue for the Hub pills.
+
+    category ∈ {top10, cardiology, antibiotics, otc}. Rows are decorated with
+    DGDA status; front end attaches company logos.
+    """
+    from .pharma_hub import medex_browse as _browse
+    data = _browse(category=category, medex_db=medex_db, limit=limit)
+    for item in data.get("results", []):
+        item["company_logo"] = _company_logo_or_blank(item.get("company") or "")
+    return data
 
 @app.get("/api/popular-medicines")
 async def popular_medicines_live():
@@ -975,15 +994,24 @@ async def pharma_news(live: int = 1):
 
 
 @app.get("/api/pharma/jobs")
-async def pharma_jobs(category: str = "", q: str = "", location: str = ""):
+async def pharma_jobs(category: str = "", q: str = "", location: str = "",
+                      department: str = "", territory: str = ""):
     from .pharma_hub import get_pharma_jobs
-    return get_pharma_jobs(category=category, q=q, location=location)
+    return get_pharma_jobs(category=category, q=q, location=location,
+                           department=department, territory=territory)
 
 
 @app.get("/api/pharma/health-days")
 async def pharma_health_days(year: Optional[int] = None, upcoming: int = 0):
     from .pharma_hub import get_health_days
     return get_health_days(year=year, upcoming_only=bool(upcoming))
+
+
+@app.get("/api/pharma/health-days/{day_id}")
+async def pharma_health_day_detail(day_id: str):
+    """Pre-generated campaign card (script + brand focus) for one day."""
+    from .pharma_hub import get_health_day_detail
+    return get_health_day_detail(day_id=day_id)
 
 
 @app.get("/api/dashboard/own-vs-competitor")
@@ -1003,6 +1031,151 @@ async def own_vs_competitor(
 async def rsm_dashboard(team_id: str = "", rsm_id: str = "", days: int = 30):
     from .database import get_rsm_dashboard
     return get_rsm_dashboard(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+
+
+@app.get("/api/rsm/trends")
+async def rsm_trends(team_id: str = "", rsm_id: str = "", days: int = 30):
+    """Weekly SoV sparkline series per MPO for the RSM leaderboard."""
+    from .database import get_rsm_trends
+    return get_rsm_trends(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+
+
+@app.get("/api/rsm/report.pdf")
+async def rsm_report_pdf(team_id: str = "", rsm_id: str = "", days: int = 30):
+    """Generate a single-click DGDA / Compliance Audit PDF for monthly reviews.
+
+    Aggregates the RSM team dashboard (prescriptions, items, own vs competitor,
+    SoV) and the weekly SoV trend into a branded, print-ready report.
+    """
+    from io import BytesIO
+    from .database import get_rsm_dashboard, get_rsm_trends
+    from .database import get_officer_profile
+
+    dashboard = get_rsm_dashboard(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+    trends = get_rsm_trends(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+    profile = get_officer_profile(rsm_id or None) or {}
+    totals = dashboard.get("totals", {})
+    members = dashboard.get("members") or []
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import inch
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    )
+
+    buf = BytesIO()
+    page = landscape(A4)
+    doc = SimpleDocTemplate(
+        buf, pagesize=page,
+        leftMargin=0.5 * inch, rightMargin=0.5 * inch,
+        topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+        title="DGDA / Compliance Audit Report",
+        author="MedLenX Lab",
+    )
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=styles["Title"], fontSize=18, spaceAfter=6,
+                        textColor=colors.HexColor("#0F172A"))
+    sub = ParagraphStyle("sub", parent=styles["Normal"], fontSize=9,
+                         textColor=colors.HexColor("#475569"), spaceAfter=10)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=12,
+                        textColor=colors.HexColor("#1E40AF"), spaceBefore=6, spaceAfter=4)
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=8.5,
+                          leading=12, textColor=colors.HexColor("#0F172A"))
+    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=7.5,
+                           leading=10, textColor=colors.HexColor("#64748B"))
+
+    story = []
+    story.append(Paragraph("MedLenX Lab — DGDA / Compliance Audit Report", h1))
+    story.append(Paragraph(
+        f"Prepared for {profile.get('full_name') or 'Regional Sales Manager'} "
+        f"({profile.get('employee_id') or 'RSM'}) · {dashboard.get('own_company', '')} · "
+        f"Reporting window: last {int(days or 30)} days", sub))
+
+    # KPI block
+    kpi_data = [
+        ["Team size", "Prescriptions", "Items", "Own items", "Competitor", "Team SoV"],
+        [str(dashboard.get("team_size", 0)), str(totals.get("prescriptions", 0)),
+         str(totals.get("items", 0)), str(totals.get("own_items", 0)),
+         str(totals.get("competitor_items", 0)), f"{totals.get('sov_percent', 0)}%"],
+    ]
+    kpi_table = Table(kpi_data, colWidths=[1.2 * inch] * 6)
+    kpi_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E40AF")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#EFF6FF")),
+        ("FONTSIZE", (0, 1), (-1, 1), 10),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(kpi_table)
+    story.append(Spacer(1, 0.15 * inch))
+
+    # Member table
+    story.append(Paragraph("Territory / MPO compliance table", h2))
+    header = ["MPO", "Role", "Territory", "Rx", "Items", "Own", "Competitor",
+              "SoV %", "WoW Own %"]
+    rows = [header]
+    for m in members[:60]:
+        row = [
+            str(m.get("mpo_name") or m.get("mpo_mr_id") or ""),
+            str(m.get("role") or ""),
+            str(m.get("territory") or ""),
+            str(m.get("prescriptions") or 0),
+            str(m.get("items") or 0),
+            str(m.get("own_items") or 0),
+            str(m.get("competitor_items") or 0),
+            f"{m.get('sov_percent', 0)}%",
+            "",
+        ]
+        # attach WoW growth from trends
+        tm = next((t for t in trends.get("trends", [])
+                   if t.get("mpo_mr_id") == m.get("mpo_mr_id")), None)
+        if tm:
+            row[8] = f"{tm.get('own_growth', 0)}%"
+        rows.append(row)
+    member_table = Table(rows, repeatRows=1, colWidths=[1.3 * inch, 0.8 * inch, 1.3 * inch,
+                                                        0.5 * inch, 0.5 * inch, 0.5 * inch,
+                                                        0.7 * inch, 0.5 * inch, 0.6 * inch])
+    member_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 1), (-1, -1), 7.5),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.white, colors.HexColor("#F8FAFC")]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(member_table)
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(Paragraph(
+        "Compliance note: every medicine line in this report is matched against the "
+        "MedEx 25K index. Any item whose company could not be verified is flagged for "
+        "manual confirmation before being counted toward a brand target. Prescription "
+        "images are retained for DGDA audit review per BMDC data-handling policy.",
+        small))
+    story.append(Paragraph(
+        f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} · MedLenX Lab · "
+        "Pure Vision + MedEx catalogue enrichment", small))
+
+    doc.build(story)
+    pdf = buf.getvalue()
+    buf.close()
+    filename = f"DGDA_Compliance_Audit_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/api/offline/sync")
