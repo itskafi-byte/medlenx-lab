@@ -55,6 +55,29 @@ def _load_neml() -> Dict[str, Any]:
     return data
 
 
+def _molecule_key_match(mk: str, key: str, min_len: int = 5) -> bool:
+    """Word-boundary molecule matching that rejects substring collisions.
+
+    'Dapagliflozin' matches 'Dapagliflozin 10 mg' (strength tail), and
+    'Vitamin D' matches 'Vitamin D3' (numeric tail), but 'Omeprazole' must
+    NOT match 'Esomeprazole' — the pair differs by a letter prefix, which
+    makes raw substring containment unsafe for molecule names.
+    """
+    if not mk or not key:
+        return False
+    if mk == key:
+        return True
+    if re.search(rf"(?:^| ){re.escape(mk)}(?: |$)", key):
+        return len(mk) >= min_len
+    m = re.search(rf"(?:^| ){re.escape(key)}(?: |$)", mk)
+    if m and len(key) >= min_len:
+        remainder = (mk[:m.start()] + mk[m.end():]).strip()
+        # allow only strength-like remainders ('3', 'd3', '20 mg')
+        return bool(re.fullmatch(r"[a-z0-9+\- ]*", remainder or "")) and \
+            bool(re.search(r"\d", remainder or ""))
+    return False
+
+
 def neml_lookup(generic: str = "", ingredient: str = "") -> Dict[str, Any]:
     """NEML membership for a molecule (the drawer's blue pill).
 
@@ -72,16 +95,12 @@ def neml_lookup(generic: str = "", ingredient: str = "") -> Dict[str, Any]:
         if hit:
             return {"listed": True, "molecule": hit.get("molecule", raw),
                     "class": hit.get("class", ""), "category": hit.get("category", "")}
-        # containment both ways (strip dosage tails from ingredient blobs)
+        # word-boundary containment (strips dosage tails, rejects collisions)
         for mk, m in index.items():
-            if not mk:
-                continue
-            if mk in key or key in mk:
-                # guard against 3-letter fragments matching everything
-                if len(mk) >= 5 or len(key) >= 5:
-                    return {"listed": True, "molecule": m.get("molecule", ""),
-                            "class": m.get("class", ""),
-                            "category": m.get("category", "")}
+            if _molecule_key_match(mk, key):
+                return {"listed": True, "molecule": m.get("molecule", ""),
+                        "class": m.get("class", ""),
+                        "category": m.get("category", "")}
     return {"listed": False, "molecule": "", "class": "", "category": ""}
 
 
@@ -281,6 +300,99 @@ def clinical_summary(items: List[dict]) -> Dict[str, Any]:
             "brands": [a.get("brand_name") for a in abx if a.get("brand_name")],
         },
     }
+
+
+# -------------------------------------------------- TRIPS waiver tracker --
+_TRIPS_CACHE: Dict[str, Any] = {}
+
+
+def load_trips() -> Dict[str, Any]:
+    """TRIPS/LDC-waiver watch dataset (data/trips_waiver.json)."""
+    if "data" in _TRIPS_CACHE:
+        return _TRIPS_CACHE["data"]
+    path = os.path.join(settings.DATA_DIR, "trips_waiver.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        print(f"⚠️  could not load {path}: {exc}")
+        data = {"waiver_expiry": "", "molecules": []}
+    index: Dict[str, dict] = {}
+    for m in data.get("molecules", []):
+        index[_norm(m.get("molecule", ""))] = m
+    data["_index"] = index
+    _TRIPS_CACHE["data"] = data
+    return data
+
+
+def trips_lookup(generic: str = "", ingredient: str = "") -> Dict[str, Any]:
+    """TRIPS-waiver watch entry for a molecule (PMD portfolio tracker).
+
+    Returns ``{"watch": False}`` when the molecule is not on the list;
+    otherwise the molecule record (originator, watch_level, note).
+    """
+    data = load_trips()
+    index: Dict[str, dict] = data.get("_index", {})
+    for raw in (generic, ingredient):
+        key = _norm(raw)
+        if not key:
+            continue
+        hit = index.get(key)
+        if hit:
+            return {"watch": True, **{k: hit.get(k, "") for k in
+                                      ("molecule", "class", "originator",
+                                       "watch_level", "note")}}
+        for mk, m in index.items():
+            if _molecule_key_match(mk, key):
+                return {"watch": True, **{k: m.get(k, "") for k in
+                                          ("molecule", "class", "originator",
+                                           "watch_level", "note")}}
+    return {"watch": False, "molecule": "", "originator": "",
+            "watch_level": "", "note": ""}
+
+
+def trips_expiry() -> str:
+    """LDC pharmaceutical waiver expiry (2033-01-01) for display."""
+    return (load_trips().get("waiver_expiry") or "").split(" ")[0]
+
+
+# --------------------------------------- MPO pitch evidence notes --------
+def substitution_evidence_notes(sub: Dict[str, Any]) -> Dict[str, str]:
+    """Bioequivalence + dosage-advantage lines for the Doctor Pitch Card.
+
+    Factual only: derived from the MedEx catalogue comparison (same molecule,
+    matched strength/form), never invented clinical claims.
+    """
+    comp = sub.get("competitor") or {}
+    own = sub.get("own_brand") or {}
+    generic = sub.get("generic") or own.get("generic") or comp.get("generic") or ""
+    bioequiv = (
+        f"Both products are DGDA-registered formulations of the same molecule "
+        f"({generic}) — therapeutic substitutes under the DGDA generic "
+        f"substitution framework."
+        if generic else
+        "Both products are DGDA-registered formulations of the same molecule — "
+        "therapeutic substitutes under the DGDA generic substitution framework."
+    )
+    cs = _norm(comp.get("strength"))
+    ct = _norm(comp.get("type"))
+    os_ = _norm(own.get("strength"))
+    ot = _norm(own.get("type"))
+    if cs and os_ and cs == os_:
+        if ct and ot and ct == ot:
+            dosage = (f"Identical strength ({comp.get('strength')}) and dosage "
+                      f"form ({comp.get('type')}) — no dose titration needed "
+                      f"when switching.")
+        else:
+            dosage = (f"Identical strength ({comp.get('strength')}) — same "
+                      f"dose, different pack form; switching needs no titration.")
+    elif cs and os_:
+        dosage = (f"Strength differs ({comp.get('strength')} vs "
+                  f"{own.get('strength')}) — confirm the equivalent dose and "
+                  f"titrate before switching the patient.")
+    else:
+        dosage = "Confirm pack-strength equivalence before switching."
+    return {"bioequiv": bioequiv, "dosage_advantage": dosage}
 
 
 # ------------------------------------------------------- geofencing -------

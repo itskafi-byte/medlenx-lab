@@ -1850,6 +1850,183 @@ def get_scan_points(days=30, limit=2000):
     return [d for d in out if d.get("lat") is not None and d.get("lng") is not None]
 
 
+# ============ TRIPS Waiver Portfolio Tracker (PMD) ============
+
+def get_trips_portfolio(days=90):
+    """Field-volume trends for TRIPS-waiver watch molecules, per territory.
+
+    Joins the watch list (compliance.load_trips) against prescribed_medicines
+    so PMD sees where high-priority generics are actually being written and
+    whether that volume is rising or falling versus the previous period.
+    """
+    from .compliance import load_trips, _molecule_key_match
+    data = load_trips()
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now()
+    since = (now - timedelta(days=int(days))).isoformat()
+    prev_since = (now - timedelta(days=2 * int(days))).isoformat()
+
+    rows = cur.execute("""
+        SELECT pm.generic_name, pm.brand_name, p.territory, p.district,
+               p.timestamp
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        WHERE p.timestamp >= ?
+    """, (prev_since,)).fetchall()
+    conn.close()
+
+    stats = {}
+    boundary = since
+    for r in rows:
+        g = (r["generic_name"] or "").strip()
+        if not g:
+            continue
+        entry = None
+        gk = " ".join(str(g).lower().split())
+        for mk, m in (data.get("_index") or {}).items():
+            if _molecule_key_match(mk, gk):
+                entry = m
+                break
+        if not entry:
+            continue
+        key = entry["molecule"]
+        st = stats.setdefault(key, {"current": 0, "prev": 0,
+                                    "territories": {}, "brands": set(),
+                                    "meta": entry})
+        if r["timestamp"] >= boundary:
+            st["current"] += 1
+        else:
+            st["prev"] += 1
+        terr = r["territory"] or r["district"] or "Unknown"
+        st["territories"][terr] = st["territories"].get(terr, 0) + 1
+        if r["brand_name"]:
+            st["brands"].add(r["brand_name"])
+
+    out = []
+    for key, st in stats.items():
+        meta = st["meta"]
+        delta = st["current"] - st["prev"]
+        pct = round(delta * 100.0 / st["prev"], 1) if st["prev"] else None
+        top_terr = sorted(st["territories"].items(),
+                          key=lambda kv: -kv[1])[:3]
+        out.append({
+            "molecule": key,
+            "class": meta.get("class", ""),
+            "originator": meta.get("originator", ""),
+            "watch_level": meta.get("watch_level", "medium"),
+            "note": meta.get("note", ""),
+            "current_volume": st["current"],
+            "prev_volume": st["prev"],
+            "delta": delta,
+            "delta_pct": pct,
+            "top_territories": [{"name": t, "count": c} for t, c in top_terr],
+            "brands": sorted(st["brands"])[:5],
+        })
+    # dataset order (watch_level critical first) for molecules with no field
+    # volume yet, so PMD still sees the full watch list
+    seen = {o["molecule"] for o in out}
+    for m in data.get("molecules", []):
+        if m["molecule"] not in seen:
+            out.append({
+                "molecule": m["molecule"], "class": m.get("class", ""),
+                "originator": m.get("originator", ""),
+                "watch_level": m.get("watch_level", "medium"),
+                "note": m.get("note", ""), "current_volume": 0,
+                "prev_volume": 0, "delta": 0, "delta_pct": None,
+                "top_territories": [], "brands": [],
+            })
+    level_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    out.sort(key=lambda o: (level_rank.get(o["watch_level"], 9),
+                            -o["current_volume"], o["molecule"]))
+    return {
+        "waiver_expiry": data.get("waiver_expiry", ""),
+        "ldc_graduation": data.get("ldc_graduation", ""),
+        "context": data.get("context", ""),
+        "days": int(days),
+        "molecules": out,
+        "totals": {
+            "watched": len(out),
+            "with_field_volume": sum(1 for o in out if o["current_volume"]),
+            "volume": sum(o["current_volume"] for o in out),
+            "rising": sum(1 for o in out if o["delta"] > 0),
+        },
+    }
+
+
+# ============ Antibiotic Stewardship Monitor (per doctor chamber) ============
+
+def get_stewardship_summary(days=30, limit=100):
+    """Per-doctor antibiotic prescribing audit for field managers.
+
+    Classifies every prescribed item's molecule with the compliance layer and
+    aggregates per doctor: items, antibiotic items, broad-spectrum items and
+    the antibiotic share of that chamber's prescribing.
+    """
+    from .compliance import is_antibiotic, is_broad_spectrum
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    rows = cur.execute("""
+        SELECT p.doctor_id, p.doctor_name, d.specialty, d.district,
+               pm.generic_name, pm.brand_name
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE p.timestamp >= ? AND IFNULL(p.doctor_name,'') != ''
+    """, (since,)).fetchall()
+    conn.close()
+
+    docs = {}
+    for r in rows:
+        key = r["doctor_id"] or r["doctor_name"]
+        d = docs.setdefault(key, {
+            "doctor_name": r["doctor_name"], "specialty": r["specialty"] or "",
+            "district": r["district"] or "", "rx_ids": set(),
+            "items": 0, "abx_items": 0, "broad_items": 0, "abx_brands": set(),
+        })
+        d["rx_ids"].add(True)
+        d["items"] += 1
+        g = r["generic_name"] or ""
+        if is_antibiotic(g):
+            d["abx_items"] += 1
+            if r["brand_name"]:
+                d["abx_brands"].add(r["brand_name"])
+            if is_broad_spectrum(g):
+                d["broad_items"] += 1
+
+    out = []
+    for d in docs.values():
+        share = round(d["abx_items"] * 100.0 / d["items"], 1) if d["items"] else 0.0
+        out.append({
+            "doctor_name": d["doctor_name"],
+            "specialty": d["specialty"],
+            "district": d["district"],
+            "rx": len(d["rx_ids"]),
+            "items": d["items"],
+            "abx_items": d["abx_items"],
+            "broad_items": d["broad_items"],
+            "abx_share_pct": share,
+            "abx_brands": sorted(d["abx_brands"])[:5],
+        })
+    out.sort(key=lambda x: (-x["abx_items"], -x["abx_share_pct"]))
+    flagged = [x for x in out if x["abx_items"] > 0]
+    return {
+        "days": int(days),
+        "doctors": out[:limit],
+        "totals": {
+            "doctors_audited": len(out),
+            "doctors_with_abx": len(flagged),
+            "items": sum(x["items"] for x in out),
+            "abx_items": sum(x["abx_items"] for x in out),
+            "broad_items": sum(x["broad_items"] for x in out),
+            "abx_share_pct": round(
+                (sum(x["abx_items"] for x in out) * 100.0
+                 / max(sum(x["items"] for x in out), 1)), 1),
+        },
+    }
+
+
 def save_error_report(payload):
     conn = get_db()
     cur = conn.cursor()

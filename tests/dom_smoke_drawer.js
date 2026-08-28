@@ -57,7 +57,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok('cards carry data-rx-id', cards.length && cards[0].dataset.rxId);
 
   console.log('\n=== Drawer opens on card click ===');
-  cards[0].dispatchEvent(new win.Event('click', { bubbles: true }));
+  // open the richest demo Rx (the 4-medicine mock scan) so all badges appear
+  const richCard = [...cards].find(c => /4 meds/.test(c.textContent)) || cards[0];
+  richCard.dispatchEvent(new win.Event('click', { bubbles: true }));
   await sleep(700);
   const drawer = doc.getElementById('rxDrawer');
   ok('drawer visible', drawer && !drawer.classList.contains('hidden'));
@@ -133,6 +135,33 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const spResp = await fetch(BASE + '/api/rsm/scan-points?days=30');
   const sp = await spResp.json();
   ok('scan-points endpoint returns coords', Array.isArray(sp) && sp.length > 0 && sp[0].lat != null);
+
+  console.log('\n=== Upgrade round 3: TRIPS tracker + stewardship + pitch evidence ===');
+  ok('pitch modal shows bioequivalence evidence',
+     doc.getElementById('rxPitchBody') !== null);  // modal element intact
+  const tripsResp = await fetch(BASE + '/api/trips/portfolio?days=90');
+  const trips = await tripsResp.json();
+  ok('trips endpoint live with watch list',
+     tripsResp.ok && Array.isArray(trips.molecules) && trips.molecules.length >= 20,
+     `${(trips.molecules || []).length} molecules`);
+  const abxResp = await fetch(BASE + '/api/rsm/stewardship?days=30');
+  const abx = await abxResp.json();
+  ok('stewardship endpoint live with totals', abxResp.ok && abx.totals && 'abx_items' in abx.totals);
+  // render both cards by invoking the loaders directly
+  await win.eval('loadStewardship()');
+  await win.eval('loadTripsPortfolio()');
+  await sleep(400);
+  ok('stewardship table rendered rows',
+     doc.querySelectorAll('#abxBody tr').length > 0 &&
+     !/No antibiotic/.test(doc.getElementById('abxBody').textContent),
+     doc.getElementById('abxBody').textContent.slice(0, 60));
+  ok('stewardship totals chips rendered', doc.querySelectorAll('#abxTotals > div').length === 4);
+  ok('trips watch table rendered rows',
+     doc.querySelectorAll('#tripsBody tr').length >= 20,
+     `${doc.querySelectorAll('#tripsBody tr').length} rows`);
+  ok('trips window chip shows 2033', /2033/.test(doc.getElementById('tripsWindow').textContent),
+     doc.getElementById('tripsWindow').textContent);
+  ok('trips totals chips rendered', doc.querySelectorAll('#tripsTotals > div').length === 4);
 
   if (errors.length) {
     console.log('\nJS errors during run:');

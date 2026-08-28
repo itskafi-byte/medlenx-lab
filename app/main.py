@@ -30,7 +30,8 @@ from .rx_audit import (
 )
 from .compliance import (
     neml_lookup, is_antibiotic, is_broad_spectrum, resolve_therapeutic_class,
-    price_ceiling_alert, clinical_summary, territory_check,
+    price_ceiling_alert, clinical_summary, territory_check, trips_lookup,
+    trips_expiry, substitution_evidence_notes,
 )
 from .medlenx_client import MedLenXVLClient
 from .medicine_matcher import (
@@ -974,6 +975,12 @@ async def prescription_audit_detail(pid: int):
                 sub = generic_substitution(med, own, medex_db)
             except Exception:
                 sub = None
+        if sub:
+            # factual bioequivalence / dosage-advantage lines for the pitch card
+            try:
+                sub["_evidence"] = substitution_evidence_notes(sub)
+            except Exception:
+                pass
         items.append({
             "brand_name": med.get("brand_name", ""),
             "strength": med.get("strength", ""),
@@ -997,6 +1004,8 @@ async def prescription_audit_detail(pid: int):
             "is_antibiotic": abx,
             "broad_spectrum": bool(abx and is_broad_spectrum(generic, ingredient)),
             "dgda_price_alert": t_alert,
+            # TRIPS-waiver portfolio watch (PMD tracker)
+            "trips": trips_lookup(generic, ingredient),
         })
 
     market_share = build_market_share(medicines, own)
@@ -1179,6 +1188,17 @@ async def pitch_card_pdf(pid: int, idx: int = 0):
     delta = sub.get("unit_difference_label")
     if delta:
         story.append(Paragraph(f"• Price position: {delta}", body))
+
+    # Bioequivalence & dosage-advantage evidence (factual, catalogue-derived)
+    notes = substitution_evidence_notes(sub)
+    story.append(Paragraph("Bioequivalence & dosage", h2))
+    story.append(Paragraph(f"• {notes['bioequiv']}", body))
+    story.append(Paragraph(f"• {notes['dosage_advantage']}", body))
+    trips = item.get("trips") or {}
+    if trips.get("watch"):
+        story.append(Paragraph(
+            f"• TRIPS watch molecule ({trips.get('originator') or 'originator'} "
+            f"patent-sensitive) — BD generic waiver window to 2033", body))
 
     story.append(Paragraph("Smart pitch script", h2))
     story.append(Paragraph(sub.get("pitch", ""), body))
@@ -1481,6 +1501,23 @@ async def rsm_scan_points(days: int = 30, limit: int = 2000):
     """Point-level audit locations for the density-clustering map."""
     from .database import get_scan_points
     return get_scan_points(days=days, limit=limit)
+
+
+@app.get("/api/rsm/stewardship")
+async def rsm_stewardship(days: int = 30, limit: int = 100):
+    """Antibiotic Stewardship Monitor — per doctor chamber ABX audit trends."""
+    from .database import get_stewardship_summary
+    return get_stewardship_summary(days=days, limit=limit)
+
+
+@app.get("/api/trips/portfolio")
+async def trips_portfolio(days: int = 90):
+    """TRIPS Waiver Portfolio Tracker — field volume trends per watch molecule
+    (LDC pharma waiver window to 2033) for PMD teams."""
+    from .database import get_trips_portfolio
+    payload = get_trips_portfolio(days=days)
+    payload["waiver_expiry"] = payload.get("waiver_expiry") or trips_expiry()
+    return payload
 
 
 @app.get("/api/rsm/report.pdf")

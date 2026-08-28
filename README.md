@@ -114,6 +114,25 @@ Output JSON example:
   zoom-aware grid clusters of audit pins with counts, chamber hotspots and
   off-territory/duplicate counters (`/api/rsm/scan-points`).
 
+## TRIPS Waiver Portfolio Tracker & Stewardship Monitor
+
+- **TRIPS Waiver Portfolio Tracker** (Pharma Intelligence Hub) — the LDC
+  pharmaceutical TRIPS waiver runs to **1 Jan 2033**; `data/trips_waiver.json`
+  watch-lists 26 high-priority molecules (Dapagliflozin, Rivaroxaban,
+  Empagliflozin, Adalimumab...) with originator + criticality. The tracker
+  joins that list against real prescription scans: per-molecule field volume,
+  delta vs the previous period and top territories, so PMD sees which watch
+  brands are being written where. Drawer rows for watched molecules get an
+  amber `TRIPS Watch` pill (`GET /api/trips/portfolio`).
+- **Antibiotic Stewardship Monitor** (RSM Command) — per doctor chamber ABX
+  audit: items scanned, antibiotic items, broad-spectrum ★ count and ABX share
+  bar, plus clinic-wide totals (`GET /api/rsm/stewardship`).
+- **Doctor Pitch Card evidence** — the pitch card (modal + PDF) now includes
+  factual bioequivalence ("both products are DGDA-registered formulations of
+  the same molecule") and dosage-advantage lines (identical strength → no
+  titration; differing → titrate first), plus a TRIPS-watch note when the
+  molecule is on the waiver tracker.
+
 ## API
 
 - `POST /api/scan` - upload image, returns doctor + medicines with MedEx images (+ `duplicate` fraud alert when the same Rx was scanned before)
@@ -126,6 +145,8 @@ Output JSON example:
 - `GET /api/prescriptions/{pid}/pitch-card.pdf?idx=` - one-page MPO Doctor Pitch Card (PDF) for a matched competitor row
 - `GET /api/rsm/off-territory` - geofenced audits captured outside the officer's assigned territory
 - `GET /api/rsm/scan-points` - point-level audit locations for the density-clustering map
+- `GET /api/trips/portfolio?days=90` - TRIPS waiver watch list with field volume trends per territory
+- `GET /api/rsm/stewardship?days=30` - per-chamber antibiotic prescribing audit
 - `GET /api/medex?q=Napa&form=Tablet&limit=20` - search scraped DB
 - `GET /api/health` - model + DB count
 
