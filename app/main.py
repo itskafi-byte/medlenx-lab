@@ -21,7 +21,12 @@ from .config import settings
 from .database import (
     init_db, save_prescription, get_all_prescriptions, get_prescription_by_id, delete_prescription, get_stats,
     get_dashboard_kpis, get_most_prescribed_medicines, get_company_share, get_top_doctor_prescribers,
-    get_generic_brand_matrix, search_medex_db, get_bengali_normalized_dosage, save_medicine_to_catalog
+    get_generic_brand_matrix, search_medex_db, get_bengali_normalized_dosage, save_medicine_to_catalog,
+    add_doctor_target, remove_doctor_target, get_doctor_targets, get_recent_target_visits
+)
+from .rx_audit import (
+    compute_phash, hamming_distance, build_market_share, items_to_csv,
+    items_to_clipboard, DUPLICATE_THRESHOLD,
 )
 from .medlenx_client import MedLenXVLClient
 from .medicine_matcher import (
@@ -626,10 +631,29 @@ async def scan_prescription(
         }
     }
 
+    # Perceptual hash for the Duplicate-Rx fraud alert (never fails a scan).
+    image_phash = compute_phash(save_path)
+
     try:
-        pid = save_prescription(save_path, result, mr_id=mr_id, geo_lat=geo_lat, geo_lng=geo_lng, upazila=upazila, district=district, territory=territory, is_verified=is_verified)
+        pid = save_prescription(save_path, result, mr_id=mr_id, geo_lat=geo_lat, geo_lng=geo_lng, upazila=upazila, district=district, territory=territory, is_verified=is_verified, image_phash=image_phash)
         result["id"] = pid
         result["saved_image_path"] = f"/uploads/prescriptions/{unique_name}"
+        saved = get_prescription_by_id(pid) if pid else None
+        result["image_phash"] = (saved or {}).get("image_phash") or image_phash
+        if saved and saved.get("duplicate_of"):
+            orig = get_prescription_by_id(saved["duplicate_of"]) or {}
+            result["duplicate"] = {
+                "duplicate_of": orig.get("id"),
+                "mr_id": orig.get("mr_id", ""),
+                "first_scanned_at": orig.get("timestamp", ""),
+                "image_url": f"/uploads/prescriptions/{os.path.basename(orig.get('image_path') or '')}",
+                "message": (
+                    "Duplicate Rx detected — this physical prescription appears "
+                    f"to have been scanned before (Rx #{orig.get('id')}, "
+                    f"{orig.get('mr_id') or 'unknown MR'}). "
+                    "Flagged for RSM review before it counts toward targets."
+                ),
+            }
     except Exception as e:
         print(f"DB error: {e}")
         result["id"] = None
@@ -874,6 +898,136 @@ async def list_prescriptions(limit: int = 50):
             pass
     return {"prescriptions": rows, "stats": get_stats()}
 
+
+@app.get("/api/prescriptions/{pid}")
+async def prescription_audit_detail(pid: int):
+    """Full payload for the Prescription Audit Summary slide-over drawer.
+
+    Returns every detected medicine with brand/dosage form, generic molecule,
+    pharmaceutical manufacturer, AI confidence, own-vs-competitor flag, the
+    Own Portfolio Match (competitor → own brand) card, the market-share
+    summary for this Rx and any duplicate-scan fraud flag.
+    """
+    row = get_prescription_by_id(pid)
+    if not row:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    own = get_current_own_company()
+    try:
+        medicines = json.loads(row['medicines_json']) if row['medicines_json'] else []
+    except Exception:
+        medicines = []
+    try:
+        doctor = json.loads(row['doctor_json']) if row['doctor_json'] else {}
+    except Exception:
+        doctor = {}
+
+    items = []
+    for med in medicines:
+        conf = med.get("confidence", 0) or 0
+        conf_pct = round(conf * 100) if conf <= 1 else round(conf)
+        company = (med.get("company") or "").strip()
+        is_own = bool(own and same_company(company, own))
+        # Own Portfolio Match — reuse the scan-time substitution card, or
+        # compute it now for scans saved before this field existed.
+        sub = med.get("substitution")
+        if not sub and not is_own and (med.get("generic") or med.get("generic_name")):
+            try:
+                sub = generic_substitution(med, own, medex_db)
+            except Exception:
+                sub = None
+        items.append({
+            "brand_name": med.get("brand_name", ""),
+            "strength": med.get("strength", ""),
+            "form": med.get("form", ""),
+            "type": med.get("type", ""),
+            "dosage_normalized": med.get("dosage_normalized", "") or med.get("dosage", ""),
+            "generic": med.get("generic") or med.get("generic_name", ""),
+            "company": company,
+            "company_logo": med.get("company_logo", ""),
+            "image_url": med.get("image_url") or med.get("pack_image", ""),
+            "confidence": conf,
+            "confidence_pct": conf_pct,
+            "low_confidence": conf_pct < 80,
+            "is_own": is_own,
+            "needs_review": bool(med.get("needs_review")),
+            "portfolio_match": sub,
+            "dgda": med.get("dgda", {}),
+        })
+
+    market_share = build_market_share(medicines, own)
+
+    duplicate = None
+    if row.get("duplicate_of"):
+        orig = get_prescription_by_id(row["duplicate_of"]) or {}
+        duplicate = {
+            "duplicate_of": orig.get("id"),
+            "mr_id": orig.get("mr_id", ""),
+            "first_scanned_at": orig.get("timestamp", ""),
+            "image_url": f"/uploads/prescriptions/{os.path.basename(orig.get('image_path') or '')}",
+        }
+
+    return {
+        "prescription": {
+            "id": row["id"],
+            "rx_no": f"A-{row['id']}",
+            "timestamp": row["timestamp"],
+            "mr_id": row["mr_id"],
+            "image_url": f"/uploads/prescriptions/{os.path.basename(row.get('image_path') or '')}",
+            "doctor_name": row.get("doctor_name") or doctor.get("name", ""),
+            "doctor_specialty": row.get("doctor_specialty") or doctor.get("specialty", ""),
+            "doctor_hospital": row.get("doctor_hospital") or doctor.get("hospital", ""),
+            "doctor_bmdc_no": row.get("doctor_bmdc_no", ""),
+            "district": row.get("district", ""),
+            "upazila": row.get("upazila", ""),
+            "avg_confidence": row.get("avg_confidence", 0),
+            "total_medicines": row.get("total_medicines", len(items)),
+            "is_verified": row.get("is_verified", 0),
+        },
+        "own_company": own,
+        "items": items,
+        "market_share": market_share,
+        "is_duplicate": bool(duplicate),
+        "duplicate": duplicate,
+    }
+
+
+@app.get("/api/prescriptions/{pid}/export.csv")
+async def prescription_audit_csv(pid: int):
+    """CSV export of one prescription's detected items for audit reporting."""
+    row = get_prescription_by_id(pid)
+    if not row:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    own = get_current_own_company()
+    try:
+        medicines = json.loads(row['medicines_json']) if row['medicines_json'] else []
+    except Exception:
+        medicines = []
+    csv_text = items_to_csv(medicines, own)
+    stamp = (row.get("timestamp") or "").replace(":", "").replace(" ", "_")[:15]
+    filename = f"rx_A-{pid}_{stamp or 'audit'}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/prescriptions/{pid}/clipboard")
+async def prescription_audit_clipboard(pid: int):
+    """Plain-text audit list for pasting into internal reporting channels."""
+    row = get_prescription_by_id(pid)
+    if not row:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    own = get_current_own_company()
+    try:
+        medicines = json.loads(row['medicines_json']) if row['medicines_json'] else []
+    except Exception:
+        medicines = []
+    header = (f"Rx #A-{pid} • {row.get('doctor_name') or 'Unknown'} • "
+              f"{len(medicines)} medicines • MR {row.get('mr_id') or '-'}")
+    return {"header": header, "text": items_to_clipboard(medicines, header)}
+
 @app.get("/api/medex")
 async def search_medex(q: str = "", form: str = "", limit: int = 50):
     """
@@ -1113,6 +1267,38 @@ async def rsm_trends(team_id: str = "", rsm_id: str = "", days: int = 30):
     """Weekly SoV sparkline series per MPO for the RSM leaderboard."""
     from .database import get_rsm_trends
     return get_rsm_trends(team_id=team_id, rsm_employee_id=rsm_id, days=days)
+
+
+@app.get("/api/rsm/doctor-targets")
+async def rsm_doctor_targets(mpo_id: str = "", month: str = ""):
+    """Doctor Detailing Target Tracker — RSM-attached target doctor lists
+    per MPO with auto-logged visit progress from prescription scans."""
+    from .database import get_doctor_targets
+    return get_doctor_targets(mpo_id=mpo_id, month=month or None)
+
+
+@app.post("/api/rsm/doctor-targets")
+async def rsm_add_doctor_target(payload: dict):
+    """RSM attaches a target doctor to an MPO (auto-counts this month's scans)."""
+    from .database import add_doctor_target
+    try:
+        result = add_doctor_target(payload or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+@app.delete("/api/rsm/doctor-targets/{target_id}")
+async def rsm_remove_doctor_target(target_id: int):
+    from .database import remove_doctor_target
+    return remove_doctor_target(target_id)
+
+
+@app.get("/api/rsm/doctor-targets/visits")
+async def rsm_doctor_target_visits(limit: int = 25, mpo_id: str = ""):
+    """Auto-generated visit log feed (one entry per matching scan)."""
+    from .database import get_recent_target_visits
+    return get_recent_target_visits(limit=limit, mpo_id=mpo_id)
 
 
 @app.get("/api/rsm/report.pdf")

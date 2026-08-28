@@ -62,9 +62,39 @@ Output JSON example:
 }
 ```
 
+## Rx Audit Drawer, Duplicate-Rx Fraud Alert & Doctor Target Tracker
+
+- **Prescription Audit Summary drawer** — click any card under *Recent Prescriptions*
+  (Analytics Dashboard) to slide open an isolated item breakdown: medicine brand +
+  dosage form, generic molecule, pharmaceutical manufacturer badge and AI
+  confidence badge (`<80%` rows glow soft orange with a **Verify against Medex**
+  button that queues the item for the handwriting-retraining pipeline).
+- **Search + filter inside the drawer**: `All (n) | Own Pharma (n) | Competitors (n) | <80% (n)` pills and a free-text search over scanned items.
+- **Own Portfolio Match pill** — competitor rows expand into the client company's
+  matching brand (e.g. Seclo/Square -> Opal/Healthcare) with price difference and
+  an MPO pitch note, for in-chamber detailing.
+- **Market Share Summary** for the Rx (own vs competitor, counts + %).
+- **Export Rx Items as CSV** and **Copy List to Clipboard** for audit reporting.
+- **Crop preview on hover** — hovering a medicine name pops a thumbnail of the
+  prescription scan.
+- **Duplicate Rx fraud alert** — every scan is fingerprinted with a pure-Python
+  DCT perceptual hash (`app/rx_audit.py`). Re-uploading the same physical Rx
+  (even resized / recompressed) flags a red **Duplicate Rx Detected** tag on the
+  card, in the drawer and as a post-scan alert, so target inflation via
+  double-scanning is caught before it reaches KPIs.
+- **Doctor Detailing Target Tracker** (RSM Command tab) — RSMs attach target
+  doctor lists to MPOs; every scan whose doctor matches a target auto-logs a
+  visit (deduped per prescription), with progress bars and a live visit log.
+
 ## API
 
-- `POST /api/scan` - upload image, returns doctor + medicines with MedEx images
+- `POST /api/scan` - upload image, returns doctor + medicines with MedEx images (+ `duplicate` fraud alert when the same Rx was scanned before)
+- `GET /api/prescriptions/{pid}` - full Prescription Audit Summary drawer payload (items, market share, duplicate flag, portfolio matches)
+- `GET /api/prescriptions/{pid}/export.csv` - download the Rx's detected items as CSV
+- `GET /api/prescriptions/{pid}/clipboard` - plain-text audit list for reporting channels
+- `GET|POST /api/rsm/doctor-targets` - doctor detailing target list / attach target (retro-counts this month's scans)
+- `DELETE /api/rsm/doctor-targets/{id}` - remove a doctor target
+- `GET /api/rsm/doctor-targets/visits` - auto-logged visit feed from prescription scans
 - `GET /api/medex?q=Napa&form=Tablet&limit=20` - search scraped DB
 - `GET /api/health` - model + DB count
 
