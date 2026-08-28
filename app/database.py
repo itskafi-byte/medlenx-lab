@@ -266,6 +266,36 @@ def init_db():
     )
     """)
 
+    # 9. doctor_targets - RSM-attached target doctor lists per MPO. Powers the
+    # Doctor Detailing Target Tracker: whenever a scanned prescription's
+    # doctor matches a target, a visit is auto-logged in doctor_target_visits.
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS doctor_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mpo_id TEXT NOT NULL,
+        mpo_name TEXT,
+        doctor_name TEXT NOT NULL,
+        specialty TEXT,
+        territory TEXT,
+        monthly_target INTEGER DEFAULT 0,
+        month TEXT NOT NULL,
+        created_at TEXT,
+        UNIQUE(mpo_id, doctor_name, month)
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS doctor_target_visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        prescription_id INTEGER,
+        mr_id TEXT,
+        doctor_name TEXT,
+        visited_at TEXT NOT NULL,
+        UNIQUE(target_id, prescription_id),
+        FOREIGN KEY (target_id) REFERENCES doctor_targets(id)
+    )
+    """)
+
     conn.commit()
 
     # ---- lightweight migrations for pre-existing databases ----
@@ -278,6 +308,10 @@ def init_db():
         ("prescribed_medicines", "needs_review", "INTEGER DEFAULT 0"),
         ("doctors", "division", "TEXT"),
         ("prescriptions", "prescription_source", "TEXT"),
+        ("prescriptions", "image_phash", "TEXT"),
+        ("prescriptions", "duplicate_of", "INTEGER"),
+        ("prescriptions", "off_territory", "INTEGER DEFAULT 0"),
+        ("prescriptions", "territory_note", "TEXT"),
         ("recent_scanned_medicines", "prescription_source", "TEXT"),
         ("recent_scanned_medicines", "specialty", "TEXT"),
     ]:
@@ -737,7 +771,32 @@ def _write_medicine_rows(cur, prescription_id, medicines, *, mr_id="MR001",
             ))
 
 
-def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0):
+def find_duplicate_prescription(cur, image_phash, exclude_id=None,
+                                threshold=8):
+    """Return the earlier prescription this scan duplicates, or None.
+
+    Uses a DCT perceptual hash so re-uploads of the same physical Rx — even
+    after phone re-compression — are caught as target inflation.
+    """
+    from .rx_audit import hamming_distance
+    if not image_phash:
+        return None
+    rows = cur.execute(
+        "SELECT id, mr_id, image_phash, timestamp FROM prescriptions "
+        "WHERE image_phash IS NOT NULL AND image_phash != '' ORDER BY id ASC"
+    ).fetchall()
+    best, best_dist = None, None
+    for r in rows:
+        if exclude_id is not None and r["id"] == exclude_id:
+            continue
+        dist = hamming_distance(image_phash, r["image_phash"])
+        if dist is not None and dist <= threshold and \
+                (best_dist is None or dist < best_dist):
+            best, best_dist = r, dist
+    return dict(best) if best else None
+
+
+def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=None, upazila="", district="", territory="", is_verified=0, image_phash=None, off_territory=0, territory_note=""):
     """
     Save prescription with relational links
     result contains doctor + medicines from MedLenX VL
@@ -773,8 +832,8 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
 
     cur.execute("""
     INSERT INTO prescriptions 
-    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified, prescription_source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (timestamp, image_path, image_url, doctor_id, doctor_name, doctor_qualifications, doctor_hospital, doctor_bmdc_no, doctor_specialty, doctor_json, medicines_json, meta_json, avg_confidence, total_medicines, processing_time, model_used, mr_id, geo_lat, geo_lng, upazila, district, territory, patient_info_masked, is_verified, prescription_source, image_phash, duplicate_of, off_territory, territory_note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         # Always store a real ISO-8601 timestamp. The scan meta uses
         # "%Y-%m-%d %H:%M:%S" (space separator); a space sorts BEFORE 'T', so
@@ -805,6 +864,10 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
         patient_masked,
         is_verified,
         source,
+        image_phash or "",
+        dup["id"] if (dup := find_duplicate_prescription(cur, image_phash)) else None,
+        1 if off_territory else 0,
+        territory_note or "",
     ))
     prescription_id = cur.lastrowid
     
@@ -816,6 +879,17 @@ def save_prescription(image_path, result, mr_id="MR001", geo_lat=None, geo_lng=N
         district=district, upazila=upazila, territory=territory,
         prescription_source=source, write_recent=True,
     )
+
+    # Doctor Detailing Target Tracker: a scanned doctor name matching an
+    # RSM-attached target auto-logs the visit.
+    try:
+        matched = match_doctor_targets(
+            cur, doctor_name, mr_id=mr_id, prescription_id=prescription_id,
+        )
+        if matched:
+            meta["doctor_targets_hit"] = matched
+    except Exception as exc:
+        print(f"⚠️  doctor target visit log failed: {exc}")
 
     conn.commit()
     conn.close()
@@ -1518,6 +1592,439 @@ def get_target_progress(employee_id=None, month=None):
         })
     conn.close()
     return {"employee_id": employee_id, "month": month, "brands": out}
+
+
+# ============ Doctor Detailing Target Tracker (RSM → MPO) ============
+
+def normalize_doctor_name(name: str) -> str:
+    """Loose doctor-name normaliser for matching scans to target lists.
+
+    Strips honorifics (Dr./ডা.), punctuation and collapses whitespace so
+    "Dr. A. K. M. Rahman" and "A.K.M. Rahman" land on the same target.
+    """
+    import re as _re
+    text = (name or "").strip().lower()
+    text = _re.sub(r"^(dr\.?|ডা\.?|prof\.?|প্রফেসর)\s*", "", text)
+    text = _re.sub(r"[.,()\[\]-]", " ", text)
+    return " ".join(text.split())
+
+
+def _doctor_names_match(a: str, b: str) -> bool:
+    na, nb = normalize_doctor_name(a), normalize_doctor_name(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    if na in nb or nb in na:
+        return True
+    # Token overlap: >=2 shared tokens or >=50% of the shorter name's tokens.
+    ta, tb = set(na.split()), set(nb.split())
+    if not ta or not tb:
+        return False
+    shared = ta & tb
+    return len(shared) >= min(2, max(1, int(len(ta) * 0.5)))
+
+
+def match_doctor_targets(cur, doctor_name, mr_id="", prescription_id=None):
+    """Auto-log a visit on every target whose doctor matches this scan.
+
+    Runs inside the save_prescription transaction (uses the live cursor).
+    UNIQUE(target_id, prescription_id) + INSERT OR IGNORE guarantee the same
+    physical Rx never inflates a doctor's visit count twice.
+    """
+    if not doctor_name:
+        return []
+    month = datetime.now().strftime("%Y-%m")
+    rows = cur.execute(
+        "SELECT id, doctor_name, mpo_id, monthly_target FROM doctor_targets "
+        "WHERE month=?", (month,)
+    ).fetchall()
+    now = datetime.now().isoformat()
+    matched = []
+    for r in rows:
+        if not _doctor_names_match(doctor_name, r["doctor_name"]):
+            continue
+        cur.execute("""
+            INSERT OR IGNORE INTO doctor_target_visits
+            (target_id, prescription_id, mr_id, doctor_name, visited_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (r["id"], prescription_id, mr_id, doctor_name, now))
+        matched.append({
+            "target_id": r["id"], "doctor_name": r["doctor_name"],
+            "mpo_id": r["mpo_id"],
+        })
+    return matched
+
+
+def add_doctor_target(payload: dict):
+    """RSM attaches a target doctor to an MPO for the current month."""
+    conn = get_db()
+    cur = conn.cursor()
+    mpo_id = (payload.get("mpo_id") or "").strip()
+    doctor_name = (payload.get("doctor_name") or "").strip()
+    if not mpo_id or not doctor_name:
+        conn.close()
+        raise ValueError("mpo_id and doctor_name are required")
+    month = payload.get("month") or datetime.now().strftime("%Y-%m")
+    cur.execute("""
+        INSERT INTO doctor_targets
+        (mpo_id, mpo_name, doctor_name, specialty, territory, monthly_target, month, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(mpo_id, doctor_name, month)
+        DO UPDATE SET monthly_target=excluded.monthly_target,
+                      mpo_name=excluded.mpo_name,
+                      specialty=excluded.specialty,
+                      territory=excluded.territory
+    """, (
+        mpo_id,
+        payload.get("mpo_name") or "",
+        doctor_name,
+        payload.get("specialty") or "",
+        payload.get("territory") or "",
+        int(payload.get("monthly_target") or 0),
+        month,
+        datetime.now().isoformat(),
+    ))
+    # Any scans already saved this month for this doctor retro-actively count.
+    hits = []
+    scans = cur.execute(
+        "SELECT id, doctor_name, mr_id FROM prescriptions "
+        "WHERE timestamp >= ? ORDER BY id ASC", (f"{month}-01T00:00:00",)
+    ).fetchall()
+    for s in scans:
+        if _doctor_names_match(s["doctor_name"], doctor_name):
+            hits += match_doctor_targets(cur, s["doctor_name"],
+                                         mr_id=s["mr_id"], prescription_id=s["id"])
+    conn.commit()
+    conn.close()
+    return {"ok": True, "retro_visits_logged": len(hits)}
+
+
+def remove_doctor_target(target_id: int):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM doctor_target_visits WHERE target_id=?", (target_id,))
+    cur.execute("DELETE FROM doctor_targets WHERE id=?", (target_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+def get_doctor_targets(mpo_id="", month=None):
+    """Target list + auto-logged visit progress for the tracker card."""
+    month = month or datetime.now().strftime("%Y-%m")
+    conn = get_db()
+    cur = conn.cursor()
+    sql = "SELECT * FROM doctor_targets WHERE month=?"
+    params = [month]
+    if mpo_id:
+        sql += " AND mpo_id=?"
+        params.append(mpo_id)
+    sql += " ORDER BY id DESC"
+    rows = cur.execute(sql, params).fetchall()
+    out = []
+    for r in rows:
+        visits = cur.execute(
+            "SELECT v.*, p.image_path FROM doctor_target_visits v "
+            "LEFT JOIN prescriptions p ON v.prescription_id = p.id "
+            "WHERE v.target_id=? ORDER BY v.visited_at DESC", (r["id"],)
+        ).fetchall()
+        visit_count = len(visits)
+        tgt = r["monthly_target"] or 0
+        out.append({
+            "id": r["id"],
+            "mpo_id": r["mpo_id"],
+            "mpo_name": r["mpo_name"],
+            "doctor_name": r["doctor_name"],
+            "specialty": r["specialty"],
+            "territory": r["territory"],
+            "monthly_target": tgt,
+            "month": r["month"],
+            "visits": visit_count,
+            "remaining": max(tgt - visit_count, 0),
+            "percent": round(visit_count / tgt * 100, 1) if tgt else 0.0,
+            "last_visit": visits[0]["visited_at"] if visits else "",
+            "visit_log": [dict(v) for v in visits[:5]],
+        })
+    conn.close()
+    return {"month": month, "targets": out}
+
+
+def get_recent_target_visits(limit=25, mpo_id=""):
+    """Global visit log feed (newest first) for the RSM tracker card."""
+    conn = get_db()
+    cur = conn.cursor()
+    sql = """
+        SELECT v.id, v.target_id, v.prescription_id, v.mr_id, v.doctor_name,
+               v.visited_at, t.mpo_id AS target_mpo_id, t.doctor_name AS target_doctor
+        FROM doctor_target_visits v
+        LEFT JOIN doctor_targets t ON v.target_id = t.id
+    """
+    params = []
+    if mpo_id:
+        sql += " WHERE t.mpo_id=?"
+        params.append(mpo_id)
+    sql += " ORDER BY v.visited_at DESC, v.id DESC LIMIT ?"
+    params.append(limit)
+    rows = cur.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ============ Geofenced audit verification (off-territory) ============
+
+def find_off_territory_audits(days=30, limit=50, mr_id=""):
+    """Scans flagged outside the officer's assigned territory, newest first."""
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    sql = """
+        SELECT id, timestamp, mr_id, doctor_name, doctor_specialty,
+               upazila, district, territory, geo_lat, geo_lng,
+               territory_note, off_territory, image_path, total_medicines
+        FROM prescriptions
+        WHERE off_territory=1 AND timestamp >= ?
+    """
+    params = [since]
+    if mr_id:
+        sql += " AND mr_id=?"
+        params.append(mr_id)
+    sql += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+    rows = cur.execute(sql, params).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("image_path"):
+            d["image_url"] = f"/uploads/prescriptions/{os.path.basename(d['image_path'])}"
+        out.append(d)
+    return out
+
+
+def get_scan_points(days=30, limit=2000):
+    """Point-level scan locations for the density-clustering map.
+
+    Falls back to the district centroid (data/bd_geo.json) with a small
+    deterministic jitter when the scan has no GPS pin, so district-level
+    audits still cluster.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    rows = cur.execute("""
+        SELECT p.id, p.timestamp, p.mr_id, p.doctor_name, p.district,
+               p.territory, p.geo_lat, p.geo_lng, p.off_territory,
+               p.duplicate_of,
+               (SELECT COUNT(*) FROM prescribed_medicines pm
+                  WHERE pm.prescription_id = p.id) AS items
+        FROM prescriptions p
+        WHERE p.timestamp >= ?
+        ORDER BY p.id DESC LIMIT ?
+    """, (since, limit)).fetchall()
+    conn.close()
+
+    geo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "data", "bd_geo.json")
+    centroids = {}
+    try:
+        with open(geo_path, "r", encoding="utf-8") as f:
+            centroids = json.load(f).get("districts", {}) or {}
+    except Exception:
+        pass
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        lat, lng = d.pop("geo_lat", None), d.pop("geo_lng", None)
+        if lat is None or lng is None:
+            c = centroids.get(d.get("district") or "", {})
+            lat, lng = c.get("lat"), c.get("lng")
+            if lat is not None and lng is not None:
+                # deterministic jitter so same-district audits don't stack
+                seed = d.get("id") or 0
+                lat += ((seed % 13) - 6) * 0.008
+                lng += ((seed % 7) - 3) * 0.008
+        d["lat"], d["lng"] = lat, lng
+        out.append(d)
+    return [d for d in out if d.get("lat") is not None and d.get("lng") is not None]
+
+
+# ============ TRIPS Waiver Portfolio Tracker (PMD) ============
+
+def get_trips_portfolio(days=90):
+    """Field-volume trends for TRIPS-waiver watch molecules, per territory.
+
+    Joins the watch list (compliance.load_trips) against prescribed_medicines
+    so PMD sees where high-priority generics are actually being written and
+    whether that volume is rising or falling versus the previous period.
+    """
+    from .compliance import load_trips, _molecule_key_match
+    data = load_trips()
+    conn = get_db()
+    cur = conn.cursor()
+    now = datetime.now()
+    since = (now - timedelta(days=int(days))).isoformat()
+    prev_since = (now - timedelta(days=2 * int(days))).isoformat()
+
+    rows = cur.execute("""
+        SELECT pm.generic_name, pm.brand_name, p.territory, p.district,
+               p.timestamp
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        WHERE p.timestamp >= ?
+    """, (prev_since,)).fetchall()
+    conn.close()
+
+    stats = {}
+    boundary = since
+    for r in rows:
+        g = (r["generic_name"] or "").strip()
+        if not g:
+            continue
+        entry = None
+        gk = " ".join(str(g).lower().split())
+        for mk, m in (data.get("_index") or {}).items():
+            if _molecule_key_match(mk, gk):
+                entry = m
+                break
+        if not entry:
+            continue
+        key = entry["molecule"]
+        st = stats.setdefault(key, {"current": 0, "prev": 0,
+                                    "territories": {}, "brands": set(),
+                                    "meta": entry})
+        if r["timestamp"] >= boundary:
+            st["current"] += 1
+        else:
+            st["prev"] += 1
+        terr = r["territory"] or r["district"] or "Unknown"
+        st["territories"][terr] = st["territories"].get(terr, 0) + 1
+        if r["brand_name"]:
+            st["brands"].add(r["brand_name"])
+
+    out = []
+    for key, st in stats.items():
+        meta = st["meta"]
+        delta = st["current"] - st["prev"]
+        pct = round(delta * 100.0 / st["prev"], 1) if st["prev"] else None
+        top_terr = sorted(st["territories"].items(),
+                          key=lambda kv: -kv[1])[:3]
+        out.append({
+            "molecule": key,
+            "class": meta.get("class", ""),
+            "originator": meta.get("originator", ""),
+            "watch_level": meta.get("watch_level", "medium"),
+            "note": meta.get("note", ""),
+            "current_volume": st["current"],
+            "prev_volume": st["prev"],
+            "delta": delta,
+            "delta_pct": pct,
+            "top_territories": [{"name": t, "count": c} for t, c in top_terr],
+            "brands": sorted(st["brands"])[:5],
+        })
+    # dataset order (watch_level critical first) for molecules with no field
+    # volume yet, so PMD still sees the full watch list
+    seen = {o["molecule"] for o in out}
+    for m in data.get("molecules", []):
+        if m["molecule"] not in seen:
+            out.append({
+                "molecule": m["molecule"], "class": m.get("class", ""),
+                "originator": m.get("originator", ""),
+                "watch_level": m.get("watch_level", "medium"),
+                "note": m.get("note", ""), "current_volume": 0,
+                "prev_volume": 0, "delta": 0, "delta_pct": None,
+                "top_territories": [], "brands": [],
+            })
+    level_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    out.sort(key=lambda o: (level_rank.get(o["watch_level"], 9),
+                            -o["current_volume"], o["molecule"]))
+    return {
+        "waiver_expiry": data.get("waiver_expiry", ""),
+        "ldc_graduation": data.get("ldc_graduation", ""),
+        "context": data.get("context", ""),
+        "days": int(days),
+        "molecules": out,
+        "totals": {
+            "watched": len(out),
+            "with_field_volume": sum(1 for o in out if o["current_volume"]),
+            "volume": sum(o["current_volume"] for o in out),
+            "rising": sum(1 for o in out if o["delta"] > 0),
+        },
+    }
+
+
+# ============ Antibiotic Stewardship Monitor (per doctor chamber) ============
+
+def get_stewardship_summary(days=30, limit=100):
+    """Per-doctor antibiotic prescribing audit for field managers.
+
+    Classifies every prescribed item's molecule with the compliance layer and
+    aggregates per doctor: items, antibiotic items, broad-spectrum items and
+    the antibiotic share of that chamber's prescribing.
+    """
+    from .compliance import is_antibiotic, is_broad_spectrum
+    conn = get_db()
+    cur = conn.cursor()
+    since = (datetime.now() - timedelta(days=int(days))).isoformat()
+    rows = cur.execute("""
+        SELECT p.doctor_id, p.doctor_name, d.specialty, d.district,
+               pm.generic_name, pm.brand_name
+        FROM prescribed_medicines pm
+        JOIN prescriptions p ON pm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE p.timestamp >= ? AND IFNULL(p.doctor_name,'') != ''
+    """, (since,)).fetchall()
+    conn.close()
+
+    docs = {}
+    for r in rows:
+        key = r["doctor_id"] or r["doctor_name"]
+        d = docs.setdefault(key, {
+            "doctor_name": r["doctor_name"], "specialty": r["specialty"] or "",
+            "district": r["district"] or "", "rx_ids": set(),
+            "items": 0, "abx_items": 0, "broad_items": 0, "abx_brands": set(),
+        })
+        d["rx_ids"].add(True)
+        d["items"] += 1
+        g = r["generic_name"] or ""
+        if is_antibiotic(g):
+            d["abx_items"] += 1
+            if r["brand_name"]:
+                d["abx_brands"].add(r["brand_name"])
+            if is_broad_spectrum(g):
+                d["broad_items"] += 1
+
+    out = []
+    for d in docs.values():
+        share = round(d["abx_items"] * 100.0 / d["items"], 1) if d["items"] else 0.0
+        out.append({
+            "doctor_name": d["doctor_name"],
+            "specialty": d["specialty"],
+            "district": d["district"],
+            "rx": len(d["rx_ids"]),
+            "items": d["items"],
+            "abx_items": d["abx_items"],
+            "broad_items": d["broad_items"],
+            "abx_share_pct": share,
+            "abx_brands": sorted(d["abx_brands"])[:5],
+        })
+    out.sort(key=lambda x: (-x["abx_items"], -x["abx_share_pct"]))
+    flagged = [x for x in out if x["abx_items"] > 0]
+    return {
+        "days": int(days),
+        "doctors": out[:limit],
+        "totals": {
+            "doctors_audited": len(out),
+            "doctors_with_abx": len(flagged),
+            "items": sum(x["items"] for x in out),
+            "abx_items": sum(x["abx_items"] for x in out),
+            "broad_items": sum(x["broad_items"] for x in out),
+            "abx_share_pct": round(
+                (sum(x["abx_items"] for x in out) * 100.0
+                 / max(sum(x["items"] for x in out), 1)), 1),
+        },
+    }
 
 
 def save_error_report(payload):

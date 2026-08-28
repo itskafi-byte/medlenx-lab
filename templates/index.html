@@ -207,6 +207,10 @@ tailwind.config={
         <input id="geoUpazila" placeholder="Upazila" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
         <input id="geoDistrict" placeholder="District" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
         <input id="geoTerritory" placeholder="Territory" class="flex-1 px-3 py-1.5 rounded-lg border text-[11px] bg-white">
+        <button type="button" id="geoPinBtn" class="shrink-0 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-100" title="Embed GPS coordinates with this audit for territory verification">
+          <i class="fas fa-location-dot text-emerald-600 mr-1"></i>GPS
+        </button>
+        <input type="hidden" id="geoLat"><input type="hidden" id="geoLng">
       </div>
     </div>
 
@@ -478,6 +482,120 @@ tailwind.config={
   </div>
 </div>
 
+<!-- ===== Prescription Audit Summary slide-over drawer ===== -->
+<div id="rxDrawer" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
+  <div id="rxDrawerBackdrop" class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+  <div id="rxDrawerPanel" class="absolute right-0 top-0 h-full w-full max-w-2xl bg-slate-50 shadow-2xl flex flex-col translate-x-full transition-transform duration-300">
+    <!-- Header -->
+    <div class="flex items-start justify-between gap-3 px-5 py-4 bg-white border-b border-slate-200">
+      <div class="min-w-0">
+        <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+          📄 Prescription Audit Summary — Rx #<span id="rxDrawerRxNo">—</span>
+          <span id="rxDrawerDupTag" class="hidden items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full">
+            <i class="fas fa-triangle-exclamation"></i> Duplicate Rx Detected
+          </span>
+        </h3>
+        <p id="rxDrawerDoctor" class="text-[11px] text-slate-500 mt-1 truncate"></p>
+      </div>
+      <button id="rxDrawerClose" class="shrink-0 w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <!-- Toolbar: search + filter pills -->
+    <div class="flex flex-wrap items-center gap-2 px-5 py-3 bg-white border-b border-slate-200">
+      <div class="relative flex-1 min-w-[180px]">
+        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input id="rxAuditSearch" type="text" placeholder="Search scanned items..."
+               class="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-slate-400 focus:outline-none">
+      </div>
+      <div id="rxAuditFilters" class="flex items-center gap-1 text-[11px] font-semibold">
+        <button type="button" data-filter="all" class="rx-filter px-2.5 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white">All (0)</button>
+        <button type="button" data-filter="own" class="rx-filter px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600">Own Pharma (0)</button>
+        <button type="button" data-filter="competitor" class="rx-filter px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600">Competitors (0)</button>
+        <button type="button" data-filter="low" class="rx-filter px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600">&lt;80% (0)</button>
+      </div>
+    </div>
+    <!-- Clinical & regulatory analytics strip -->
+    <div id="rxDrawerClinical" class="px-5 py-3 bg-white border-b border-slate-200 hidden">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span id="rxPolyBadge" class="hidden"></span>
+        <span id="rxAbxBadge" class="hidden"></span>
+        <span id="rxOffTerritoryBadge" class="hidden"></span>
+      </div>
+      <div id="rxTherapyBarWrap" class="hidden">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[9px] font-bold uppercase tracking-widest text-slate-500"><i class="fas fa-chart-pie mr-1"></i>Therapeutic class breakdown</span>
+        </div>
+        <div id="rxTherapyBar" class="flex h-3 w-full rounded-full overflow-hidden bg-slate-100"></div>
+        <div id="rxTherapyLegend" class="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[9px] text-slate-600"></div>
+      </div>
+    </div>
+    <!-- Items table -->
+    <div class="flex-1 overflow-y-auto px-5 py-4">
+      <p id="rxDrawerDupNote" class="hidden mb-3 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
+      <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-sm">
+        <table class="w-full text-xs min-w-[560px]">
+          <thead>
+            <tr class="text-left text-slate-500 border-b border-slate-200">
+              <th class="py-2.5 px-3 font-semibold">Medicine Brand</th>
+              <th class="py-2.5 px-3 font-semibold">Generic Composition</th>
+              <th class="py-2.5 px-3 font-semibold">Pharmaceutical</th>
+              <th class="py-2.5 px-3 font-semibold text-right">Conf.</th>
+            </tr>
+          </thead>
+          <tbody id="rxAuditItems"></tbody>
+        </table>
+        <div id="rxAuditEmpty" class="hidden text-center py-10">
+          <div class="w-12 h-12 mx-auto bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mb-2"><i class="fas fa-file-prescription"></i></div>
+          <p class="text-xs text-slate-500">No medicines match this search/filter.</p>
+        </div>
+      </div>
+    </div>
+    <!-- Footer: market share + export actions -->
+    <div class="px-5 py-4 bg-white border-t border-slate-200 space-y-3">
+      <div id="rxAuditShare" class="text-[11px] text-slate-600 space-y-1"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="rxExportCsvBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
+          <i class="fas fa-file-csv text-emerald-600 mr-1.5"></i>Export Rx Items as CSV
+        </button>
+        <button id="rxCopyBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
+          <i class="fas fa-clipboard text-blue-600 mr-1.5"></i>Copy List to Clipboard
+        </button>
+        <span class="ml-auto text-[10px] text-slate-400">Hover a medicine name to preview the prescription crop</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hover crop preview popover for drawer medicine rows -->
+<div id="rxCropPopover" class="fixed z-[10000] hidden pointer-events-none">
+  <div class="bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 w-52">
+    <img id="rxCropImg" class="w-full h-40 object-contain rounded-lg bg-slate-50" alt="Prescription crop preview">
+    <p id="rxCropCaption" class="text-[9px] text-slate-500 text-center mt-1 px-1"></p>
+  </div>
+</div>
+
+<!-- MPO Doctor Pitch Card modal (mobile-friendly) -->
+<div id="rxPitchModal" class="fixed inset-0 z-[10001] hidden items-center justify-center modal-backdrop p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] overflow-hidden flex flex-col">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
+      <div>
+        <h3 class="font-bold text-sm">🩺 Doctor Pitch Card</h3>
+        <p id="rxPitchSub" class="text-[10px] text-white/80 mt-0.5"></p>
+      </div>
+      <button id="rxPitchClose" class="w-8 h-8 rounded-lg hover:bg-white/20 text-white" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div id="rxPitchBody" class="p-5 overflow-y-auto space-y-3 text-xs"></div>
+    <div class="px-5 py-4 border-t border-slate-200 flex flex-wrap items-center gap-2 bg-slate-50">
+      <button id="rxPitchPdfBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-700">
+        <i class="fas fa-file-pdf text-red-400 mr-1.5"></i>Download PDF
+      </button>
+      <button id="rxPitchCopyBtn" type="button" class="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
+        <i class="fas fa-clipboard text-blue-600 mr-1.5"></i>Copy pitch script
+      </button>
+      <span class="ml-auto text-[9px] text-slate-400">Show during chamber visit</span>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TAB: PHARMA INTELLIGENCE HUB ==================== -->
 <div id="tab-database" class="tab-content hidden space-y-5">
   <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -618,6 +736,32 @@ tailwind.config={
   </div>
 </div>
 
+<!-- TRIPS Waiver Portfolio Tracker (PMD) -->
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+  <div class="flex flex-wrap items-center gap-2 mb-1">
+    <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-globe text-amber-600"></i> TRIPS Waiver Portfolio Tracker</h3>
+    <span id="tripsWindow" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300"></span>
+    <select id="tripsDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+      <option value="30">30 days</option>
+      <option value="90" selected>90 days</option>
+      <option value="180">180 days</option>
+    </select>
+    <button type="button" id="tripsRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+  </div>
+  <p class="text-[11px] text-slate-500 mb-3">High-priority generic molecules on the LDC pharmaceutical TRIPS waiver (to 2033) with real field volume from prescription scans — PMD visibility into where watch-list brands are being written and whether volume is rising.</p>
+  <div id="tripsTotals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs min-w-[860px]">
+      <thead>
+        <tr class="text-left text-slate-500 border-b">
+          <th class="py-2">Molecule</th><th>Class</th><th>Originator</th><th>Watch</th><th>Window</th><th>Field volume</th><th>Δ vs prev</th><th>Top territories</th>
+        </tr>
+      </thead>
+      <tbody id="tripsBody"><tr><td colspan="8" class="py-6 text-center text-slate-400">Loading TRIPS watch list…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ==================== TAB: RSM COMMAND ==================== -->
 <div id="tab-rsm" class="tab-content hidden space-y-6">
   <div class="bg-gradient-to-r from-slate-900 to-blue-800 rounded-2xl p-6 text-white shadow-lg">
@@ -642,6 +786,10 @@ tailwind.config={
         <p class="text-[11px] text-slate-500 mt-0.5">Live scan locations mapped across Bangladesh — bubble size = volume, colour = your company's market penetration (green = dominant, red = competitor-heavy).</p>
       </div>
       <div class="flex items-center gap-2">
+        <div class="flex items-center rounded-lg border border-slate-200 overflow-hidden text-[11px] font-semibold">
+          <button type="button" id="hmViewSov" class="hm-view px-2.5 py-1.5 bg-slate-900 text-white">SoV</button>
+          <button type="button" id="hmViewClusters" class="hm-view px-2.5 py-1.5 bg-white text-slate-600 border-l border-slate-200">Density clusters</button>
+        </div>
         <select id="hmDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
           <option value="7">7 days</option>
           <option value="30" selected>30 days</option>
@@ -707,6 +855,79 @@ tailwind.config={
           </tr>
         </thead>
         <tbody id="rsmTeamBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Doctor Detailing Target Tracker: RSM-attached target doctor lists per MPO.
+       Visit logs auto-update whenever a scanned prescription's doctor matches a target. -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-bullseye text-rose-600"></i> Doctor Detailing Target Tracker</h3>
+      <button type="button" id="dtRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">Attach target doctor lists to MPOs. Every scanned prescription whose doctor matches a target <b>auto-logs a visit</b> — duplicates of the same physical Rx never count twice.</p>
+    <form id="doctorTargetForm" class="flex flex-wrap items-end gap-2 mb-4 text-xs">
+      <label class="flex flex-col gap-1"><span class="text-[10px] font-semibold text-slate-500">MPO</span>
+        <select id="dtMpo" class="px-2.5 py-2 rounded-lg border border-slate-200 min-w-[150px]"><option value="">Loading team…</option></select>
+      </label>
+      <label class="flex flex-col gap-1 flex-1 min-w-[180px]"><span class="text-[10px] font-semibold text-slate-500">Target doctor</span>
+        <input id="dtDoctor" type="text" placeholder="Dr. A. K. M. Rahman" class="px-2.5 py-2 rounded-lg border border-slate-200">
+      </label>
+      <label class="flex flex-col gap-1"><span class="text-[10px] font-semibold text-slate-500">Specialty</span>
+        <input id="dtSpecialty" type="text" placeholder="Orthopedics" class="px-2.5 py-2 rounded-lg border border-slate-200 w-32">
+      </label>
+      <label class="flex flex-col gap-1"><span class="text-[10px] font-semibold text-slate-500">Monthly visits target</span>
+        <input id="dtTarget" type="number" min="1" value="4" class="px-2.5 py-2 rounded-lg border border-slate-200 w-28">
+      </label>
+      <button type="submit" id="dtAddBtn" class="px-4 py-2 bg-slate-900 text-white rounded-lg font-semibold hover:bg-slate-700"><i class="fas fa-plus mr-1"></i>Attach target</button>
+    </form>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs min-w-[760px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b">
+            <th class="py-2">MPO</th><th>Target doctor</th><th>Specialty</th><th>Target</th><th>Visits (auto-logged)</th><th class="w-40">Progress</th><th>Last visit</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="dtBody"><tr><td colspan="8" class="py-6 text-center text-slate-400">No doctor targets attached yet.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="mt-4">
+      <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2"><i class="fas fa-route text-emerald-600 mr-1"></i>Auto-visit log (from prescription scans)</p>
+      <div id="dtVisits" class="space-y-1 max-h-44 overflow-y-auto text-[11px]"><p class="text-slate-400">No auto-logged visits yet.</p></div>
+    </div>
+  </div>
+
+  <!-- Geofenced audit verification: uploads captured outside the MPO's assigned territory -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-location-crosshairs text-red-600"></i> Off-Territory Audit Verification</h3>
+      <span id="otCount" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0 flagged</span>
+      <button type="button" id="otRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">GPS-pinned and location-resolved audits are geofenced against each MPO's assigned territory &mdash; <b>Off-Territory Audit</b> uploads (e.g. a Dhaka South MR scanning in Khulna) are listed here alongside the pHash duplicate guard.</p>
+    <div id="otBody" class="space-y-2 max-h-72 overflow-y-auto">
+      <p class="text-slate-400 text-xs">No off-territory audits flagged — every scan matches its assigned zone.</p>
+    </div>
+  </div>
+
+  <!-- Antibiotic Stewardship Monitor: per-chamber ABX prescribing audit -->
+  <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-1">
+      <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-bacterium text-red-600"></i> Antibiotic Stewardship Monitor</h3>
+      <span id="abxShareChip" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">—</span>
+      <button type="button" id="abxRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">Broad-spectrum antibiotic prescribing audited per doctor chamber (AWaRe watch list) — regional stewardship compliance and detailing focus at a glance.</p>
+    <div id="abxTotals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs min-w-[760px]">
+        <thead>
+          <tr class="text-left text-slate-500 border-b">
+            <th class="py-2">Doctor (chamber)</th><th>Specialty</th><th>District</th><th>Rx audited</th><th>ABX items</th><th>Broad ★</th><th class="w-36">ABX share</th><th>Brands seen</th>
+          </tr>
+        </thead>
+        <tbody id="abxBody"><tr><td colspan="8" class="py-6 text-center text-slate-400">No stewardship data yet — scan prescriptions to audit ABX trends.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -1032,7 +1253,7 @@ document.querySelectorAll('.nav-btn, .nav-btn-mobile').forEach(btn=>{
       else{b.classList.add('bg-slate-900','text-white');b.classList.remove('text-slate-500');}
     });
     if(tab==='dashboard'){loadKpis();loadCharts();loadHistoryDash();loadRecentMedicines();}
-    if(tab==='database'){loadMedexStats();loadMedexBrowse(medexActiveFilter);loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();}
+    if(tab==='database'){loadMedexStats();loadMedexBrowse(medexActiveFilter);loadPopularMedicinesLive();loadHubNews();loadHubJobs();loadHealthDays();loadTripsPortfolio();}
     if(tab==='rsm'){loadRsmDashboard();}
     if(tab==='settings'){loadOfficerForm();}
     if(tab==='rsm'){initRsmExtras();}
@@ -1084,6 +1305,25 @@ document.querySelectorAll('.viewer-control').forEach(btn=>{
     if(action==='contrast'){contrast=contrast===100?150:contrast===150?200:100;updateTransform();}
     if(action==='fit'){scale=1;translateX=0;translateY=0;rotation=0;contrast=100;updateTransform();}
   });
+});
+
+// GPS territory pinpoint — embeds coordinates with the audit record so the
+// backend can geofence the upload against the officer's assigned territory.
+document.getElementById('geoPinBtn')?.addEventListener('click',()=>{
+  if(!navigator.geolocation){ toast.error('Geolocation not supported on this device'); return; }
+  const btn=document.getElementById('geoPinBtn');
+  btn.disabled=true; btn.innerHTML='<i class="fas fa-circle-notch fa-spin text-emerald-600 mr-1"></i>Pinning…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById('geoLat').value=pos.coords.latitude.toFixed(6);
+    document.getElementById('geoLng').value=pos.coords.longitude.toFixed(6);
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-location-dot text-emerald-600 mr-1"></i>Pinned ✓';
+    toast.success('GPS pinned — coordinates will be embedded with this audit');
+  },err=>{
+    btn.disabled=false;
+    btn.innerHTML='<i class="fas fa-location-dot text-emerald-600 mr-1"></i>GPS';
+    toast.error('GPS unavailable: '+err.message);
+  },{enableHighAccuracy:true,timeout:10000});
 });
 
 // Camera
@@ -1210,6 +1450,10 @@ async function scanPrescription(){
     fd.append('upazila',document.getElementById('geoUpazila').value);
     fd.append('district',document.getElementById('geoDistrict').value);
     fd.append('territory',document.getElementById('geoTerritory').value);
+    if(document.getElementById('geoLat').value){
+      fd.append('geo_lat',document.getElementById('geoLat').value);
+      fd.append('geo_lng',document.getElementById('geoLng').value);
+    }
 
     if(!navigator.onLine){
       const reader=new FileReader();
@@ -1227,6 +1471,12 @@ async function scanPrescription(){
     document.getElementById('skeletonLoader').classList.add('hidden');
     progressArea.classList.add('hidden');
     renderVerification(data);
+    if(data.duplicate){
+      toast.error(`<b>Duplicate Rx Detected</b> — ${data.duplicate.message||'This prescription was scanned before.'} <button class="underline font-bold ml-1" onclick="openRxAuditDrawer(${data.duplicate.duplicate_of||data.id})">Review</button>`,{duration:9000});
+    }
+    if(data.territory_check?.off_territory){
+      toast.error(`<b>Off-Territory Audit</b> — ${data.territory_check.reason||'Scan location is outside your assigned territory.'} Flagged for RSM review.`,{duration:9000});
+    }
     loadKpis();loadCharts();loadHistory();loadHistoryDash();
   }catch(e){
     clearInterval(progInt);
@@ -2267,27 +2517,465 @@ document.addEventListener('click',e=>{
 });
 
 // History
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function loadHistory(){
   try{
     const res=await fetch('/api/prescriptions?limit=10');
     const data=await res.json();
-    const grid=document.getElementById('historyGrid')||document.getElementById('historyGridDash');
     // For workspace tab history
     const historyGrids=document.querySelectorAll('#historyGrid, #historyGridDash');
     historyGrids.forEach(g=>{
       if(!data.prescriptions.length){g.innerHTML='<p class="text-[11px] text-slate-500 text-center py-4">No history yet - scan your first prescription to unlock analytics</p>';return;}
       g.innerHTML=data.prescriptions.map(p=>`
-        <div class="flex gap-2 p-2 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+        <div class="rx-card flex gap-2 p-2 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:ring-2 hover:ring-slate-900/10 transition-all cursor-pointer" data-rx-id="${p.id}" title="Open Prescription Audit Summary">
           <div class="w-10 h-10 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden"><img src="/uploads/prescriptions/${p.image_path.split('/').pop()}" class="w-full h-full object-cover"></div>
-          <div class="flex-1 min-w-0"><p class="text-xs font-medium truncate">${p.doctor_name} ${p.doctor_bmdc_no? '• '+p.doctor_bmdc_no:''}</p><p class="text-[10px] text-slate-500">${p.total_medicines} meds • ${p.upazila||''} ${p.district||''} • ${p.mr_id||''}</p></div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-medium truncate flex items-center gap-1.5">${p.doctor_name} ${p.doctor_bmdc_no? '• '+p.doctor_bmdc_no:''}
+              ${p.duplicate_of ? '<span class="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-px rounded-full"><i class="fas fa-triangle-exclamation"></i>Duplicate Rx</span>' : ''}
+            </p>
+            <p class="text-[10px] text-slate-500 truncate">${p.total_medicines} meds • ${p.upazila||''} ${p.district||''} • ${p.mr_id||''} • <span class="text-slate-400">tap for item breakdown</span></p>
+          </div>
+          <div class="self-center text-slate-300 flex-shrink-0"><i class="fas fa-chevron-right text-[10px]"></i></div>
         </div>
       `).join('');
+      g.querySelectorAll('.rx-card').forEach(card=>{
+        card.addEventListener('click',()=>openRxAuditDrawer(parseInt(card.dataset.rxId,10)));
+      });
     });
   }catch(e){console.error(e);}
 }
 function loadHistoryDash(){loadHistory();}
 document.getElementById('refreshHist')?.addEventListener('click',loadHistory);
 document.getElementById('refreshHistDash')?.addEventListener('click',loadHistoryDash);
+
+/* ============================================================
+   Prescription Audit Summary — slide-over drawer
+   Opens from any "Recent Prescriptions" card; shows every
+   detected medicine with its manufacturer + AI confidence,
+   market-share summary, CSV/clipboard export and the
+   duplicate-Rx fraud alert.
+   ============================================================ */
+let rxAuditData=null, rxAuditFilter='all', rxAuditQuery='';
+
+async function openRxAuditDrawer(pid){
+  if(!pid) return;
+  const drawer=document.getElementById('rxDrawer');
+  const panel=document.getElementById('rxDrawerPanel');
+  const backdrop=document.getElementById('rxDrawerBackdrop');
+  if(!drawer||!panel) return;
+  document.getElementById('rxAuditItems').innerHTML=
+    '<tr><td colspan="4" class="py-8 text-center text-xs text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Loading audit breakdown...</td></tr>';
+  document.getElementById('rxAuditEmpty').classList.add('hidden');
+  drawer.classList.remove('hidden');
+  document.body.style.overflow='hidden';
+  requestAnimationFrame(()=>{
+    backdrop.classList.remove('opacity-0');
+    panel.classList.remove('translate-x-full');
+  });
+  try{
+    const r=await fetch(`/api/prescriptions/${pid}`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    rxAuditData=await r.json();
+  }catch(e){
+    toast.error('Could not load prescription audit: '+e.message);
+    closeRxAuditDrawer();
+    return;
+  }
+  rxAuditFilter='all'; rxAuditQuery='';
+  const search=document.getElementById('rxAuditSearch'); if(search) search.value='';
+  renderRxAuditDrawer();
+}
+
+function closeRxAuditDrawer(){
+  const drawer=document.getElementById('rxDrawer');
+  const panel=document.getElementById('rxDrawerPanel');
+  const backdrop=document.getElementById('rxDrawerBackdrop');
+  if(!drawer||drawer.classList.contains('hidden')) return;
+  hideRxCropPopover();
+  backdrop.classList.add('opacity-0');
+  panel.classList.add('translate-x-full');
+  setTimeout(()=>{ drawer.classList.add('hidden'); document.body.style.overflow=''; },300);
+}
+document.getElementById('rxDrawerClose')?.addEventListener('click',closeRxAuditDrawer);
+document.getElementById('rxDrawerBackdrop')?.addEventListener('click',closeRxAuditDrawer);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeRxAuditDrawer(); });
+
+function rxAuditFilteredItems(){
+  const items=rxAuditData?.items||[];
+  const q=rxAuditQuery.trim().toLowerCase();
+  return items.filter(m=>{
+    if(rxAuditFilter==='own' && !m.is_own) return false;
+    if(rxAuditFilter==='competitor' && m.is_own) return false;
+    if(rxAuditFilter==='low' && !m.low_confidence) return false;
+    if(q){
+      const blob=[m.brand_name,m.generic,m.company,m.strength,m.type].join(' ').toLowerCase();
+      if(!blob.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderRxAuditDrawer(){
+  const d=rxAuditData; if(!d) return;
+  const p=d.prescription;
+  document.getElementById('rxDrawerRxNo').textContent=p.rx_no||('A-'+p.id);
+  const bits=[`${p.doctor_name||'Unknown doctor'}${p.doctor_specialty? ' ('+p.doctor_specialty+')':''}`,
+              `${d.items.length} Medicines Detected`, p.mr_id?('MR '+p.mr_id):'', p.district||''];
+  document.getElementById('rxDrawerDoctor').textContent=bits.filter(Boolean).join(' • ');
+
+  const dupTag=document.getElementById('rxDrawerDupTag');
+  const dupNote=document.getElementById('rxDrawerDupNote');
+  if(d.is_duplicate){
+    dupTag.classList.remove('hidden'); dupTag.classList.add('inline-flex');
+    dupNote.classList.remove('hidden');
+    dupNote.innerHTML=`<i class="fas fa-triangle-exclamation mr-1.5"></i><b>Fraud alert:</b> this physical prescription appears to have been scanned before — first captured as Rx #${d.duplicate.duplicate_of} (${d.duplicate.mr_id||'unknown MR'}${d.duplicate.first_scanned_at? ', '+esc(d.duplicate.first_scanned_at):''}). Excluded from target credit pending RSM review.`;
+  }else{ dupTag.classList.add('hidden'); dupTag.classList.remove('inline-flex'); dupNote.classList.add('hidden'); }
+
+  // filter pill counts
+  const items=d.items;
+  const counts={all:items.length, own:items.filter(m=>m.is_own).length,
+                competitor:items.filter(m=>!m.is_own).length,
+                low:items.filter(m=>m.low_confidence).length};
+  const labels={all:`All (${counts.all})`, own:`Own Pharma (${counts.own})`,
+                competitor:`Competitors (${counts.competitor})`, low:`&lt;80% (${counts.low})`};
+  document.querySelectorAll('#rxAuditFilters .rx-filter').forEach(btn=>{
+    const f=btn.dataset.filter;
+    btn.innerHTML=labels[f]||f;
+    const active=rxAuditFilter===f;
+    btn.className='rx-filter px-2.5 py-1.5 rounded-lg border '+(active
+      ?'border-slate-900 bg-slate-900 text-white'
+      :'border-slate-200 bg-white text-slate-600');
+  });
+
+  renderRxAuditItems();
+
+  // Clinical & regulatory analytics strip (polypharmacy, stewardship, therapy mix)
+  const clinical=d.clinical||{};
+  const strip=document.getElementById('rxDrawerClinical');
+  if(strip){
+    strip.classList.remove('hidden');
+    const poly=clinical.polypharmacy||{level:'normal',label:items.length+' Meds Prescribed'};
+    const polyEl=document.getElementById('rxPolyBadge');
+    polyEl.classList.remove('hidden');
+    if(poly.level==='high'){
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-triangle-exclamation"></i> ${esc(poly.label)}`;
+    }else if(poly.level==='moderate'){
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-triangle-exclamation"></i> ${esc(poly.label)}`;
+    }else{
+      polyEl.className='inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full';
+      polyEl.innerHTML=`<i class="fas fa-prescription"></i> ${esc(poly.label)}`;
+    }
+    const abx=clinical.antibiotics||{count:0,broad_spectrum:0};
+    const abxEl=document.getElementById('rxAbxBadge');
+    if(abx.count>0){
+      abxEl.classList.remove('hidden');
+      abxEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full';
+      abxEl.innerHTML=`<i class="fas fa-bacterium"></i> Antibiotic Stewardship: ${abx.count} in Rx${abx.broad_spectrum?` · ${abx.broad_spectrum} broad-spectrum`:''}`;
+      abxEl.title='Broad-spectrum antibiotics flagged for regional stewardship tracking';
+    }else{ abxEl.classList.add('hidden'); }
+    const offEl=document.getElementById('rxOffTerritoryBadge');
+    if(p.off_territory){
+      offEl.classList.remove('hidden');
+      offEl.className='inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full';
+      offEl.innerHTML='<i class="fas fa-location-dot"></i> Off-Territory Audit';
+      offEl.title=p.territory_note||'Scan location outside the assigned territory';
+    }else{ offEl.classList.add('hidden'); }
+
+    const segs=clinical.therapy_breakdown||[];
+    const wrap=document.getElementById('rxTherapyBarWrap');
+    if(segs.length){
+      wrap.classList.remove('hidden');
+      document.getElementById('rxTherapyBar').innerHTML=segs.map(sg=>
+        `<div style="width:${sg.pct}%;background:${sg.color}" title="${esc(sg.class)}: ${sg.count} of ${items.length} (${sg.pct}%)"></div>`).join('');
+      document.getElementById('rxTherapyLegend').innerHTML=segs.map(sg=>
+        `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-sm inline-block" style="background:${sg.color}"></span>${esc(sg.class)}: ${sg.pct}%</span>`).join('');
+    }else{ wrap.classList.add('hidden'); }
+  }
+
+  const s=d.market_share;
+  document.getElementById('rxAuditShare').innerHTML=`
+    <p class="font-bold text-slate-700"><i class="fas fa-briefcase text-slate-400 mr-1"></i>Market Share Summary for this Rx:</p>
+    <p>• <b>${esc(s.own_company||'Your company')}</b>: ${s.own_count} / ${s.total_medicines} (<b class="${s.own_share_pct>0?'text-emerald-600':'text-red-600'}">${s.own_share_pct}%</b>)</p>
+    <p>• Competitor brands identified: ${s.competitor_count} / ${s.total_medicines} (<b class="text-amber-600">${s.competitor_share_pct}%</b>)</p>`;
+}
+
+function renderRxAuditItems(){
+  const d=rxAuditData; if(!d) return;
+  const rows=rxAuditFilteredItems();
+  const tbody=document.getElementById('rxAuditItems');
+  const empty=document.getElementById('rxAuditEmpty');
+  tbody.querySelectorAll('tr').forEach(tr=>tr.remove());
+  empty.classList.toggle('hidden', rows.length>0);
+  tbody.insertAdjacentHTML('beforeend', rows.map((m)=>{
+    const origIdx=d.items.indexOf(m);
+    const lowCls=m.low_confidence?'bg-orange-50/70':'';
+    const confCls=m.low_confidence
+      ?'bg-orange-100 text-orange-700 border-orange-300'
+      :(m.confidence_pct>=90?'bg-emerald-100 text-emerald-700 border-emerald-300':'bg-slate-100 text-slate-600 border-slate-200');
+    const logoSrc=m.company_logo || `/static/images/companies/${(m.company||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,50)}.png`;
+    // Regulatory + stewardship row badges
+    const nemlPill=(m.neml&&m.neml.listed)
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-px rounded-full" title="Listed on the DGDA National Essential Medicines List (${esc(m.neml.molecule||m.generic)}${m.neml.class?' — '+esc(m.neml.class):''})">
+           <i class="fas fa-certificate"></i> NEML Listed</span>` : '';
+    const alertPill=(m.dgda_price_alert&&m.dgda_price_alert.flagged)
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-px rounded-full cursor-help" title="${esc(m.dgda_price_alert.reason||'DGDA price ceiling issue')}">
+           <i class="fas fa-ban"></i> DGDA Price Alert</span>` : '';
+    const abxPill=m.is_antibiotic
+      ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold ${m.broad_spectrum?'text-red-700 bg-red-50 border-red-300':'text-amber-800 bg-amber-50 border-amber-300'} border px-1.5 py-px rounded-full" title="${m.broad_spectrum?'Broad-spectrum antibiotic — stewardship watch list':'Antibiotic — stewardship tracking'}">
+           <i class="fas fa-bacterium"></i> ABX${m.broad_spectrum?' ★':''}</span>` : '';
+    const tripsPill=(m.trips&&m.trips.watch)
+      ? `<span class="inline-flex items-center gap-1 mt-1 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-px rounded-full cursor-help" title="TRIPS waiver watch: ${esc(m.trips.molecule||m.generic)} (${esc(m.trips.originator||'originator')} patent-sensitive) — BD generic window until 2033">
+           <i class="fas fa-globe"></i> TRIPS Watch</span>` : '';
+    const classChip=m.therapeutic_class
+      ? `<span class="inline-flex items-center gap-1 mt-1 text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-px rounded-full">${esc(m.therapeutic_class)}</span>` : '';
+    const portfolio=m.portfolio_match && m.portfolio_match.own_brand
+      ? `<div class="mt-1 flex flex-wrap items-center gap-1">
+         <button type="button" class="rx-portfolio-pill inline-flex items-center gap-1 text-[9px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 border border-violet-300 px-2 py-0.5 rounded-full transition"
+           data-idx="${origIdx}" title="Show your company's matching brand for this competitor item">
+           <i class="fas fa-wand-magic-sparkles"></i> Own Portfolio Match: ${esc(m.portfolio_match.own_brand.brand||'')}
+         </button>
+         <button type="button" class="rx-pitch-btn inline-flex items-center gap-1 text-[9px] font-bold text-white bg-violet-600 hover:bg-violet-700 border border-violet-600 px-2 py-0.5 rounded-full transition"
+           data-idx="${origIdx}" title="Generate a one-page Doctor Pitch Card (PDF) for the chamber visit">
+           <i class="fas fa-id-card"></i> Generate Doctor Pitch Card
+         </button></div>` : '';
+    const verifyBtn=m.low_confidence
+      ? `<button type="button" class="rx-verify-btn mt-1 inline-flex items-center gap-1 text-[9px] font-semibold text-orange-700 hover:text-orange-900 hover:underline" data-idx="${origIdx}" title="Queue this low-confidence read for verification against the MedEx catalogue">
+           <i class="fas fa-circle-question"></i> Verify against Medex
+         </button>` : '';
+    return `
+    <tr class="border-b border-slate-100 last:border-0 align-top ${lowCls}">
+      <td class="py-2.5 px-3">
+        <div class="rx-crop-hover font-semibold text-slate-900 cursor-zoom-in underline decoration-dotted decoration-slate-300 underline-offset-2"
+             data-image="${esc(d.prescription.image_url)}" data-line="${origIdx+1}" data-total="${d.items.length}" data-brand="${esc(m.brand_name)}">
+          ${esc(m.brand_name)||'<span class="text-slate-400 italic">Unknown Brand</span>'} ${esc(m.strength||'')}
+        </div>
+        <p class="text-[10px] text-slate-400">${esc([m.type||m.form, m.dosage_normalized].filter(Boolean).join(' • '))}</p>
+        <div class="flex flex-wrap items-center gap-0.5">${alertPill}${abxPill}${classChip}</div>
+        ${portfolio}${verifyBtn}
+      </td>
+      <td class="py-2.5 px-3 text-slate-600">
+        ${esc(m.generic)||'<span class="text-slate-400">—</span>'}
+        <div>${nemlPill}</div>
+        <div>${tripsPill}</div>
+      </td>
+      <td class="py-2.5 px-3">
+        <span class="inline-flex items-center gap-1.5 ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">
+          <img src="${esc(logoSrc)}" class="w-4 h-4 rounded-full bg-white object-contain border border-slate-200" onerror="this.style.display='none'">
+          ${m.company?esc(m.company):'<span class="italic text-slate-400">Unknown Brand</span>'}
+          ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500" title="Your company"></i>':''}
+        </span>
+      </td>
+      <td class="py-2.5 px-3 text-right">
+        <span class="inline-block text-[10px] font-bold border px-2 py-0.5 rounded-full ${confCls}">${m.confidence_pct}%</span>
+      </td>
+    </tr>`;
+  }).join(''));
+
+  tbody.querySelectorAll('.rx-portfolio-pill').forEach(btn=>{
+    btn.addEventListener('click',()=>toggleRxAuditPortfolio(parseInt(btn.dataset.idx,10), btn));
+  });
+  tbody.querySelectorAll('.rx-pitch-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>openRxPitchCard(parseInt(btn.dataset.idx,10)));
+  });
+  tbody.querySelectorAll('.rx-verify-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>verifyRxAuditItem(parseInt(btn.dataset.idx,10)));
+  });
+  attachRxCropHover();
+}
+
+/** Expand a row with the competitor → own-brand substitution card. */
+function toggleRxAuditPortfolio(idx){
+  const row=event?.target?.closest?.('tr');
+  const m=rxAuditData?.items?.[idx];
+  if(!m || !m.portfolio_match) return;
+  if(row){
+    const existing=row.nextElementSibling;
+    if(existing && existing.classList.contains('rx-portfolio-row')){ existing.remove(); return; }
+  }
+  const s=m.portfolio_match, o=s.own_brand||{}, c=s.competitor||{};
+  const tr=document.createElement('tr');
+  tr.className='rx-portfolio-row bg-violet-50/50';
+  tr.innerHTML=`<td colspan="4" class="px-3 py-3 border-b border-violet-100">
+    <div class="flex flex-wrap items-center gap-3 text-[11px]">
+      <span class="font-bold text-violet-700 uppercase tracking-widest text-[9px] w-full"><i class="fas fa-wand-magic-sparkles mr-1"></i>Own Portfolio Match — for MPO doctor detailing</span>
+      <span class="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5"><b>${esc(c.brand||m.brand_name)}</b> <span class="text-slate-400">(${esc(c.company||'')})</span> ${esc(c.strength||'')} ${esc(c.type||'')}</span>
+      <i class="fas fa-arrow-right-long text-violet-400"></i>
+      <span class="bg-white border border-violet-300 rounded-lg px-2.5 py-1.5"><b class="text-violet-700">${esc(o.brand||'')}</b> <span class="text-slate-400">(${esc(o.company||rxAuditData.own_company||'')})</span> ${esc(o.strength||'')} ${esc(o.type||'')}</span>
+      ${s.unit_difference_label?`<span class="text-[10px] px-2 py-0.5 rounded-full ${s.unit_difference<0?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${esc(s.unit_difference_label)}</span>`:''}
+    </div>
+    ${s.pitch?`<p class="mt-2 text-[11px] text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 italic leading-relaxed"><i class="fas fa-bullhorn text-amber-500 mr-1"></i>${esc(s.pitch)}</p>`:''}
+  </td>`;
+  if(row) row.insertAdjacentElement('afterend', tr);
+}
+
+/** MPO Detailing Action Card — mobile-friendly modal + downloadable PDF.
+    Pulls the substitution payload (MRP delta, pack, strength/type) plus the
+    NEML/DGDA compliance badges into a card the rep presents in-chamber. */
+let rxPitchIdx=null;
+function openRxPitchCard(idx){
+  const m=rxAuditData?.items?.[idx];
+  if(!m?.portfolio_match?.own_brand){ toast.error('No portfolio match available for this item'); return; }
+  rxPitchIdx=idx;
+  const s=m.portfolio_match, o=s.own_brand||{}, c=s.competitor||{};
+  const p=rxAuditData.prescription;
+  document.getElementById('rxPitchSub').textContent=
+    `${p.doctor_name||'Doctor'} · Rx #${p.rx_no} · ${c.brand||m.brand_name} → ${o.brand}`;
+  const delta=s.unit_difference_label
+    ? `<div class="rounded-lg px-3 py-2 ${s.unit_difference<0?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'}"><i class="fas fa-scale-balanced mr-1"></i><b>Price position:</b> ${esc(s.unit_difference_label)}</div>`
+    : '';
+  const neml=(m.neml&&m.neml.listed)
+    ? `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-full"><i class="fas fa-certificate"></i> NEML Listed · ${esc(m.neml.molecule||m.generic)}</span>` : '';
+  const alert=(m.dgda_price_alert&&m.dgda_price_alert.flagged)
+    ? `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full"><i class="fas fa-ban"></i> DGDA Price Alert</span>` : '';
+  const mrpRow=(c.mrp!=null||o.mrp!=null)
+    ? `<tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">MRP</td><td class="py-1.5">${c.mrp!=null?c.mrp+' BDT':'—'} <span class="text-slate-400">(${esc(c.pack||'')})</span></td><td class="py-1.5 font-bold text-violet-700">${o.mrp!=null?o.mrp+' BDT':'—'} <span class="text-slate-400">(${esc(o.pack||'')})</span></td></tr>` : '';
+  document.getElementById('rxPitchBody').innerHTML=`
+    <div class="flex flex-wrap gap-1">${neml}${alert}</div>
+    <table class="w-full text-[11px]">
+      <thead><tr class="text-left text-slate-400 border-b border-slate-200"><th class="py-1 font-semibold"></th><th class="py-1 font-semibold">Competitor</th><th class="py-1 font-semibold text-violet-700">Your Brand</th></tr></thead>
+      <tbody>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Brand</td><td class="py-1.5 font-semibold">${esc(c.brand||m.brand_name)}</td><td class="py-1.5 font-bold text-violet-700">${esc(o.brand)}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Company</td><td class="py-1.5">${esc(c.company||'')}</td><td class="py-1.5">${esc(o.company||rxAuditData.own_company||'')}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Generic</td><td colspan="2" class="py-1.5">${esc(s.generic||m.generic||'')}</td></tr>
+        <tr class="border-t border-slate-100"><td class="py-1.5 text-slate-500">Strength / Form</td><td class="py-1.5">${esc([c.strength,c.type].filter(Boolean).join(' '))}</td><td class="py-1.5">${esc([o.strength,o.type].filter(Boolean).join(' '))}</td></tr>
+        ${mrpRow}
+      </tbody>
+    </table>
+    ${delta}
+    <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-1.5">
+      <p class="text-[9px] font-bold uppercase tracking-widest text-blue-700"><i class="fas fa-flask-vial mr-1"></i>Bioequivalence & dosage evidence</p>
+      <p class="text-[11px] text-slate-700 leading-relaxed" id="rxPitchBioequiv">${esc(m.portfolio_match?._evidence?.bioequiv||'')}</p>
+      <p class="text-[11px] text-slate-700 leading-relaxed" id="rxPitchDosage">${esc(m.portfolio_match?._evidence?.dosage_advantage||'')}</p>
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p class="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1"><i class="fas fa-bullhorn text-amber-500 mr-1"></i>Smart pitch script</p>
+      <p id="rxPitchScript" class="italic leading-relaxed text-slate-700">${esc(s.pitch||'')}</p>
+    </div>
+    <p class="text-[9px] text-slate-400">Bioequivalence & pack data from the MedEx-audited catalogue · verify sample stock before the visit.</p>`;
+  const modal=document.getElementById('rxPitchModal');
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  document.getElementById('rxPitchPdfBtn').onclick=()=>window.open(
+    `/api/prescriptions/${p.id}/pitch-card.pdf?idx=${idx}`,'_blank');
+  document.getElementById('rxPitchCopyBtn').onclick=async()=>{
+    const text=document.getElementById('rxPitchScript')?.textContent||'';
+    try{ await navigator.clipboard.writeText(text); toast.success('Pitch script copied'); }
+    catch(_){ toast.error('Copy failed — clipboard unavailable'); }
+  };
+}
+function closeRxPitchCard(){
+  const modal=document.getElementById('rxPitchModal');
+  if(!modal||modal.classList.contains('hidden')) return;
+  modal.classList.add('hidden'); modal.classList.remove('flex');
+}
+document.getElementById('rxPitchClose')?.addEventListener('click',closeRxPitchCard);
+document.getElementById('rxPitchModal')?.addEventListener('click',e=>{
+  if(e.target.id==='rxPitchModal') closeRxPitchCard();
+});
+
+/** Low-confidence item → queue for verification against the MedEx catalogue. */
+async function verifyRxAuditItem(idx){
+  const m=rxAuditData?.items?.[idx]; if(!m) return;
+  const p=rxAuditData.prescription;
+  try{
+    const r=await fetch('/api/training/queue',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        prescription_id:p.id, mr_id:p.mr_id||'MR001',
+        brand_name:m.brand_name, corrected_brand:m.brand_name,
+        corrected_company:m.company, raw_text:m.raw_text||'',
+        confidence:m.confidence,
+        notes:'Rx Audit Drawer — Verify against Medex (confidence <80%)',
+      })});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    toast.success(`"${m.brand_name||'Item'}" queued for Medex verification — thanks for flagging it`);
+  }catch(e){ toast.error('Could not queue verification: '+e.message); }
+}
+
+/** Export Rx Items as CSV (backend serializer, browser download). */
+async function exportRxAuditCsv(){
+  const d=rxAuditData; if(!d) return;
+  try{
+    const r=await fetch(`/api/prescriptions/${d.prescription.id}/export.csv`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob=await r.blob();
+    const cd=(r.headers.get('Content-Disposition')||'').match(/filename="?([^"]+)"?/);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(cd&&cd[1])||`rx_A-${d.prescription.id}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast.success('Rx items exported as CSV');
+  }catch(e){ toast.error('CSV export failed: '+e.message); }
+}
+document.getElementById('rxExportCsvBtn')?.addEventListener('click',exportRxAuditCsv);
+
+/** Copy the audit list to the clipboard for internal reporting channels. */
+async function copyRxAuditList(){
+  const d=rxAuditData; if(!d) return;
+  let text='';
+  try{
+    const r=await fetch(`/api/prescriptions/${d.prescription.id}/clipboard`);
+    if(r.ok){ text=(await r.json()).text||''; }
+  }catch(_){}
+  if(!text){
+    text=`Rx #${d.prescription.rx_no} • ${d.prescription.doctor_name||''} • ${d.items.length} medicines`;
+    d.items.forEach((m,i)=>{ text+=`\n${i+1}. ${m.brand_name||'Unknown'} ${m.strength||''} — ${m.generic||''} — ${m.company||'Unknown Brand'} (${m.confidence_pct}%)`; });
+  }
+  try{
+    await navigator.clipboard.writeText(text);
+    toast.success('Audit list copied — paste it into your reporting channel');
+  }catch(_){
+    const ta=document.createElement('textarea');
+    ta.value=text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast.success('Audit list copied'); }
+    catch(e){ toast.error('Copy failed — clipboard unavailable'); }
+    ta.remove();
+  }
+}
+document.getElementById('rxCopyBtn')?.addEventListener('click',copyRxAuditList);
+
+document.getElementById('rxAuditSearch')?.addEventListener('input',e=>{
+  rxAuditQuery=e.target.value; renderRxAuditItems();
+});
+document.querySelectorAll('#rxAuditFilters .rx-filter').forEach(btn=>{
+  btn.addEventListener('click',()=>{ rxAuditFilter=btn.dataset.filter; renderRxAuditDrawer(); });
+});
+
+/* ---------- Crop Preview on Hover (drawer medicine rows) ---------- */
+let rxCropTimer=null;
+function showRxCropPopover(target){
+  const pop=document.getElementById('rxCropPopover');
+  const img=document.getElementById('rxCropImg');
+  const cap=document.getElementById('rxCropCaption');
+  if(!pop||!img) return;
+  const brand=target.dataset.brand||'';
+  const line=parseInt(target.dataset.line||'1',10);
+  const total=parseInt(target.dataset.total||'1',10);
+  img.src=target.dataset.image;
+  cap.textContent=`${brand} — Rx line ${line}/${total}`;
+  pop.classList.remove('hidden');
+  const rect=target.getBoundingClientRect();
+  const pw=224, ph=196;
+  let x=rect.right+8, y=rect.top-8;
+  if(x+pw>window.innerWidth-8) x=rect.left-pw-8;
+  if(x<8) x=8;
+  if(y+ph>window.innerHeight-8) y=window.innerHeight-ph-8;
+  if(y<8) y=8;
+  pop.style.left=x+'px'; pop.style.top=y+'px';
+}
+function hideRxCropPopover(){
+  clearTimeout(rxCropTimer);
+  document.getElementById('rxCropPopover')?.classList.add('hidden');
+}
+function attachRxCropHover(){
+  document.querySelectorAll('#rxAuditItems .rx-crop-hover').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{ rxCropTimer=setTimeout(()=>showRxCropPopover(el),150); });
+    el.addEventListener('mouseleave',hideRxCropPopover);
+    el.addEventListener('click',()=>showRxCropPopover(el));
+  });
+}
+
 
 async function loadMedexStats(){
   try{
@@ -3027,6 +3715,9 @@ async function loadRsmDashboard(){
     ]);
     loadRsmHeatmap();
     loadDoctorTiers();
+    loadDoctorTargets(d.members||[]);
+    loadOffTerritory();
+    loadStewardship();
     const k=d.totals||{};
     const kpis=document.getElementById('rsmKpis');
     if(kpis){
@@ -3064,6 +3755,104 @@ async function loadRsmDashboard(){
   }catch(e){console.error('rsm',e);}
 }
 
+/* ---------- RSM: Doctor Detailing Target Tracker ----------
+   RSMs attach target doctor lists to MPOs; every scan whose doctor
+   matches a target auto-logs a visit (deduped per prescription). */
+let dtMembers=[];
+
+function dtPopulateMpoSelect(members){
+  const sel=document.getElementById('dtMpo'); if(!sel) return;
+  if(Array.isArray(members) && members.length) dtMembers=members;
+  if(!dtMembers.length) return;
+  const prev=sel.value;
+  sel.innerHTML=dtMembers.map(m=>
+    `<option value="${esc(m.mpo_mr_id)}">${esc(m.mpo_name||m.mpo_mr_id)}${m.territory?` — ${esc(m.territory)}`:''}</option>`
+  ).join('');
+  if(prev && dtMembers.some(m=>m.mpo_mr_id===prev)) sel.value=prev;
+}
+
+async function loadDoctorTargets(members){
+  dtPopulateMpoSelect(members);
+  const body=document.getElementById('dtBody');
+  const visits=document.getElementById('dtVisits');
+  if(!body) return;
+  try{
+    const [t, v]=await Promise.all([
+      fetch('/api/rsm/doctor-targets').then(r=>r.json()),
+      fetch('/api/rsm/doctor-targets/visits?limit=25').then(r=>r.json()).catch(()=>[]),
+    ]);
+    const rows=t.targets||[];
+    if(!rows.length){
+      body.innerHTML='<tr><td colspan="8" class="py-6 text-center text-slate-400">No doctor targets attached yet — add one above.</td></tr>';
+    }else{
+      body.innerHTML=rows.map(tg=>{
+        const pct=Math.min(tg.percent||0,100);
+        const done=tg.monthly_target>0 && tg.visits>=tg.monthly_target;
+        return `<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+          <td class="py-2 font-medium">${esc(tg.mpo_name||tg.mpo_id)}</td>
+          <td>${esc(tg.doctor_name)}</td>
+          <td>${esc(tg.specialty||'—')}</td>
+          <td>${tg.monthly_target||'—'}</td>
+          <td class="font-semibold ${done?'text-emerald-700':'text-slate-800'}">${tg.visits}${tg.monthly_target?` <span class="text-slate-400 font-normal">/ ${tg.monthly_target}</span>`:''}</td>
+          <td><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full rounded-full ${pct>=100?'bg-emerald-500':pct>=50?'bg-amber-400':'bg-rose-400'}" style="width:${pct}%"></div></div><span class="text-[9px] text-slate-400">${tg.percent||0}%</span></td>
+          <td class="text-slate-500 text-[10px]">${tg.last_visit?esc(tg.last_visit.slice(0,16).replace('T',' ')):'—'}</td>
+          <td><button type="button" class="dt-remove text-slate-300 hover:text-red-600" data-id="${tg.id}" title="Remove target"><i class="fas fa-trash-can"></i></button></td>
+        </tr>`;
+      }).join('');
+      body.querySelectorAll('.dt-remove').forEach(btn=>{
+        btn.addEventListener('click',async()=>{
+          try{
+            const r=await fetch(`/api/rsm/doctor-targets/${btn.dataset.id}`,{method:'DELETE'});
+            if(!r.ok) throw new Error(`HTTP ${r.status}`);
+            toast.success('Doctor target removed');
+            loadDoctorTargets();
+          }catch(e){ toast.error('Remove failed: '+e.message); }
+        });
+      });
+    }
+    if(visits){
+      const list=Array.isArray(v)?v:[];
+      visits.innerHTML=list.length?list.map(v=>`
+        <div class="flex items-center gap-2 border border-slate-100 rounded-lg px-2 py-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+          <span class="font-semibold">${esc(v.doctor_name||v.target_doctor||'')}</span>
+          <span class="text-slate-400">visited by</span>
+          <span>${esc(v.mr_id||v.target_mpo_id||'')}</span>
+          <span class="ml-auto text-slate-400 text-[10px]">${esc((v.visited_at||'').slice(0,16).replace('T',' '))}</span>
+          ${v.prescription_id?`<button class="text-[10px] text-blue-600 hover:underline" onclick="openRxAuditDrawer(${v.prescription_id})">Rx #A-${v.prescription_id}</button>`:''}
+        </div>`).join('')
+        :'<p class="text-slate-400">No auto-logged visits yet.</p>';
+    }
+  }catch(e){ console.error('doctor targets',e); }
+}
+
+document.getElementById('doctorTargetForm')?.addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const mpo=document.getElementById('dtMpo');
+  const doctor=document.getElementById('dtDoctor')?.value.trim();
+  const member=dtMembers.find(m=>m.mpo_mr_id===(mpo?.value||''));
+  if(!doctor){ toast.error('Enter a target doctor name'); return; }
+  const btn=document.getElementById('dtAddBtn');
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/rsm/doctor-targets',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        mpo_id:mpo?.value||'', mpo_name:member?.mpo_name||'',
+        doctor_name:doctor,
+        specialty:document.getElementById('dtSpecialty')?.value.trim()||'',
+        monthly_target:parseInt(document.getElementById('dtTarget')?.value||'0',10)||0,
+      })});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.detail||`HTTP ${r.status}`); }
+    toast.success(`Target attached — visits to ${doctor} will auto-log from scans`);
+    const dt=document.getElementById('dtDoctor'); if(dt) dt.value='';
+    const sp=document.getElementById('dtSpecialty'); if(sp) sp.value='';
+    loadDoctorTargets();
+  }catch(err){ toast.error('Could not attach target: '+err.message); }
+  finally{ btn.disabled=false; }
+});
+document.getElementById('dtRefresh')?.addEventListener('click',()=>{ loadDoctorTargets(); toast.info('Doctor targets refreshed'); });
+
+
 /* ---------- RSM: Territory penetration heatmap (Leaflet) ---------- */
 let heatmapInstance=null;
 
@@ -3072,6 +3861,203 @@ function heatmapColor(sov){
   if(sov>=35) return '#F59E0B';   // competitive / mixed (amber)
   return '#EF4444';               // competitor-heavy (red)
 }
+
+/* ---------- RSM: density clustering of audit points ----------
+   Grid-clusters every audit pin (GPS when pinned, district centroid
+   otherwise) into zoom-aware bubbles: size + colour = audit volume, so
+   chamber hotspots and underserved zones are visible at a glance. */
+let clusterLayer=null, hmView='sov';
+
+function hmClusterColor(n){
+  if(n>=10) return '#7C3AED';   // hot cluster (high audit density)
+  if(n>=5)  return '#0284C7';
+  if(n>=2)  return '#10B981';
+  return '#94A3B8';             // isolated single audits
+}
+
+async function loadRsmClusters(){
+  const map=initLeaflet();
+  if(!map) return;
+  const days=document.getElementById('hmDays')?.value||'30';
+  if(clusterLayer){ map.removeLayer(clusterLayer); clusterLayer=null; }
+  let pts=[];
+  try{
+    pts=await fetch(`/api/rsm/scan-points?days=${days}&limit=2000`).then(r=>r.json());
+    if(!Array.isArray(pts)) pts=[];
+  }catch(e){ console.error('scan-points',e); return; }
+  // grid cluster: cell size shrinks as you zoom in
+  const zoom=map.getZoom();
+  const cell=zoom>=10?0.02:zoom>=8?0.06:zoom>=7?0.15:0.45;
+  const groups={};
+  pts.forEach(pt=>{
+    const k=`${Math.floor(pt.lat/cell)}:${Math.floor(pt.lng/cell)}`;
+    (groups[k]=groups[k]||[]).push(pt);
+  });
+  clusterLayer=L.layerGroup().addTo(map);
+  const stats=document.getElementById('heatmapStats');
+  if(stats){
+    const off=pts.filter(p=>p.off_territory).length;
+    const dup=pts.filter(p=>p.duplicate_of).length;
+    stats.innerHTML=`
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Audit clusters</p><p class="text-xl font-bold">${Object.keys(groups).length}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Total audits mapped</p><p class="text-xl font-bold">${pts.length}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Off-territory flagged</p><p class="text-xl font-bold ${off?'text-red-600':''}">${off}</p></div>
+      <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Duplicates blocked</p><p class="text-xl font-bold ${dup?'text-amber-600':''}">${dup}</p></div>`;
+  }
+  Object.values(groups).forEach(g=>{
+    const lat=g.reduce((a,b)=>a+b.lat,0)/g.length;
+    const lng=g.reduce((a,b)=>a+b.lng,0)/g.length;
+    const n=g.length;
+    const col=hmClusterColor(n);
+    const radius=Math.max(9, Math.min(30, 5+Math.sqrt(n)*4));
+    const docs=[...new Set(g.slice(0,6).map(p=>p.doctor_name||'—'))];
+    const offN=g.filter(p=>p.off_territory).length;
+    const marker=L.circleMarker([lat,lng],{
+      radius, color:col, weight:2, fillColor:col, fillOpacity:0.45, opacity:0.9
+    }).addTo(clusterLayer);
+    marker.bindTooltip(`${n}`, {permanent:true, direction:'center', className:'cluster-count'});
+    marker.bindPopup(
+      `<div class="text-[12px]"><b>${n} audit${n>1?'s':''}</b> in this zone<br>`+
+      `Doctors: ${docs.map(d=>esc(d)).join(', ')}${g.length>6?' +more':''}<br>`+
+      (offN?`<span class="text-red-600 font-bold">⚠ ${offN} off-territory flagged</span><br>`:'')+
+      `Rx: ${g.map(p=>`<a href="javascript:openRxAuditDrawer(${p.id})" class="text-blue-600 underline">A-${p.id}</a>`).slice(0,8).join(' ')}${g.length>8?' …':''}</div>`);
+  });
+  if(pts.length) map.fitBounds(pts.map(p=>[p.lat,p.lng]),{padding:[30,30]});
+}
+
+function setHmView(view){
+  hmView=view;
+  document.getElementById('hmViewSov')?.classList.toggle('bg-slate-900', view==='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('text-white', view==='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('bg-white', view!=='sov');
+  document.getElementById('hmViewSov')?.classList.toggle('text-slate-600', view!=='sov');
+  document.getElementById('hmViewClusters')?.classList.toggle('bg-slate-900', view==='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('text-white', view==='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('bg-white', view!=='clusters');
+  document.getElementById('hmViewClusters')?.classList.toggle('text-slate-600', view!=='clusters');
+  if(view==='clusters') loadRsmClusters();
+  else loadRsmHeatmap();
+}
+document.getElementById('hmViewSov')?.addEventListener('click',()=>setHmView('sov'));
+document.getElementById('hmViewClusters')?.addEventListener('click',()=>setHmView('clusters'));
+
+/* ---------- RSM: Off-Territory Audit Verification list ---------- */
+async function loadOffTerritory(){
+  const body=document.getElementById('otBody');
+  const count=document.getElementById('otCount');
+  if(!body) return;
+  const days=document.getElementById('hmDays')?.value||'30';
+  try{
+    const rows=await fetch(`/api/rsm/off-territory?days=${days}&limit=50`).then(r=>r.json());
+    const list=Array.isArray(rows)?rows:[];
+    if(count){
+      count.textContent=`${list.length} flagged`;
+      count.className='text-[10px] font-bold px-2 py-0.5 rounded-full '+(list.length?'bg-red-100 text-red-700':'bg-slate-100 text-slate-600');
+    }
+    if(!list.length){
+      body.innerHTML='<p class="text-slate-400 text-xs">No off-territory audits flagged — every scan matches its assigned zone.</p>';
+      return;
+    }
+    body.innerHTML=list.map(r=>`
+      <div class="border border-red-200 bg-red-50/60 rounded-xl p-2.5 text-[11px] flex items-start gap-2">
+        <div class="w-9 h-9 rounded-lg bg-white border border-red-200 flex-shrink-0 overflow-hidden">${r.image_url?`<img src="${r.image_url}" class="w-full h-full object-cover">`:''}</div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold flex items-center gap-1.5 flex-wrap">${esc(r.doctor_name||'Unknown doctor')}
+            <span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-red-100 border border-red-300 px-1.5 py-px rounded-full"><i class="fas fa-location-dot"></i>Off-Territory Audit</span>
+            ${r.duplicate_of?'<span class="inline-flex items-center gap-1 text-[9px] font-bold text-red-700 bg-white border border-red-300 px-1.5 py-px rounded-full"><i class="fas fa-clone"></i>also Duplicate</span>':''}
+          </p>
+          <p class="text-slate-600 truncate">${esc(r.territory_note||'Location mismatch with assigned territory')}</p>
+          <p class="text-slate-400 text-[10px]">MR ${esc(r.mr_id||'—')} · ${esc([r.upazila,r.district].filter(Boolean).join(', ')||'unknown location')} · ${esc((r.timestamp||'').slice(0,16).replace('T',' '))}</p>
+        </div>
+        <button class="text-[10px] text-blue-600 hover:underline shrink-0" onclick="openRxAuditDrawer(${r.id})">Review Rx</button>
+      </div>`).join('');
+  }catch(e){ console.error('off-territory',e); }
+}
+document.getElementById('otRefresh')?.addEventListener('click',()=>{ loadOffTerritory(); toast.info('Off-territory audits refreshed'); });
+
+/* ---------- RSM: Antibiotic Stewardship Monitor (per chamber) ---------- */
+async function loadStewardship(){
+  const body=document.getElementById('abxBody');
+  if(!body) return;
+  const days=document.getElementById('hmDays')?.value||'30';
+  try{
+    const d=await fetch(`/api/rsm/stewardship?days=${days}&limit=100`).then(r=>r.json());
+    const t=d.totals||{};
+    const chip=document.getElementById('abxShareChip');
+    if(chip){
+      chip.textContent=`${t.abx_share_pct||0}% ABX share`;
+      chip.className='text-[10px] font-bold px-2 py-0.5 rounded-full '+((t.abx_share_pct||0)>=40?'bg-red-100 text-red-700':(t.abx_share_pct||0)>=20?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600');
+    }
+    const totals=document.getElementById('abxTotals');
+    if(totals){
+      totals.innerHTML=`
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Chambers audited</p><p class="text-xl font-bold">${t.doctors_audited||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Chambers prescribing ABX</p><p class="text-xl font-bold ${t.doctors_with_abx?'text-amber-600':''}">${t.doctors_with_abx||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">ABX items (${days}d)</p><p class="text-xl font-bold">${t.abx_items||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Broad-spectrum ★</p><p class="text-xl font-bold ${t.broad_items?'text-red-600':''}">${t.broad_items||0}</p></div>`;
+    }
+    const rows=d.doctors||[];
+    const visible=rows.filter(x=>x.abx_items>0);
+    if(!visible.length){
+      body.innerHTML='<tr><td colspan="8" class="py-6 text-center text-slate-400">No antibiotic prescribing in this window.</td></tr>';
+      return;
+    }
+    body.innerHTML=visible.map(x=>{
+      const pct=Math.min(x.abx_share_pct||0,100);
+      return `<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+        <td class="py-2 font-medium">${esc(x.doctor_name)}</td>
+        <td>${esc(x.specialty||'—')}</td>
+        <td>${esc(x.district||'—')}</td>
+        <td>${x.rx}</td>
+        <td class="font-bold ${x.abx_items>=4?'text-red-600':'text-amber-700'}">${x.abx_items} <span class="text-slate-400 font-normal">/ ${x.items} items</span></td>
+        <td>${x.broad_items?`<span class="font-bold text-red-600">★ ${x.broad_items}</span>`:'<span class="text-slate-300">0</span>'}</td>
+        <td><div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full rounded-full ${pct>=40?'bg-red-500':pct>=20?'bg-amber-400':'bg-emerald-500'}" style="width:${pct}%"></div></div><span class="text-[9px] text-slate-400">${x.abx_share_pct}%</span></td>
+        <td class="text-[10px] text-slate-500">${esc((x.abx_brands||[]).join(', ')||'—')}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){ console.error('stewardship',e); }
+}
+document.getElementById('abxRefresh')?.addEventListener('click',()=>{ loadStewardship(); toast.info('Stewardship audit refreshed'); });
+
+/* ---------- Hub: TRIPS Waiver Portfolio Tracker (PMD) ---------- */
+async function loadTripsPortfolio(){
+  const body=document.getElementById('tripsBody');
+  if(!body) return;
+  const days=document.getElementById('tripsDays')?.value||'90';
+  try{
+    const d=await fetch(`/api/trips/portfolio?days=${days}`).then(r=>r.json());
+    const win=document.getElementById('tripsWindow');
+    if(win) win.textContent=`LDC pharma waiver → ${(d.waiver_expiry||'2033').slice(0,10)}`;
+    const t=d.totals||{};
+    const totals=document.getElementById('tripsTotals');
+    if(totals){
+      totals.innerHTML=`
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-3"><p class="text-[10px] text-amber-600">Molecules on watch</p><p class="text-xl font-bold text-amber-700">${t.watched||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">With field volume (${days}d)</p><p class="text-xl font-bold">${t.with_field_volume||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Watch-list items scanned</p><p class="text-xl font-bold">${t.volume||0}</p></div>
+        <div class="rounded-xl border border-slate-200 p-3"><p class="text-[10px] text-slate-500">Rising vs prev period</p><p class="text-xl font-bold ${t.rising?'text-emerald-600':''}">${t.rising||0}</p></div>`;
+    }
+    const lv={critical:'bg-red-100 text-red-700 border-red-300',high:'bg-amber-100 text-amber-700 border-amber-300',medium:'bg-slate-100 text-slate-600 border-slate-200',low:'bg-slate-50 text-slate-400 border-slate-200'};
+    body.innerHTML=(d.molecules||[]).map(m=>{
+      const delta=m.delta>0?`<span class="text-emerald-600 font-bold">▲ +${m.delta}</span>`
+        :m.delta<0?`<span class="text-red-600 font-bold">▼ ${m.delta}</span>`
+        :'<span class="text-slate-300">—</span>';
+      const pct=m.delta_pct!=null?` <span class="text-[9px] text-slate-400">(${m.delta_pct>0?'+':''}${m.delta_pct}%)</span>`:'';
+      return `<tr class="border-b border-slate-100 hover:bg-slate-50/60">
+        <td class="py-2 font-semibold">${esc(m.molecule)}</td>
+        <td class="text-slate-500">${esc(m.class||'—')}</td>
+        <td class="text-slate-500">${esc(m.originator||'—')}</td>
+        <td><span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${lv[m.watch_level]||lv.medium}">${esc((m.watch_level||'medium').toUpperCase())}</span></td>
+        <td class="text-slate-400 text-[10px]">→ ${(d.waiver_expiry||'').slice(0,10)}</td>
+        <td class="font-bold ${m.current_volume?'':'text-slate-300'}">${m.current_volume}</td>
+        <td>${delta}${pct}</td>
+        <td class="text-[10px] text-slate-500">${esc((m.top_territories||[]).map(x=>`${x.name} (${x.count})`).join(', ')||'—')}</td>
+      </tr>`;
+    }).join('')||'<tr><td colspan="8" class="py-6 text-center text-slate-400">TRIPS watch list unavailable.</td></tr>';
+  }catch(e){ console.error('trips',e); }
+}
+document.getElementById('tripsRefresh')?.addEventListener('click',()=>{ loadTripsPortfolio(); toast.info('TRIPS portfolio refreshed'); });
+document.getElementById('tripsDays')?.addEventListener('change',loadTripsPortfolio);
 
 function initLeaflet(){
   if(!window.L){

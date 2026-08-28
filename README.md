@@ -62,9 +62,91 @@ Output JSON example:
 }
 ```
 
+## Rx Audit Drawer, Duplicate-Rx Fraud Alert & Doctor Target Tracker
+
+- **Prescription Audit Summary drawer** — click any card under *Recent Prescriptions*
+  (Analytics Dashboard) to slide open an isolated item breakdown: medicine brand +
+  dosage form, generic molecule, pharmaceutical manufacturer badge and AI
+  confidence badge (`<80%` rows glow soft orange with a **Verify against Medex**
+  button that queues the item for the handwriting-retraining pipeline).
+- **Search + filter inside the drawer**: `All (n) | Own Pharma (n) | Competitors (n) | <80% (n)` pills and a free-text search over scanned items.
+- **Own Portfolio Match pill** — competitor rows expand into the client company's
+  matching brand (e.g. Seclo/Square -> Opal/Healthcare) with price difference and
+  an MPO pitch note, for in-chamber detailing.
+- **Market Share Summary** for the Rx (own vs competitor, counts + %).
+- **Export Rx Items as CSV** and **Copy List to Clipboard** for audit reporting.
+- **Crop preview on hover** — hovering a medicine name pops a thumbnail of the
+  prescription scan.
+- **Duplicate Rx fraud alert** — every scan is fingerprinted with a pure-Python
+  DCT perceptual hash (`app/rx_audit.py`). Re-uploading the same physical Rx
+  (even resized / recompressed) flags a red **Duplicate Rx Detected** tag on the
+  card, in the drawer and as a post-scan alert, so target inflation via
+  double-scanning is caught before it reaches KPIs.
+- **Doctor Detailing Target Tracker** (RSM Command tab) — RSMs attach target
+  doctor lists to MPOs; every scan whose doctor matches a target auto-logs a
+  visit (deduped per prescription), with progress bars and a live visit log.
+
+## DGDA NEML & Price Ceiling Monitor, Prescribing Analytics, Pitch Cards, Geofencing
+
+- **NEML Compliance Badge** — drawer rows show a blue `NEML Listed` pill for
+  molecules on the DGDA National Essential Medicines List (`data/neml_list.json`,
+  ~295-molecule NEML alignment: Omeprazole, Metformin, Amlodipine, Azithromycin...).
+- **MRP Ceiling Violation Warning** — red `DGDA Price Alert` flag when a brand is
+  banned, its MRP was ceiling-adjusted by gazette, or a captured price exceeds
+  the DGDA ceiling; unverified pricing gets a muted note instead of false alarms.
+- **Polypharmacy Risk Counter** — `⚠️ 8+ Meds Prescribed — High Polypharmacy`
+  top-level drawer badge (5-7 = moderate).
+- **Therapeutic Class Breakdown** — stacked percentage bar (Cardiology /
+  Gastroenterology / Antibiotics / ...) from NEML classes + MedEx categories.
+- **Antibiotic Stewardship Tag** — `ABX` pill per row; broad-spectrum molecules
+  (Azithromycin, Cefixime, fluoroquinolones...) get a red `ABX ★` watch-list tag
+  and a stewardship summary badge.
+- **MPO Detailing Action Cards** — every Own Portfolio Match row has a
+  **Generate Doctor Pitch Card** button: a mobile-friendly modal (MRP delta,
+  pack, strength/type, compliance evidence, smart pitch script) plus a
+  one-page **PDF** download (`/api/prescriptions/{pid}/pitch-card.pdf?idx=`).
+- **Geofenced Audit Verification** — the workspace has a **GPS** pin button;
+  scans are geofenced against the officer's assigned territory using
+  `data/bd_geo.json` district centroids, and mismatches surface as an
+  **Off-Territory Audit** flag in the drawer and a red RSM Command card
+  (`/api/rsm/off-territory`).
+- **Density Clustering Map** — the RSM heatmap gains a *Density clusters* view:
+  zoom-aware grid clusters of audit pins with counts, chamber hotspots and
+  off-territory/duplicate counters (`/api/rsm/scan-points`).
+
+## TRIPS Waiver Portfolio Tracker & Stewardship Monitor
+
+- **TRIPS Waiver Portfolio Tracker** (Pharma Intelligence Hub) — the LDC
+  pharmaceutical TRIPS waiver runs to **1 Jan 2033**; `data/trips_waiver.json`
+  watch-lists 26 high-priority molecules (Dapagliflozin, Rivaroxaban,
+  Empagliflozin, Adalimumab...) with originator + criticality. The tracker
+  joins that list against real prescription scans: per-molecule field volume,
+  delta vs the previous period and top territories, so PMD sees which watch
+  brands are being written where. Drawer rows for watched molecules get an
+  amber `TRIPS Watch` pill (`GET /api/trips/portfolio`).
+- **Antibiotic Stewardship Monitor** (RSM Command) — per doctor chamber ABX
+  audit: items scanned, antibiotic items, broad-spectrum ★ count and ABX share
+  bar, plus clinic-wide totals (`GET /api/rsm/stewardship`).
+- **Doctor Pitch Card evidence** — the pitch card (modal + PDF) now includes
+  factual bioequivalence ("both products are DGDA-registered formulations of
+  the same molecule") and dosage-advantage lines (identical strength → no
+  titration; differing → titrate first), plus a TRIPS-watch note when the
+  molecule is on the waiver tracker.
+
 ## API
 
-- `POST /api/scan` - upload image, returns doctor + medicines with MedEx images
+- `POST /api/scan` - upload image, returns doctor + medicines with MedEx images (+ `duplicate` fraud alert when the same Rx was scanned before)
+- `GET /api/prescriptions/{pid}` - full Prescription Audit Summary drawer payload (items, market share, duplicate flag, portfolio matches)
+- `GET /api/prescriptions/{pid}/export.csv` - download the Rx's detected items as CSV
+- `GET /api/prescriptions/{pid}/clipboard` - plain-text audit list for reporting channels
+- `GET|POST /api/rsm/doctor-targets` - doctor detailing target list / attach target (retro-counts this month's scans)
+- `DELETE /api/rsm/doctor-targets/{id}` - remove a doctor target
+- `GET /api/rsm/doctor-targets/visits` - auto-logged visit feed from prescription scans
+- `GET /api/prescriptions/{pid}/pitch-card.pdf?idx=` - one-page MPO Doctor Pitch Card (PDF) for a matched competitor row
+- `GET /api/rsm/off-territory` - geofenced audits captured outside the officer's assigned territory
+- `GET /api/rsm/scan-points` - point-level audit locations for the density-clustering map
+- `GET /api/trips/portfolio?days=90` - TRIPS waiver watch list with field volume trends per territory
+- `GET /api/rsm/stewardship?days=30` - per-chamber antibiotic prescribing audit
 - `GET /api/medex?q=Napa&form=Tablet&limit=20` - search scraped DB
 - `GET /api/health` - model + DB count
 

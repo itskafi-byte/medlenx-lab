@@ -322,7 +322,15 @@ def company_key(name: str) -> str:
     text = _ascii_fold(str(name)).lower()
     text = _COMPANY_NOISE.sub(" ", text)
     text = re.sub(r"[^a-z0-9]+", " ", text)
-    return " ".join(text.split())
+    key = " ".join(text.split())
+    if not key:
+        # Corporate-noise-only name (e.g. 'Healthcare Pharmaceuticals Ltd.'
+        # is healthcare + pharmaceuticals + ltd) — strip-noise left nothing.
+        # Fall back to the normalised raw name so the key stays stable and
+        # comparable instead of silently disabling own-company matching.
+        raw = _ascii_fold(str(name)).lower()
+        key = " ".join(re.sub(r"[^a-z0-9]+", " ", raw).split())
+    return key
 
 
 def same_company(a: str, b: str) -> bool:
