@@ -1,25 +1,37 @@
-const CACHE_NAME = 'medlenx-lab-v2';
+const CACHE_NAME = 'medlenx-lab-v3';
 const urlsToCache = [
   '/',
-  '/static/css/tailwind.css',
-  '/manifest.json'
+  '/manifest.json',
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)).catch(() => {})
   );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+    ))
+  );
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
+  const url = event.request.url;
+  if (url.includes('/api/') || event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
   event.respondWith(
-    caches.match(event.request).then(response => {
-      // Return cached or fetch, but for API always fetch
-      if (event.request.url.includes('/api/')) {
-        return fetch(event.request).catch(() => response);
-      }
-      return response || fetch(event.request);
-    })
+    caches.match(event.request).then(response => response || fetch(event.request).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+      return res;
+    }).catch(() => response))
   );
 });
 
@@ -30,6 +42,5 @@ self.addEventListener('sync', event => {
 });
 
 async function syncOfflinePrescriptions() {
-  // Would sync IndexedDB prescriptions when online
   console.log('Syncing offline prescriptions...');
 }

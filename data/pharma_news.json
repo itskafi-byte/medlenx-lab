@@ -1,0 +1,84 @@
+{
+  "items": [
+    {
+      "id": "n001",
+      "source": "DGDA",
+      "source_type": "regulatory",
+      "title": "DGDA issues updated GMP inspection circular for local manufacturers",
+      "summary": "The Directorate General of Drug Administration published a revised GMP inspection checklist covering sterile and non-sterile plants. Marketing authorisation holders must close CAPAs within 90 days.",
+      "url": "https://www.dgda.gov.bd/",
+      "published_at": "2026-08-26T09:00:00",
+      "tags": ["DGDA", "GMP", "Regulatory"]
+    },
+    {
+      "id": "n002",
+      "source": "Medex",
+      "source_type": "market",
+      "title": "PPI category remains the most prescribed GI class in urban chambers",
+      "summary": "Medex catalogue traffic and field audits show omeprazole / esomeprazole brands dominating gastroenterology prescriptions. Square, Incepta and Healthcare lead SoV.",
+      "url": "https://medex.com.bd/",
+      "published_at": "2026-08-25T11:30:00",
+      "tags": ["Market", "GI", "PPI"]
+    },
+    {
+      "id": "n003",
+      "source": "DGDA",
+      "source_type": "regulatory",
+      "title": "Price notification: essential medicines list ceiling prices reaffirmed",
+      "summary": "DGDA reminded manufacturers not to exceed notified MRP on the national essential medicines list. Field force should flag any trade-price drift in rural pharmacies.",
+      "url": "https://www.dgda.gov.bd/",
+      "published_at": "2026-08-22T16:00:00",
+      "tags": ["Pricing", "EML"]
+    },
+    {
+      "id": "n004",
+      "source": "Market Desk",
+      "source_type": "market",
+      "title": "SGLT2 inhibitors gain share among urban endocrinologists ahead of World Diabetes Day",
+      "summary": "Cardiologists and endocrinologists in Dhaka and Chattogram are adding SGLT2s earlier in T2DM algorithms. Plan WDD (14 Nov) camps now.",
+      "url": "",
+      "published_at": "2026-08-21T08:15:00",
+      "tags": ["Diabetes", "Cardiology", "Campaign"]
+    },
+    {
+      "id": "n005",
+      "source": "Medex",
+      "source_type": "catalogue",
+      "title": "New pack images added for 400+ inhaler and insulin SKUs",
+      "summary": "Medex.com.bd refreshed packaging photography used by MedLenX vision matching. Expect higher pack-image hit rates on respiratory and endocrine lines.",
+      "url": "https://medex.com.bd/",
+      "published_at": "2026-08-20T13:00:00",
+      "tags": ["Medex", "Catalogue"]
+    },
+    {
+      "id": "n006",
+      "source": "DGDA",
+      "source_type": "regulatory",
+      "title": "Pharmacovigilance: ADR reporting deadline reminder for Q3",
+      "summary": "MAHs must submit quarterly ADR summaries. MPOs should collect chamber-level adverse-event notes on high-alert brands.",
+      "url": "https://www.dgda.gov.bd/",
+      "published_at": "2026-08-18T10:00:00",
+      "tags": ["PV", "ADR"]
+    },
+    {
+      "id": "n007",
+      "source": "Market Desk",
+      "source_type": "market",
+      "title": "Chattogram Metro antibiotic SoV tightens between Square, Incepta and Beximco",
+      "summary": "Azithromycin and cefixime remain crowded. Differentiation now depends on doctor-level conversion, not just coverage.",
+      "url": "",
+      "published_at": "2026-08-16T09:45:00",
+      "tags": ["Antibiotics", "SoV", "Chattogram"]
+    },
+    {
+      "id": "n008",
+      "source": "WHO / DGHS",
+      "source_type": "public-health",
+      "title": "National dengue circular: hospital preparedness for late-monsoon surge",
+      "summary": "DGHS asked private chambers to refer warning-sign dengue promptly. NS1 kits, ORS and antipyretic (paracetamol-only) messaging for field force.",
+      "url": "https://www.who.int/",
+      "published_at": "2026-08-14T07:30:00",
+      "tags": ["Dengue", "Public Health"]
+    }
+  ]
+}
