@@ -1811,22 +1811,28 @@ function renderVerification(data){
     const companyGrad = companyVerified
       ? 'from-blue-700 to-blue-600'
       : 'from-amber-500 to-orange-500';
-    const companyIcon = companyVerified ? 'fa-building' : 'fa-triangle-exclamation';
     const companyTitle = med.company_ambiguous
       ? 'This brand name is sold by more than one company - please confirm'
       : (med.company_verified ? 'Company confirmed from MedEx catalogue'
                               : 'Not found in MedEx - unverified, please confirm');
     const companyLogoUrl = pharmaLogoUrl(med.company);
-    const companyLogoImg = companyLogoUrl
-      ? `<img src="${esc(companyLogoUrl)}" alt="${esc(med.company)}" class="w-4 h-4 rounded-sm bg-white object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"><i class="hidden fas ${companyIcon}"></i>`
-      : `<i class="fas ${companyIcon}"></i>`;
+    // Standardized logo container: fixed-size rounded circle that never
+    // shrinks and centers either the real logo image or a fallback
+    // building icon - keeps the pill's icon and text on the same baseline.
+    const companyLogoImg = `<div class="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center overflow-hidden shrink-0">
+           ${companyLogoUrl
+             ? `<img src="${esc(companyLogoUrl)}" alt="${esc(med.company)}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                <svg class="hidden w-2.5 h-2.5 text-white fill-current" viewBox="0 0 20 20"><path d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v12H4V4zm2 2v2h2V6H6zm4 0v2h2V6h-2zm4 0v2h2V6h-2z"/></svg>`
+             : `<svg class="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 20 20"><path d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v12H4V4zm2 2v2h2V6H6zm4 0v2h2V6h-2zm4 0v2h2V6h-2z"/></svg>`}
+         </div>`;
     const companyEmphasis = med.company
-      ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
-           ${companyLogoImg} ${esc(med.company)}
-           ${companyVerified ? '<i class="fas fa-circle-check text-[10px] opacity-80"></i>' : ''}
+      ? `<div class="mt-2 inline-flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
+           ${companyLogoImg}
+           <span class="leading-none">${esc(med.company)}</span>
+           ${companyVerified ? '<svg class="w-3.5 h-3.5 text-blue-200 fill-current ml-0.5 shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : '<i class="fas fa-triangle-exclamation text-[10px] opacity-90 shrink-0"></i>'}
          </div>`
-      : `<div class="mt-2 flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
-           <i class="fas fa-building-circle-xmark"></i> Company not identified
+      : `<div class="mt-2 inline-flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
+           <i class="fas fa-building-circle-xmark shrink-0"></i> <span class="leading-none">Company not identified</span>
          </div>`;
 
     // Warn when the vision model's guess was overridden by the catalogue
@@ -2896,10 +2902,12 @@ function renderRxAuditItems(){
       </td>
       <td class="py-2.5 px-3">
         <span class="inline-flex items-center gap-1.5 ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">
-          <img src="${esc(logoSrc)}" class="w-4 h-4 rounded-full bg-white object-contain border border-slate-200" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-          <span class="hidden w-4 h-4 rounded-full bg-sky-600 text-white font-bold text-[8px] items-center justify-center">${companyInitial}</span>
-          ${m.company?esc(m.company):'<span class="italic text-slate-400">Unknown Brand</span>'}
-          ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500" title="Your company"></i>':''}
+          <span class="w-4 h-4 rounded-full bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+            <img src="${esc(logoSrc)}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+            <span class="hidden w-full h-full rounded-full bg-sky-600 text-white font-bold text-[8px] flex items-center justify-center leading-none">${companyInitial}</span>
+          </span>
+          <span class="leading-none">${m.company?esc(m.company):'<span class="italic text-slate-400">Unknown Brand</span>'}</span>
+          ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500 shrink-0" title="Your company"></i>':''}
         </span>
       </td>
       <td class="py-2.5 px-3 text-right">
@@ -3136,20 +3144,33 @@ async function loadPopularMedicinesLive(){
       const fullCompanyName=meds[0]?.company||company;
       const headerLogo=pharmaLogoUrl(fullCompanyName);
       const headerInitial=esc((company||'P').charAt(0).toUpperCase());
-      const headerBadge=headerLogo
-        ? `<img src="${esc(headerLogo)}" alt="${esc(company)}" class="w-6 h-6 rounded-full bg-white object-contain border shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-           <span class="hidden w-6 h-6 rounded-full bg-sky-600 text-white font-bold text-[10px] items-center justify-center">${headerInitial}</span>`
-        : `<span class="w-6 h-6 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center">${headerInitial}</span>`;
-      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-2">${headerBadge}<span class="text-xs font-bold text-white">${esc(company)}</span><span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">${meds.length} popular</span></div>`;
+      // Section header: fixed w-7 h-7 circle badge that never shrinks, flex+items-center
+      // on both the badge itself and the outer wrapper keep the logo/initial and the
+      // title/count text on the same baseline regardless of how the image loads.
+      const headerBadge=`<div class="w-7 h-7 rounded-full bg-sky-500 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+        ${headerLogo
+          ? `<img src="${esc(headerLogo)}" alt="${esc(company)}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+             <span class="hidden text-white text-xs font-bold leading-none">${headerInitial}</span>`
+          : `<span class="text-white text-xs font-bold leading-none">${headerInitial}</span>`}
+      </div>`;
+      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-2.5">
+        ${headerBadge}
+        <h3 class="text-base font-semibold text-white leading-none">${esc(company)}</h3>
+        <span class="px-2 py-0.5 text-[11px] font-medium bg-white/10 text-sky-200 rounded-full leading-none">${meds.length} popular</span>
+      </div>`;
       meds.forEach(med=>{
         const medLogo=pharmaLogoUrl(med.company||fullCompanyName)||headerLogo;
-        const cardLogo=medLogo
-          ? `<img src="${esc(medLogo)}" alt="${esc(company)}" class="w-4 h-4 rounded-full bg-white object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-             <span class="hidden w-4 h-4 rounded-full bg-sky-600 text-white font-bold text-[8px] items-center justify-center">${headerInitial}</span>`
-          : `<span class="w-4 h-4 rounded-full bg-sky-600 text-white font-bold text-[8px] flex items-center justify-center">${headerInitial}</span>`;
+        // In-card sub-badge: same fixed-circle + flex + shrink-0 + leading-none pattern
+        // so the "S Square" style mini badge doesn't sag below the text baseline.
+        const cardLogo=`<div class="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center overflow-hidden shrink-0">
+          ${medLogo
+            ? `<img src="${esc(medLogo)}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+               <span class="hidden text-[9px] font-bold text-white leading-none">${headerInitial}</span>`
+            : `<span class="text-[9px] font-bold text-white leading-none">${headerInitial}</span>`}
+        </div>`;
         html+=`<div class="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-3 flex gap-3 hover:bg-white/20 transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
-          <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm">
-          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1 mt-1">${cardLogo}<span class="text-[9px] font-medium">${esc(company.split(' ')[0])}</span></div></div>
+          <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm shrink-0">
+          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${cardLogo}<span class="text-xs text-slate-300 font-medium leading-none">${esc(company.split(' ')[0])}</span></div></div>
         </div>`;
       });
     }
