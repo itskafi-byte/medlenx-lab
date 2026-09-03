@@ -1206,81 +1206,132 @@ function companyColorScale(names){
   return out;
 }
 
-// ---------- Reusable Pharma Logo Badge helper ----------
-// Live CDN logo map for top Bangladeshi pharma companies (medex.com.bd), plus
-// a locally-scraped fallback cache and a graceful initials badge when no logo
-// image can be resolved or the image fails to load. Used consistently across:
-//   - Currently Popular Medicines section headers + in-card sub-badges (Pharma Intelligence Hub)
-//   - Data Verification side-by-side company pill (Prescription Workspace)
-//   - Recent Prescriptions Drawer row badges (Prescription Audit Summary)
-const PHARMA_LOGOS={
-  'square pharmaceuticals':'https://medex.com.bd/storage/images/companies/73/logo.png',
+// ---------- Live Medex Logo Scraper & Local Storage Cache Agent ----------
+// Ports the MedexLogoAgent design to vanilla JS: a synchronous seeded lookup
+// (INITIAL_MEDEX_LOGOS, merged with anything already cached in localStorage)
+// for instant first-paint, plus an async background fetcher that resolves
+// unknown company logos directly from medex.com.bd (via a public CORS proxy)
+// and persists them to localStorage so future renders across the whole app
+// - and future sessions - skip the network round-trip entirely.
+const MEDEX_LOGO_CACHE_KEY='medex_company_logos_v1';
+
+// Seeded CDN URLs for the primary Bangladesh top pharma companies.
+const INITIAL_MEDEX_LOGOS={
   'square pharmaceuticals plc':'https://medex.com.bd/storage/images/companies/73/logo.png',
+  'square pharmaceuticals':'https://medex.com.bd/storage/images/companies/73/logo.png',
   'square':'https://medex.com.bd/storage/images/companies/73/logo.png',
-  'incepta':'https://medex.com.bd/storage/images/companies/38/logo.png',
   'incepta pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/38/logo.png',
-  'beximco':'https://medex.com.bd/storage/images/companies/12/logo.png',
+  'incepta':'https://medex.com.bd/storage/images/companies/38/logo.png',
   'beximco pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/12/logo.png',
-  'renata':'https://medex.com.bd/storage/images/companies/68/logo.png',
+  'beximco':'https://medex.com.bd/storage/images/companies/12/logo.png',
   'renata limited':'https://medex.com.bd/storage/images/companies/68/logo.png',
   'renata plc':'https://medex.com.bd/storage/images/companies/68/logo.png',
+  'renata':'https://medex.com.bd/storage/images/companies/68/logo.png',
   'aci limited':'https://medex.com.bd/storage/images/companies/1/logo.png',
+  'aci':'https://medex.com.bd/storage/images/companies/1/logo.png',
   'healthcare pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/34/logo.png',
   'opsonin pharma ltd':'https://medex.com.bd/storage/images/companies/62/logo.png',
   'eskayef pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/27/logo.png',
 };
 
-/** Deterministic, readable colour for the initials-fallback badge background. */
-const PHARMA_INITIALS_BG={
-  'square':'bg-emerald-600','incepta':'bg-indigo-600','beximco':'bg-sky-600',
-  'renata':'bg-amber-600','aci':'bg-rose-600','healthcare':'bg-violet-600',
-  'opsonin':'bg-cyan-600','eskayef':'bg-blue-600',
+const MedexLogoAgent={
+  _getStoredLogos(){
+    try{
+      const stored=localStorage.getItem(MEDEX_LOGO_CACHE_KEY);
+      return stored ? Object.assign({}, INITIAL_MEDEX_LOGOS, JSON.parse(stored)) : Object.assign({}, INITIAL_MEDEX_LOGOS);
+    }catch(_e){ return Object.assign({}, INITIAL_MEDEX_LOGOS); }
+  },
+  /** Synchronous lookup: exact key match, then fuzzy substring match
+   *  (e.g. "Square" resolves against "square pharmaceuticals plc"). */
+  getLogo(companyName){
+    if(!companyName) return null;
+    const key=String(companyName).toLowerCase().trim();
+    const map=this._getStoredLogos();
+    if(map[key]) return map[key];
+    const match=Object.keys(map).find(k=>k.includes(key) || key.includes(k));
+    return match ? map[match] : null;
+  },
+  /** Async fetcher: resolves unknown company logos directly from medex.com.bd
+   *  HTML (via a public CORS proxy) and persists the result to localStorage
+   *  so it never needs to be fetched again for this browser. */
+  async fetchAndCacheCompanyLogo(companyName){
+    const existing=this.getLogo(companyName);
+    if(existing) return existing;
+    try{
+      const queryName=encodeURIComponent(String(companyName).trim());
+      const target=encodeURIComponent(`https://medex.com.bd/companies?search=${queryName}`);
+      const response=await fetch(`https://api.allorigins.win/get?url=${target}`);
+      const data=await response.json();
+      if(data && data.contents){
+        const parser=new DOMParser();
+        const doc=parser.parseFromString(data.contents, 'text/html');
+        const imgElement=doc.querySelector('.company-logo img') || doc.querySelector('img[src*="storage/images/companies"]');
+        if(imgElement){
+          let logoSrc=imgElement.getAttribute('src')||'';
+          if(logoSrc && !logoSrc.startsWith('http')){
+            logoSrc=`https://medex.com.bd${logoSrc.startsWith('/')?'':'/'}${logoSrc}`;
+          }
+          if(logoSrc){
+            const currentMap=this._getStoredLogos();
+            currentMap[String(companyName).toLowerCase().trim()]=logoSrc;
+            try{ localStorage.setItem(MEDEX_LOGO_CACHE_KEY, JSON.stringify(currentMap)); }catch(_e){}
+            return logoSrc;
+          }
+        }
+      }
+    }catch(err){
+      console.warn('[MedexLogoAgent] Could not resolve logo for:', companyName, err);
+    }
+    return null;
+  },
 };
-function pharmaInitialsBg(name){
-  const key=String(name||'').toLowerCase();
-  for(const k in PHARMA_INITIALS_BG){ if(key.includes(k)) return PHARMA_INITIALS_BG[k]; }
-  return 'bg-slate-600';
-}
 
-/** Resolve the best-known logo URL for a company name, or '' if none is known. */
-function pharmaLogoUrl(name){
-  if(!name) return '';
-  const key=String(name).toLowerCase().trim();
-  if(PHARMA_LOGOS[key]) return PHARMA_LOGOS[key];
-  // Locally scraped MedEx logos (static/images/companies/<Safe_Name>.png) take next priority.
-  const local=_company_logo_or_blank_client(name);
-  return local||'';
-}
-
-/** Mirrors the backend's `_company_logo_or_blank` naming scheme for the local logo cache. */
-function _company_logo_or_blank_client(name){
-  const safe=String(name).replace(/[^a-zA-Z0-9]/g,'_').substring(0,50);
-  return `/static/images/companies/${safe}.png`;
-}
+/** Deterministic, readable colour for the Medex-blue initials fallback badge. */
+function pharmaInitialsBg(_name){ return 'bg-sky-600'; }
 
 /**
- * PharmaCompanyLogo: a fixed-size square logo chip with a white backing (so
- * transparent-background PNG logos never disappear against dark surfaces),
- * `object-contain` sizing so non-square logos never stretch, and a graceful
- * initials-badge fallback (via onerror) so a broken/missing image never shows
- * a broken-image glyph. `shrink-0` keeps the chip from being squeezed when
- * adjacent labels wrap; pair with `items-center` on the flex wrapper and
- * `leading-none` on adjacent text to keep everything on one baseline.
- *   size: 'sm' (w-4 h-4) | 'md' (w-6 h-6) | 'lg' (w-8 h-8)
+ * MedexCompanyBadge: an aligned company logo chip backed by the
+ * MedexLogoAgent cache/scraper above. Renders synchronously with whatever
+ * is already known (seeded map or localStorage cache); if nothing is known
+ * yet it kicks off a background fetchAndCacheCompanyLogo() call and swaps
+ * the placeholder for the real logo in place once resolved - mirroring the
+ * `useEffect` refresh behaviour of the React reference component.
+ *
+ * White backing (`bg-white p-0.5`) keeps transparent PNG logos visible on
+ * dark surfaces; `object-contain` stops non-square logos from stretching;
+ * `shrink-0` + `items-center` + `leading-none` keep the logo and any label
+ * on one baseline regardless of how the image loads.
+ *   size: 'sm' (w-5 h-5) | 'md' (w-7 h-7) | 'lg' (w-9 h-9)
  */
-function pharmaCompanyLogoHtml(name, {size='sm', extraClass=''}={}){
-  const dims=({sm:'w-4 h-4', md:'w-6 h-6', lg:'w-8 h-8'})[size]||'w-4 h-4';
-  const textSize=({sm:'text-[9px]', md:'text-[11px]', lg:'text-sm'})[size]||'text-[9px]';
+let _medexBadgeSeq=0;
+function pharmaCompanyLogoHtml(name, {size='sm', showLabel=false, extraClass=''}={}){
+  const dims=({sm:'w-5 h-5', md:'w-7 h-7', lg:'w-9 h-9'})[size]||'w-5 h-5';
+  const textSize=({sm:'text-[10px]', md:'text-[11px]', lg:'text-xs'})[size]||'text-[10px]';
+  const labelSize=({sm:'text-xs', md:'text-sm font-semibold', lg:'text-base font-bold'})[size]||'text-xs';
   const safeName=esc(name||'Unknown');
   const initial=esc((name||'P').charAt(0).toUpperCase());
-  const logoUrl=pharmaLogoUrl(name);
-  const initialsBadge=`<span class="hidden w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-bold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
-  const body = logoUrl
-    ? `<img src="${esc(logoUrl)}" alt="${safeName} logo" class="w-full h-full object-contain rounded-sm" onerror="this.style.display='none'; const f=this.nextElementSibling; if(f) f.classList.remove('hidden');">
-       ${initialsBadge}`
-    : `<span class="w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-bold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
-  return `<div class="relative flex items-center justify-center shrink-0 rounded bg-white p-0.5 border border-slate-200/40 shadow-sm ${dims} ${extraClass}">${body}</div>`;
+  const badgeId='medexLogo'+(_medexBadgeSeq++)+'_'+Math.random().toString(36).slice(2,7);
+  const logoUrl=MedexLogoAgent.getLogo(name);
+  const iconInner = logoUrl
+    ? `<img src="${esc(logoUrl)}" alt="${safeName} logo" class="w-full h-full object-contain" onerror="this.style.display='none'; const f=this.nextElementSibling; if(f) f.classList.remove('hidden');">
+       <span class="hidden w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`
+    : `<span class="w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
+  const icon=`<div id="${badgeId}" class="relative flex items-center justify-center shrink-0 rounded-md bg-white p-0.5 border border-slate-200 shadow-sm overflow-hidden ${dims}">${iconInner}</div>`;
+  const label=showLabel ? `<span class="leading-none ${labelSize} truncate">${safeName}</span>` : '';
+  // Background-resolve an unknown logo (not in the seeded map / localStorage
+  // cache yet) and hot-swap it into the already-rendered badge once found.
+  if(!logoUrl && name){
+    MedexLogoAgent.fetchAndCacheCompanyLogo(name).then(url=>{
+      if(!url) return;
+      const el=document.getElementById(badgeId);
+      if(!el) return;
+      el.innerHTML=`<img src="${esc(url)}" alt="${safeName} logo" class="w-full h-full object-contain" onerror="this.style.display='none'; const f=this.nextElementSibling; if(f) f.classList.remove('hidden');">
+        <span class="hidden w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
+    }).catch(()=>{});
+  }
+  return `<div class="inline-flex items-center gap-2 shrink-0 ${extraClass}">${icon}${label}</div>`;
 }
+
 
 const CHART_SERIES_COLORS=['#1E40AF','#059669','#D97706','#0891B2','#7C3AED','#DC2626'];
 
@@ -1842,9 +1893,8 @@ function renderVerification(data){
                               : 'Not found in MedEx - unverified, please confirm');
     const companyEmphasis = med.company
       ? `<div class="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${companyGrad} text-white font-medium text-xs shadow-sm w-fit company-badge" title="${companyTitle}">
-           ${pharmaCompanyLogoHtml(med.company, {size:'sm'})}
-           <span class="leading-none">${esc(med.company)}</span>
-           ${companyVerified ? '<svg class="w-3.5 h-3.5 text-blue-200 fill-current ml-0.5 shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : '<i class="fas fa-triangle-exclamation text-[10px] opacity-90 shrink-0"></i>'}
+           ${pharmaCompanyLogoHtml(med.company, {size:'sm', showLabel:true})}
+           ${companyVerified ? '<svg class="w-4 h-4 text-blue-200 fill-current shrink-0 ml-1" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : '<i class="fas fa-triangle-exclamation text-[10px] opacity-90 shrink-0"></i>'}
          </div>`
       : `<div class="mt-2 inline-flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
            <i class="fas fa-building-circle-xmark shrink-0"></i> <span class="leading-none">Company not identified</span>
@@ -3154,21 +3204,21 @@ async function loadPopularMedicinesLive(){
       // catalogue rows carry the full legal name (e.g. "Square Pharmaceuticals PLC")
       // that PHARMA_LOGOS is keyed on - prefer that for lookup.
       const fullCompanyName=meds[0]?.company||company;
-      // Section header: PharmaCompanyLogo (real CDN logo, white backing, initials
-      // fallback) at 'md' size. flex items-center gap-2.5 on the wrapper keeps
-      // the logo and title/count text on the same baseline.
-      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-2.5">
-        ${pharmaCompanyLogoHtml(fullCompanyName, {size:'md'})}
-        <h3 class="text-base font-semibold text-white leading-none tracking-wide">${esc(company)}</h3>
-        <span class="px-2 py-0.5 text-[11px] font-medium bg-white/10 text-sky-200 rounded-full leading-none">${meds.length} popular</span>
+      // Section header: MedexCompanyBadge (live-scraped/cached CDN logo, white
+      // backing, initials fallback) at 'md' size with its own label baked in.
+      // flex items-center gap-3 on the wrapper keeps the logo, title, and the
+      // "N popular" pill on the same baseline.
+      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-3">
+        ${pharmaCompanyLogoHtml(fullCompanyName, {size:'md', showLabel:true, extraClass:'text-white tracking-wide'})}
+        <span class="px-2.5 py-1 text-xs bg-white/10 text-sky-200 rounded-full font-medium leading-none">${meds.length} popular</span>
       </div>`;
       meds.forEach(med=>{
-        // In-card sub-badge: same PharmaCompanyLogo at 'sm' size. flex items-center
-        // + shrink-0 + leading-none keep the "Square" style label from sagging
-        // below the logo's baseline.
+        // In-card sub-badge: same MedexCompanyBadge at 'sm' size with its own
+        // label baked in. flex items-center + shrink-0 + leading-none keep the
+        // "Square" style label from sagging below the logo's baseline.
         html+=`<div class="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-3 flex gap-3 hover:bg-white/20 transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
           <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm shrink-0">
-          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${pharmaCompanyLogoHtml(med.company||fullCompanyName, {size:'sm'})}<span class="text-xs text-slate-300 font-medium leading-none">${esc(company.split(' ')[0])}</span></div></div>
+          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${pharmaCompanyLogoHtml(med.company||fullCompanyName, {size:'sm', showLabel:true, extraClass:'text-slate-300 font-medium'})}</div></div>
         </div>`;
       });
     }
