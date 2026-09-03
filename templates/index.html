@@ -1258,6 +1258,95 @@ function companyBadgeHtml(name, {size='w-4 h-4', textClass='text-xs font-medium 
   return `<span class="${wrapClass}">${img}<span class="${textClass} truncate">${safeName}</span></span>`;
 }
 
+// ---------- Universal Company Icon Component (Material-style, image-free) ----------
+// Maps a pharma company name to a unique gradient theme + vector icon
+// (Pharmacy Building / Medical Flask / Capsule Pill / Cross). Fully vector,
+// so it never depends on an external logo fetch and can never show a
+// broken-image glyph. Used across:
+//   - Data Verification side-by-side (Prescription Workspace)
+//   - Currently Popular Medicines header + card sub-tags (Pharma Intelligence Hub)
+//   - Recent Prescriptions Drawer (Prescription Audit Summary)
+const PHARMA_THEMES={
+  'square pharmaceuticals plc':{gradient:'from-emerald-600 to-teal-400',glow:'rgba(20,184,166,0.4)',chipDark:'bg-emerald-900/40',borderDark:'border-emerald-500/30',textDark:'text-emerald-200',chipLight:'bg-emerald-50',borderLight:'border-emerald-200',textLight:'text-emerald-800',icon:'building'},
+  'incepta pharmaceuticals ltd':{gradient:'from-indigo-600 to-violet-400',glow:'rgba(99,102,241,0.4)',chipDark:'bg-indigo-900/40',borderDark:'border-indigo-500/30',textDark:'text-indigo-200',chipLight:'bg-indigo-50',borderLight:'border-indigo-200',textLight:'text-indigo-800',icon:'flask'},
+  'beximco pharmaceuticals ltd':{gradient:'from-sky-600 to-cyan-400',glow:'rgba(56,189,248,0.4)',chipDark:'bg-sky-900/40',borderDark:'border-sky-500/30',textDark:'text-sky-200',chipLight:'bg-sky-50',borderLight:'border-sky-200',textLight:'text-sky-800',icon:'pill'},
+  'renata limited':{gradient:'from-amber-600 to-orange-400',glow:'rgba(251,146,60,0.4)',chipDark:'bg-amber-900/40',borderDark:'border-amber-500/30',textDark:'text-amber-200',chipLight:'bg-amber-50',borderLight:'border-amber-200',textLight:'text-amber-800',icon:'flask'},
+  'aci limited':{gradient:'from-rose-600 to-pink-400',glow:'rgba(244,63,94,0.4)',chipDark:'bg-rose-900/40',borderDark:'border-rose-500/30',textDark:'text-rose-200',chipLight:'bg-rose-50',borderLight:'border-rose-200',textLight:'text-rose-800',icon:'cross'},
+  'healthcare pharmaceuticals ltd':{gradient:'from-violet-600 to-purple-400',glow:'rgba(168,85,247,0.4)',chipDark:'bg-violet-900/40',borderDark:'border-violet-500/30',textDark:'text-violet-200',chipLight:'bg-violet-50',borderLight:'border-violet-200',textLight:'text-violet-800',icon:'building'},
+  'opsonin pharma ltd':{gradient:'from-cyan-600 to-teal-400',glow:'rgba(34,211,238,0.4)',chipDark:'bg-cyan-900/40',borderDark:'border-cyan-500/30',textDark:'text-cyan-200',chipLight:'bg-cyan-50',borderLight:'border-cyan-200',textLight:'text-cyan-800',icon:'pill'},
+  'eskayef pharmaceuticals ltd':{gradient:'from-blue-600 to-indigo-400',glow:'rgba(59,130,246,0.4)',chipDark:'bg-blue-900/40',borderDark:'border-blue-500/30',textDark:'text-blue-200',chipLight:'bg-blue-50',borderLight:'border-blue-200',textLight:'text-blue-800',icon:'flask'},
+  'default':{gradient:'from-blue-600 to-indigo-500',glow:'rgba(59,130,246,0.4)',chipDark:'bg-slate-800/60',borderDark:'border-slate-700',textDark:'text-slate-200',chipLight:'bg-slate-100',borderLight:'border-slate-200',textLight:'text-slate-700',icon:'cross'},
+};
+PHARMA_THEMES['renata plc']=PHARMA_THEMES['renata limited'];
+
+// Deterministic fallback themes (hash-picked) so companies outside the
+// curated list above still get a distinct, consistent gradient + icon
+// instead of always dropping to the plain "default" slate theme.
+const MATERIAL_FALLBACK_THEMES=[
+  {gradient:'from-fuchsia-600 to-pink-400',glow:'rgba(232,121,249,0.4)',chipDark:'bg-fuchsia-900/40',borderDark:'border-fuchsia-500/30',textDark:'text-fuchsia-200',chipLight:'bg-fuchsia-50',borderLight:'border-fuchsia-200',textLight:'text-fuchsia-800',icon:'flask'},
+  {gradient:'from-lime-600 to-green-400',glow:'rgba(163,230,53,0.4)',chipDark:'bg-lime-900/40',borderDark:'border-lime-500/30',textDark:'text-lime-200',chipLight:'bg-lime-50',borderLight:'border-lime-200',textLight:'text-lime-800',icon:'pill'},
+  {gradient:'from-orange-600 to-red-400',glow:'rgba(251,113,133,0.4)',chipDark:'bg-orange-900/40',borderDark:'border-orange-500/30',textDark:'text-orange-200',chipLight:'bg-orange-50',borderLight:'border-orange-200',textLight:'text-orange-800',icon:'building'},
+  {gradient:'from-teal-600 to-emerald-400',glow:'rgba(45,212,191,0.4)',chipDark:'bg-teal-900/40',borderDark:'border-teal-500/30',textDark:'text-teal-200',chipLight:'bg-teal-50',borderLight:'border-teal-200',textLight:'text-teal-800',icon:'cross'},
+];
+
+/** Resolve the Material theme (gradient + icon) for a company name. */
+function pharmaTheme(name){
+  if(!name) return PHARMA_THEMES.default;
+  const key=String(name).toLowerCase().trim();
+  if(PHARMA_THEMES[key]) return PHARMA_THEMES[key];
+  let hash=0;
+  for(let i=0;i<key.length;i++) hash=key.charCodeAt(i)+((hash<<5)-hash);
+  return MATERIAL_FALLBACK_THEMES[Math.abs(hash)%MATERIAL_FALLBACK_THEMES.length];
+}
+
+const MATERIAL_ICON_PATHS={
+  building:'<path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />',
+  flask:'<path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L5.594 15.12a2 2 0 00-1.022.547l-1.5 1.5A2 2 0 004.486 20.5h15.028a2 2 0 001.414-3.414l-1.5-1.5z" />',
+  cross:'<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />',
+};
+const MATERIAL_ICON_FILL_PATHS={
+  pill:'<path d="M4.5 10.5C3.5 11.5 3.5 13.1 4.5 14.1L9.9 19.5C10.9 20.5 12.5 20.5 13.5 19.5L19.5 13.5C20.5 12.5 20.5 10.9 19.5 9.9L14.1 4.5C13.1 3.5 11.5 3.5 10.5 4.5L4.5 10.5Z" />',
+};
+
+/** Renders the raw <svg> markup for a Material company icon type. */
+function materialIconSvg(iconType, sizeClass){
+  if(iconType==='pill'){
+    return `<svg class="${sizeClass} text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">${MATERIAL_ICON_FILL_PATHS.pill}</svg>`;
+  }
+  const path=MATERIAL_ICON_PATHS[iconType]||MATERIAL_ICON_PATHS.cross;
+  return `<svg class="${sizeClass} text-white drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">${path}</svg>`;
+}
+
+/**
+ * Universal Company Icon Component (CompanyBadge): a full pill with icon +
+ * name, styled to a Material elevation theme unique to the company.
+ *   variant 'light' -> solid pastel chip for white/light card surfaces
+ *                       (e.g. Data Verification, Recent Prescriptions Drawer)
+ *   variant 'dark'  -> translucent chip for dark/gradient surfaces
+ *                       (e.g. the Pharma Intelligence Hub hero card)
+ */
+function materialCompanyBadge(name, {variant='light', badgeSize='w-5 h-5', iconSize='w-3 h-3', extraClass=''}={}){
+  const theme=pharmaTheme(name);
+  const chip=variant==='dark'?theme.chipDark:theme.chipLight;
+  const border=variant==='dark'?theme.borderDark:theme.borderLight;
+  const text=variant==='dark'?theme.textDark:theme.textLight;
+  return `<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg border ${chip} ${border} backdrop-blur-md shrink-0 ${extraClass}">
+      <div class="${badgeSize} rounded-md bg-gradient-to-tr ${theme.gradient} flex items-center justify-center shrink-0" style="box-shadow:0 2px 8px ${theme.glow}">
+        ${materialIconSvg(theme.icon, iconSize)}
+      </div>
+      <span class="text-xs font-semibold leading-none ${text} truncate">${esc(name||'Unknown')}</span>
+    </div>`;
+}
+
+/** Icon-only Material badge (no text) for compact circular/square contexts,
+ *  e.g. section headers and in-card sub-tags in Popular Medicines. */
+function materialCompanyIcon(name, {size='w-7 h-7', rounded='rounded-lg', iconSize='w-4 h-4'}={}){
+  const theme=pharmaTheme(name);
+  return `<div class="${size} ${rounded} bg-gradient-to-tr ${theme.gradient} flex items-center justify-center shrink-0" style="box-shadow:0 2px 8px ${theme.glow}">
+      ${materialIconSvg(theme.icon, iconSize)}
+    </div>`;
+}
+
 const CHART_SERIES_COLORS=['#1E40AF','#059669','#D97706','#0891B2','#7C3AED','#DC2626'];
 
 // ---------- Cascading location engine (Issue 1) ----------
@@ -1804,32 +1893,26 @@ function renderVerification(data){
         : (isLow
           ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold"><i class="fas fa-flag mr-1"></i>${pct}% manual flag</span>`
           : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">${pct}%</span>`));
-    // Company badge. Colour encodes trust:
-    //   verified against the MedEx catalogue -> indigo + check
-    //   unverified model guess / ambiguous brand -> amber + warning
+    // Company badge: Universal Company Icon Component (Material-style gradient
+    // theme + vector icon). Colour/verified-state encodes trust:
+    //   verified against the MedEx catalogue -> its unique brand theme + "Verified Partner"
+    //   unverified model guess / ambiguous brand -> amber warning chip
     const companyVerified = med.company_verified && !med.company_ambiguous;
-    const companyGrad = companyVerified
-      ? 'from-blue-700 to-blue-600'
-      : 'from-amber-500 to-orange-500';
     const companyTitle = med.company_ambiguous
       ? 'This brand name is sold by more than one company - please confirm'
       : (med.company_verified ? 'Company confirmed from MedEx catalogue'
                               : 'Not found in MedEx - unverified, please confirm');
-    const companyLogoUrl = pharmaLogoUrl(med.company);
-    // Standardized logo container: fixed-size rounded circle that never
-    // shrinks and centers either the real logo image or a fallback
-    // building icon - keeps the pill's icon and text on the same baseline.
-    const companyLogoImg = `<div class="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center overflow-hidden shrink-0">
-           ${companyLogoUrl
-             ? `<img src="${esc(companyLogoUrl)}" alt="${esc(med.company)}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-                <svg class="hidden w-2.5 h-2.5 text-white fill-current" viewBox="0 0 20 20"><path d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v12H4V4zm2 2v2h2V6H6zm4 0v2h2V6h-2zm4 0v2h2V6h-2z"/></svg>`
-             : `<svg class="w-2.5 h-2.5 text-white fill-current" viewBox="0 0 20 20"><path d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 2h12v12H4V4zm2 2v2h2V6H6zm4 0v2h2V6h-2zm4 0v2h2V6h-2z"/></svg>`}
-         </div>`;
     const companyEmphasis = med.company
-      ? `<div class="mt-2 inline-flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
-           ${companyLogoImg}
-           <span class="leading-none">${esc(med.company)}</span>
-           ${companyVerified ? '<svg class="w-3.5 h-3.5 text-blue-200 fill-current ml-0.5 shrink-0" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : '<i class="fas fa-triangle-exclamation text-[10px] opacity-90 shrink-0"></i>'}
+      ? `<div class="mt-2 flex items-center gap-3" title="${companyTitle}">
+           ${materialCompanyBadge(med.company, {variant:'light'})}
+           ${companyVerified
+             ? `<span class="text-xs text-emerald-600 font-medium flex items-center gap-1 shrink-0">
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                  Verified Partner
+                </span>`
+             : `<span class="text-xs text-amber-600 font-medium flex items-center gap-1 shrink-0">
+                  <i class="fas fa-triangle-exclamation"></i> Unverified
+                </span>`}
          </div>`
       : `<div class="mt-2 inline-flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
            <i class="fas fa-building-circle-xmark shrink-0"></i> <span class="leading-none">Company not identified</span>
@@ -2853,8 +2936,6 @@ function renderRxAuditItems(){
     const confCls=m.low_confidence
       ?'bg-orange-100 text-orange-700 border-orange-300'
       :(m.confidence_pct>=90?'bg-emerald-100 text-emerald-700 border-emerald-300':'bg-slate-100 text-slate-600 border-slate-200');
-    const logoSrc=pharmaLogoUrl(m.company) || m.company_logo || `/static/images/companies/${(m.company||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,50)}.png`;
-    const companyInitial=esc((m.company||'P').charAt(0).toUpperCase());
     // Regulatory + stewardship row badges
     const nemlPill=(m.neml&&m.neml.listed)
       ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-px rounded-full" title="Listed on the DGDA National Essential Medicines List (${esc(m.neml.molecule||m.generic)}${m.neml.class?' — '+esc(m.neml.class):''})">
@@ -2901,14 +2982,13 @@ function renderRxAuditItems(){
         <div>${tripsPill}</div>
       </td>
       <td class="py-2.5 px-3">
-        <span class="inline-flex items-center gap-1.5 ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">
-          <span class="w-4 h-4 rounded-full bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-            <img src="${esc(logoSrc)}" class="w-full h-full object-contain" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-            <span class="hidden w-full h-full rounded-full bg-sky-600 text-white font-bold text-[8px] flex items-center justify-center leading-none">${companyInitial}</span>
-          </span>
-          <span class="leading-none">${m.company?esc(m.company):'<span class="italic text-slate-400">Unknown Brand</span>'}</span>
-          ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500 shrink-0" title="Your company"></i>':''}
-        </span>
+        ${m.company
+          ? `<span class="inline-flex items-center gap-1.5">
+               ${materialCompanyIcon(m.company, {size:'w-4 h-4', rounded:'rounded-sm', iconSize:'w-2.5 h-2.5'})}
+               <span class="leading-none ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">${esc(m.company)}</span>
+               ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500 shrink-0" title="Your company"></i>':''}
+             </span>`
+          : `<span class="italic text-slate-400 inline-flex items-center gap-1.5"><i class="fas fa-building-circle-xmark shrink-0"></i> Unknown Brand</span>`}
       </td>
       <td class="py-2.5 px-3 text-right">
         <span class="inline-block text-[10px] font-bold border px-2 py-0.5 rounded-full ${confCls}">${m.confidence_pct}%</span>
@@ -3140,37 +3220,23 @@ async function loadPopularMedicinesLive(){
       if(meds.length===0) continue;
       // The group key (e.g. "Square Pharmaceuticals") is a short label; the
       // catalogue rows carry the full legal name (e.g. "Square Pharmaceuticals PLC")
-      // that PHARMA_LOGOS / the local logo cache are keyed on - prefer that for lookup.
+      // that PHARMA_THEMES is keyed on - prefer that for theme/icon lookup.
       const fullCompanyName=meds[0]?.company||company;
-      const headerLogo=pharmaLogoUrl(fullCompanyName);
-      const headerInitial=esc((company||'P').charAt(0).toUpperCase());
-      // Section header: fixed w-7 h-7 circle badge that never shrinks, flex+items-center
-      // on both the badge itself and the outer wrapper keep the logo/initial and the
-      // title/count text on the same baseline regardless of how the image loads.
-      const headerBadge=`<div class="w-7 h-7 rounded-full bg-sky-500 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-        ${headerLogo
-          ? `<img src="${esc(headerLogo)}" alt="${esc(company)}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-             <span class="hidden text-white text-xs font-bold leading-none">${headerInitial}</span>`
-          : `<span class="text-white text-xs font-bold leading-none">${headerInitial}</span>`}
-      </div>`;
+      // Section header: Universal Company Icon (Material gradient + vector icon,
+      // never an external logo fetch) inside a fixed w-7 h-7 badge. flex items-center
+      // gap-2.5 on the wrapper + leading-none on the text keep icon and title aligned.
       html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-2.5">
-        ${headerBadge}
-        <h3 class="text-base font-semibold text-white leading-none">${esc(company)}</h3>
+        ${materialCompanyIcon(fullCompanyName, {size:'w-7 h-7', rounded:'rounded-lg', iconSize:'w-4 h-4'})}
+        <h3 class="text-base font-semibold text-white leading-none tracking-wide">${esc(company)}</h3>
         <span class="px-2 py-0.5 text-[11px] font-medium bg-white/10 text-sky-200 rounded-full leading-none">${meds.length} popular</span>
       </div>`;
       meds.forEach(med=>{
-        const medLogo=pharmaLogoUrl(med.company||fullCompanyName)||headerLogo;
-        // In-card sub-badge: same fixed-circle + flex + shrink-0 + leading-none pattern
-        // so the "S Square" style mini badge doesn't sag below the text baseline.
-        const cardLogo=`<div class="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center overflow-hidden shrink-0">
-          ${medLogo
-            ? `<img src="${esc(medLogo)}" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-               <span class="hidden text-[9px] font-bold text-white leading-none">${headerInitial}</span>`
-            : `<span class="text-[9px] font-bold text-white leading-none">${headerInitial}</span>`}
-        </div>`;
+        // In-card sub-tag: same Material icon at a smaller w-3.5 h-3.5 square,
+        // flex items-center + shrink-0 + leading-none keep the "Square" style
+        // label from sagging below the icon's baseline.
         html+=`<div class="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-3 flex gap-3 hover:bg-white/20 transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
           <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm shrink-0">
-          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${cardLogo}<span class="text-xs text-slate-300 font-medium leading-none">${esc(company.split(' ')[0])}</span></div></div>
+          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${materialCompanyIcon(med.company||fullCompanyName, {size:'w-3.5 h-3.5', rounded:'rounded-sm', iconSize:'w-2.5 h-2.5'})}<span class="text-xs text-slate-300 font-medium leading-none">${esc(company.split(' ')[0])}</span></div></div>
         </div>`;
       });
     }
