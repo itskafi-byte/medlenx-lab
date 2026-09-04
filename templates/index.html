@@ -40,6 +40,43 @@ tailwind.config={
 .pill-amber{background:#fef3c7;color:#92400e}
 .skeleton{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 37%,#f1f5f9 63%);background-size:400% 100%;animation:skeleton 1.4s ease infinite}
 @keyframes skeleton{0%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+/* ==================== Dual-Glow Radar Scan Animation ==================== */
+@keyframes scanline {
+  0% { top: 0%; opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { top: 98%; opacity: 0.8; }
+}
+.animate-scan-laser {
+  position: absolute;
+  left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, transparent, #0284c7, #38bdf8, #0284c7, transparent);
+  box-shadow: 0 0 12px #0284c7;
+  animation: scanline 2.2s ease-in-out infinite alternate;
+  z-index: 20;
+  pointer-events: none;
+}
+@keyframes scanGlowSweep {
+  0% { transform: translateY(0%); opacity: 0.35; }
+  50% { opacity: 0.6; }
+  100% { transform: translateY(2000%); opacity: 0.35; }
+}
+.scan-overlay-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(6,182,212,0.08) 45%, rgba(6,182,212,0.18) 50%, rgba(6,182,212,0.08) 55%, transparent 100%);
+  animation: scanGlowSweep 2.2s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 15;
+}
+.shimmer-row{position:relative;overflow:hidden}
+.shimmer-row::after{
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(90deg, transparent, rgba(6,182,212,0.18), transparent);
+  animation: shimmerSweep 1.6s ease-in-out infinite;
+}
+@keyframes shimmerSweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .drawer{transform:translateX(100%);transition:transform .35s cubic-bezier(0.4,0,0.2,1)}
 .drawer.open{transform:translateX(0)}
 .modal-backdrop{backdrop-filter:blur(8px);background:rgba(0,0,0,0.4)}
@@ -200,7 +237,15 @@ tailwind.config={
       <div id="imageViewer" class="image-viewer flex-1 bg-slate-100 relative flex items-center justify-center overflow-hidden">
         <img id="viewerImg" class="max-w-none" style="transform: scale(1) translate(0px, 0px) rotate(0deg);">
         <div id="bboxOverlay" class="absolute inset-0 pointer-events-none" style="z-index:5"></div>
+        <!-- Dual-Glow Radar Scan Animation - laser line sweep while OCR pipeline runs -->
+        <div id="scanLaserOverlay" class="hidden absolute inset-0 pointer-events-none" style="z-index:15">
+          <div class="scan-overlay-glow"></div>
+          <div class="animate-scan-laser"></div>
+        </div>
         <div class="absolute bottom-3 left-3 bg-slate-900/80 text-white text-[10px] px-2 py-1 rounded-full">Left: Image Viewer • Right: Data Verification</div>
+        <div id="scanLaserBadge" class="hidden absolute top-3 right-3 bg-cyan-600/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1.5 z-20">
+          <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> Scanning…
+        </div>
       </div>
       <!-- Preprocess quick bar -->
       <div class="p-3 border-t bg-slate-50 flex items-center gap-2">
@@ -227,17 +272,39 @@ tailwind.config={
       <div id="verificationContent" class="flex-1 overflow-y-auto p-4 space-y-4">
 
         <!-- Skeleton Loaders during processing (Engaging Empty States upgrade #4) -->
+        <!-- Dual-Glow Radar Scan: pulse skeleton containers w/ cyan shimmer, resolve row-by-row as OCR returns -->
         <div id="skeletonLoader" class="hidden space-y-4">
           <div class="space-y-3">
             <div class="h-4 w-32 skeleton rounded"></div>
-            <div class="h-12 w-full skeleton rounded-xl"></div>
-            <div class="h-12 w-full skeleton rounded-xl"></div>
+            <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between items-center">
+              <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+              <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+            </div>
+            <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between items-center">
+              <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+              <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+            </div>
           </div>
           <div class="space-y-3">
             <div class="h-4 w-24 skeleton rounded"></div>
-            <div class="h-24 w-full skeleton rounded-xl"></div>
-            <div class="h-24 w-full skeleton rounded-xl"></div>
-            <div class="h-24 w-full skeleton rounded-xl"></div>
+            <div id="skeletonMedRows" class="space-y-3">
+              <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between">
+                <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+                <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+              </div>
+              <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between">
+                <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+                <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+              </div>
+              <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between">
+                <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+                <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+              </div>
+              <div class="p-4 rounded-lg bg-slate-100 border-l-4 border-cyan-500 animate-pulse shimmer-row flex justify-between">
+                <div class="h-4 bg-slate-200 rounded w-1/3"></div>
+                <div class="h-4 bg-slate-200 rounded w-1/4"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -606,6 +673,7 @@ tailwind.config={
     <div class="mt-4 px-4 pb-3">
       <div class="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl" id="hubTabBar">
         <button type="button" data-hub-tab="index" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold bg-white shadow-sm text-slate-900 flex items-center gap-2">💊 25K+ Drug Index</button>
+        <button type="button" data-hub-tab="trips" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">🌐 TRIPS Waiver Tracker</button>
         <button type="button" data-hub-tab="news" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">📰 Industry News</button>
         <button type="button" data-hub-tab="jobs" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">💼 Health &amp; Pharma Jobs</button>
         <button type="button" data-hub-tab="healthdays" class="hub-tab px-4 py-2 rounded-lg text-[12px] font-semibold text-slate-600 flex items-center gap-2">🗓️ Health Days</button>
@@ -734,31 +802,33 @@ tailwind.config={
       </div>
     </div>
   </div>
-</div>
 
-<!-- TRIPS Waiver Portfolio Tracker (PMD) -->
-<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-  <div class="flex flex-wrap items-center gap-2 mb-1">
-    <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-globe text-amber-600"></i> TRIPS Waiver Portfolio Tracker</h3>
-    <span id="tripsWindow" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300"></span>
-    <select id="tripsDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
-      <option value="30">30 days</option>
-      <option value="90" selected>90 days</option>
-      <option value="180">180 days</option>
-    </select>
-    <button type="button" id="tripsRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
-  </div>
-  <p class="text-[11px] text-slate-500 mb-3">High-priority generic molecules on the LDC pharmaceutical TRIPS waiver (to 2033) with real field volume from prescription scans — PMD visibility into where watch-list brands are being written and whether volume is rising.</p>
-  <div id="tripsTotals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-xs min-w-[860px]">
-      <thead>
-        <tr class="text-left text-slate-500 border-b">
-          <th class="py-2">Molecule</th><th>Class</th><th>Originator</th><th>Watch</th><th>Window</th><th>Field volume</th><th>Δ vs prev</th><th>Top territories</th>
-        </tr>
-      </thead>
-      <tbody id="tripsBody"><tr><td colspan="8" class="py-6 text-center text-slate-400">Loading TRIPS watch list…</td></tr></tbody>
-    </table>
+  <!-- TRIPS Waiver Portfolio Tracker (PMD) - standalone sub-tab of the Pharma Intelligence Hub -->
+  <div id="hub-trips" class="hub-pane hidden space-y-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <h3 class="font-semibold text-sm flex items-center gap-2 mr-auto"><i class="fas fa-globe text-amber-600"></i> TRIPS Waiver Portfolio Tracker</h3>
+        <span id="tripsWindow" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300"></span>
+        <select id="tripsDays" class="text-xs px-3 py-1.5 rounded-lg border border-slate-200">
+          <option value="30">30 days</option>
+          <option value="90" selected>90 days</option>
+          <option value="180">180 days</option>
+        </select>
+        <button type="button" id="tripsRefresh" class="text-[11px] px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200"><i class="fas fa-rotate mr-1"></i>Refresh</button>
+      </div>
+      <p class="text-[11px] text-slate-500 mb-3">High-priority generic molecules on the LDC pharmaceutical TRIPS waiver (to 2033) with real field volume from prescription scans — PMD visibility into where watch-list brands are being written and whether volume is rising.</p>
+      <div id="tripsTotals" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[860px]">
+          <thead>
+            <tr class="text-left text-slate-500 border-b">
+              <th class="py-2">Molecule</th><th>Class</th><th>Originator</th><th>Watch</th><th>Window</th><th>Field volume</th><th>Δ vs prev</th><th>Top territories</th>
+            </tr>
+          </thead>
+          <tbody id="tripsBody"><tr><td colspan="8" class="py-6 text-center text-slate-400">Loading TRIPS watch list…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1136,7 +1206,135 @@ function companyColorScale(names){
   return out;
 }
 
+// ---------- Live Medex Logo Scraper & Local Storage Cache Agent ----------
+// Ports the MedexLogoAgent design to vanilla JS: a synchronous seeded lookup
+// (INITIAL_MEDEX_LOGOS, merged with anything already cached in localStorage)
+// for instant first-paint, plus an async background fetcher that resolves
+// unknown company logos directly from medex.com.bd (via a public CORS proxy)
+// and persists them to localStorage so future renders across the whole app
+// - and future sessions - skip the network round-trip entirely.
+const MEDEX_LOGO_CACHE_KEY='medex_company_logos_v1';
+
+// Seeded CDN URLs for the primary Bangladesh top pharma companies.
+const INITIAL_MEDEX_LOGOS={
+  'square pharmaceuticals plc':'https://medex.com.bd/storage/images/companies/73/logo.png',
+  'square pharmaceuticals':'https://medex.com.bd/storage/images/companies/73/logo.png',
+  'square':'https://medex.com.bd/storage/images/companies/73/logo.png',
+  'incepta pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/38/logo.png',
+  'incepta':'https://medex.com.bd/storage/images/companies/38/logo.png',
+  'beximco pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/12/logo.png',
+  'beximco':'https://medex.com.bd/storage/images/companies/12/logo.png',
+  'renata limited':'https://medex.com.bd/storage/images/companies/68/logo.png',
+  'renata plc':'https://medex.com.bd/storage/images/companies/68/logo.png',
+  'renata':'https://medex.com.bd/storage/images/companies/68/logo.png',
+  'aci limited':'https://medex.com.bd/storage/images/companies/1/logo.png',
+  'aci':'https://medex.com.bd/storage/images/companies/1/logo.png',
+  'healthcare pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/34/logo.png',
+  'opsonin pharma ltd':'https://medex.com.bd/storage/images/companies/62/logo.png',
+  'eskayef pharmaceuticals ltd':'https://medex.com.bd/storage/images/companies/27/logo.png',
+};
+
+const MedexLogoAgent={
+  _getStoredLogos(){
+    try{
+      const stored=localStorage.getItem(MEDEX_LOGO_CACHE_KEY);
+      return stored ? Object.assign({}, INITIAL_MEDEX_LOGOS, JSON.parse(stored)) : Object.assign({}, INITIAL_MEDEX_LOGOS);
+    }catch(_e){ return Object.assign({}, INITIAL_MEDEX_LOGOS); }
+  },
+  /** Synchronous lookup: exact key match, then fuzzy substring match
+   *  (e.g. "Square" resolves against "square pharmaceuticals plc"). */
+  getLogo(companyName){
+    if(!companyName) return null;
+    const key=String(companyName).toLowerCase().trim();
+    const map=this._getStoredLogos();
+    if(map[key]) return map[key];
+    const match=Object.keys(map).find(k=>k.includes(key) || key.includes(k));
+    return match ? map[match] : null;
+  },
+  /** Async fetcher: resolves unknown company logos directly from medex.com.bd
+   *  HTML (via a public CORS proxy) and persists the result to localStorage
+   *  so it never needs to be fetched again for this browser. */
+  async fetchAndCacheCompanyLogo(companyName){
+    const existing=this.getLogo(companyName);
+    if(existing) return existing;
+    try{
+      const queryName=encodeURIComponent(String(companyName).trim());
+      const target=encodeURIComponent(`https://medex.com.bd/companies?search=${queryName}`);
+      const response=await fetch(`https://api.allorigins.win/get?url=${target}`);
+      const data=await response.json();
+      if(data && data.contents){
+        const parser=new DOMParser();
+        const doc=parser.parseFromString(data.contents, 'text/html');
+        const imgElement=doc.querySelector('.company-logo img') || doc.querySelector('img[src*="storage/images/companies"]');
+        if(imgElement){
+          let logoSrc=imgElement.getAttribute('src')||'';
+          if(logoSrc && !logoSrc.startsWith('http')){
+            logoSrc=`https://medex.com.bd${logoSrc.startsWith('/')?'':'/'}${logoSrc}`;
+          }
+          if(logoSrc){
+            const currentMap=this._getStoredLogos();
+            currentMap[String(companyName).toLowerCase().trim()]=logoSrc;
+            try{ localStorage.setItem(MEDEX_LOGO_CACHE_KEY, JSON.stringify(currentMap)); }catch(_e){}
+            return logoSrc;
+          }
+        }
+      }
+    }catch(err){
+      console.warn('[MedexLogoAgent] Could not resolve logo for:', companyName, err);
+    }
+    return null;
+  },
+};
+
+/** Deterministic, readable colour for the Medex-blue initials fallback badge. */
+function pharmaInitialsBg(_name){ return 'bg-sky-600'; }
+
+/**
+ * MedexCompanyBadge: an aligned company logo chip backed by the
+ * MedexLogoAgent cache/scraper above. Renders synchronously with whatever
+ * is already known (seeded map or localStorage cache); if nothing is known
+ * yet it kicks off a background fetchAndCacheCompanyLogo() call and swaps
+ * the placeholder for the real logo in place once resolved - mirroring the
+ * `useEffect` refresh behaviour of the React reference component.
+ *
+ * White backing (`bg-white p-0.5`) keeps transparent PNG logos visible on
+ * dark surfaces; `object-contain` stops non-square logos from stretching;
+ * `shrink-0` + `items-center` + `leading-none` keep the logo and any label
+ * on one baseline regardless of how the image loads.
+ *   size: 'sm' (w-5 h-5) | 'md' (w-7 h-7) | 'lg' (w-9 h-9)
+ */
+let _medexBadgeSeq=0;
+function pharmaCompanyLogoHtml(name, {size='sm', showLabel=false, extraClass=''}={}){
+  const dims=({sm:'w-5 h-5', md:'w-7 h-7', lg:'w-9 h-9'})[size]||'w-5 h-5';
+  const textSize=({sm:'text-[10px]', md:'text-[11px]', lg:'text-xs'})[size]||'text-[10px]';
+  const labelSize=({sm:'text-xs', md:'text-sm font-semibold', lg:'text-base font-bold'})[size]||'text-xs';
+  const safeName=esc(name||'Unknown');
+  const initial=esc((name||'P').charAt(0).toUpperCase());
+  const badgeId='medexLogo'+(_medexBadgeSeq++)+'_'+Math.random().toString(36).slice(2,7);
+  const logoUrl=MedexLogoAgent.getLogo(name);
+  const iconInner = logoUrl
+    ? `<img src="${esc(logoUrl)}" alt="${safeName} logo" class="w-full h-full object-contain" onerror="this.style.display='none'; const f=this.nextElementSibling; if(f) f.classList.remove('hidden');">
+       <span class="hidden w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`
+    : `<span class="w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
+  const icon=`<div id="${badgeId}" class="relative flex items-center justify-center shrink-0 rounded-md bg-white p-0.5 border border-slate-200 shadow-sm overflow-hidden ${dims}">${iconInner}</div>`;
+  const label=showLabel ? `<span class="leading-none ${labelSize} truncate">${safeName}</span>` : '';
+  // Background-resolve an unknown logo (not in the seeded map / localStorage
+  // cache yet) and hot-swap it into the already-rendered badge once found.
+  if(!logoUrl && name){
+    MedexLogoAgent.fetchAndCacheCompanyLogo(name).then(url=>{
+      if(!url) return;
+      const el=document.getElementById(badgeId);
+      if(!el) return;
+      el.innerHTML=`<img src="${esc(url)}" alt="${safeName} logo" class="w-full h-full object-contain" onerror="this.style.display='none'; const f=this.nextElementSibling; if(f) f.classList.remove('hidden');">
+        <span class="hidden w-full h-full rounded ${pharmaInitialsBg(name)} text-white font-extrabold ${textSize} flex items-center justify-center leading-none">${initial}</span>`;
+    }).catch(()=>{});
+  }
+  return `<div class="inline-flex items-center gap-2 shrink-0 ${extraClass}">${icon}${label}</div>`;
+}
+
+
 const CHART_SERIES_COLORS=['#1E40AF','#059669','#D97706','#0891B2','#7C3AED','#DC2626'];
+
 
 // ---------- Cascading location engine (Issue 1) ----------
 let LOCATIONS={districts:{},specialties:[],divisions:[]};
@@ -1394,6 +1592,13 @@ document.getElementById('chooseFileBtn')?.addEventListener('click',e=>{
   fileInput.click();
 });
 
+// ---------- Dual-Glow Radar Scan Animation: sync left laser sweep + right shimmer skeleton ----------
+function setScanning(active){
+  document.getElementById('skeletonLoader').classList.toggle('hidden', !active);
+  document.getElementById('scanLaserOverlay').classList.toggle('hidden', !active);
+  document.getElementById('scanLaserBadge').classList.toggle('hidden', !active);
+}
+
 function handleFile(file){
   if(!file||!file.type.startsWith('image/'))return;
   currentFile=file;
@@ -1405,8 +1610,8 @@ function handleFile(file){
     document.getElementById('verificationWorkspace').classList.remove('hidden');
     // Switch to workspace tab
     document.querySelector('[data-tab="workspace"]').click();
-    // Reset verification content to skeleton
-    document.getElementById('skeletonLoader').classList.remove('hidden');
+    // Reset verification content to skeleton + start the radar scan sweep
+    setScanning(true);
     document.getElementById('doctorVerification').classList.add('hidden');
     document.getElementById('medicinesVerification').classList.add('hidden');
     document.getElementById('progressArea').classList.remove('hidden');
@@ -1424,7 +1629,7 @@ function clearWorkspace(){
   currentFile=null;
   document.getElementById('workspaceEmpty').classList.remove('hidden');
   document.getElementById('verificationWorkspace').classList.add('hidden');
-  document.getElementById('skeletonLoader').classList.add('hidden');
+  setScanning(false);
   document.getElementById('progressArea').classList.add('hidden');
   if(typeof clearMedBBox==='function') clearMedBBox();
   fileInput.value='';
@@ -1439,7 +1644,7 @@ async function scanPrescription(){
   const progressText=document.getElementById('progressText');
   const progressBar=document.getElementById('progressBar');
   progressArea.classList.remove('hidden');
-  document.getElementById('skeletonLoader').classList.remove('hidden');
+  setScanning(true);
   let prog=15;
   const progInt=setInterval(()=>{prog=Math.min(95,prog+Math.random()*12);progressBar.style.width=prog+'%';},700);
   progressText.textContent='MedLenX VL OCR + NER extracting BMDC, Generic, Dosage...';
@@ -1468,7 +1673,7 @@ async function scanPrescription(){
     clearInterval(progInt);
     progressBar.style.width='100%';
     progressText.textContent=`Done in ${data.meta.processing_time_sec}s`;
-    document.getElementById('skeletonLoader').classList.add('hidden');
+    setScanning(false);
     progressArea.classList.add('hidden');
     renderVerification(data);
     if(data.duplicate){
@@ -1480,7 +1685,7 @@ async function scanPrescription(){
     loadKpis();loadCharts();loadHistory();loadHistoryDash();
   }catch(e){
     clearInterval(progInt);
-    document.getElementById('skeletonLoader').classList.add('hidden');
+    setScanning(false);
     progressText.textContent='Error: '+e.message;
     toast.error(e.message);
   }
@@ -1675,25 +1880,24 @@ function renderVerification(data){
         : (isLow
           ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 font-semibold"><i class="fas fa-flag mr-1"></i>${pct}% manual flag</span>`
           : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">${pct}%</span>`));
-    // Company badge. Colour encodes trust:
-    //   verified against the MedEx catalogue -> indigo + check
-    //   unverified model guess / ambiguous brand -> amber + warning
+    // Company badge: Reusable Pharma Logo Badge Component (real CDN logo image,
+    // white backing so transparent PNGs never vanish, initials-badge fallback).
+    // Colour/verified-state encodes trust:
+    //   verified against the MedEx catalogue -> solid blue pill + checkmark
+    //   unverified model guess / ambiguous brand -> amber warning pill
     const companyVerified = med.company_verified && !med.company_ambiguous;
-    const companyGrad = companyVerified
-      ? 'from-blue-700 to-blue-600'
-      : 'from-amber-500 to-orange-500';
-    const companyIcon = companyVerified ? 'fa-building' : 'fa-triangle-exclamation';
+    const companyGrad = companyVerified ? 'bg-blue-600' : 'bg-gradient-to-r from-amber-500 to-orange-500';
     const companyTitle = med.company_ambiguous
       ? 'This brand name is sold by more than one company - please confirm'
       : (med.company_verified ? 'Company confirmed from MedEx catalogue'
                               : 'Not found in MedEx - unverified, please confirm');
     const companyEmphasis = med.company
-      ? `<div class="mt-2 flex items-center gap-2 bg-gradient-to-r ${companyGrad} text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm w-fit company-badge" title="${companyTitle}">
-           <i class="fas ${companyIcon}"></i> ${med.company}
-           ${companyVerified ? '<i class="fas fa-circle-check text-[10px] opacity-80"></i>' : ''}
+      ? `<div class="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg ${companyGrad} text-white font-medium text-xs shadow-sm w-fit company-badge" title="${companyTitle}">
+           ${pharmaCompanyLogoHtml(med.company, {size:'sm', showLabel:true})}
+           ${companyVerified ? '<svg class="w-4 h-4 text-blue-200 fill-current shrink-0 ml-1" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>' : '<i class="fas fa-triangle-exclamation text-[10px] opacity-90 shrink-0"></i>'}
          </div>`
-      : `<div class="mt-2 flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
-           <i class="fas fa-building-circle-xmark"></i> Company not identified
+      : `<div class="mt-2 inline-flex items-center gap-2 bg-slate-200 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold w-fit company-badge" title="No company found - select the medicine to set it">
+           <i class="fas fa-building-circle-xmark shrink-0"></i> <span class="leading-none">Company not identified</span>
          </div>`;
 
     // Warn when the vision model's guess was overridden by the catalogue
@@ -2714,7 +2918,6 @@ function renderRxAuditItems(){
     const confCls=m.low_confidence
       ?'bg-orange-100 text-orange-700 border-orange-300'
       :(m.confidence_pct>=90?'bg-emerald-100 text-emerald-700 border-emerald-300':'bg-slate-100 text-slate-600 border-slate-200');
-    const logoSrc=m.company_logo || `/static/images/companies/${(m.company||'').replace(/[^a-zA-Z0-9]/g,'_').substring(0,50)}.png`;
     // Regulatory + stewardship row badges
     const nemlPill=(m.neml&&m.neml.listed)
       ? `<span class="inline-flex items-center gap-1 mt-1 mr-1 text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-300 px-1.5 py-px rounded-full" title="Listed on the DGDA National Essential Medicines List (${esc(m.neml.molecule||m.generic)}${m.neml.class?' — '+esc(m.neml.class):''})">
@@ -2761,11 +2964,13 @@ function renderRxAuditItems(){
         <div>${tripsPill}</div>
       </td>
       <td class="py-2.5 px-3">
-        <span class="inline-flex items-center gap-1.5 ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">
-          <img src="${esc(logoSrc)}" class="w-4 h-4 rounded-full bg-white object-contain border border-slate-200" onerror="this.style.display='none'">
-          ${m.company?esc(m.company):'<span class="italic text-slate-400">Unknown Brand</span>'}
-          ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500" title="Your company"></i>':''}
-        </span>
+        ${m.company
+          ? `<span class="inline-flex items-center gap-1.5">
+               ${pharmaCompanyLogoHtml(m.company, {size:'sm'})}
+               <span class="leading-none ${m.is_own?'font-bold text-violet-700':'text-slate-700'}">${esc(m.company)}</span>
+               ${m.is_own?'<i class="fas fa-house-medical text-[9px] text-violet-500 shrink-0" title="Your company"></i>':''}
+             </span>`
+          : `<span class="italic text-slate-400 inline-flex items-center gap-1.5"><i class="fas fa-building-circle-xmark shrink-0"></i> Unknown Brand</span>`}
       </td>
       <td class="py-2.5 px-3 text-right">
         <span class="inline-block text-[10px] font-bold border px-2 py-0.5 rounded-full ${confCls}">${m.confidence_pct}%</span>
@@ -2995,12 +3200,25 @@ async function loadPopularMedicinesLive(){
     let html='';
     for(const [company, meds] of Object.entries(data.popular)){
       if(meds.length===0) continue;
-      const safeCompany=company.replace(/[^a-zA-Z0-9]/g,'_').substring(0,50);
-      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-2"><img src="/static/images/companies/${safeCompany}.png" class="w-6 h-6 rounded-full bg-white object-contain border shadow-sm" onerror="this.style.display='none'"><span class="text-xs font-bold text-white">${company}</span><span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">${meds.length} popular</span></div>`;
+      // The group key (e.g. "Square Pharmaceuticals") is a short label; the
+      // catalogue rows carry the full legal name (e.g. "Square Pharmaceuticals PLC")
+      // that PHARMA_LOGOS is keyed on - prefer that for lookup.
+      const fullCompanyName=meds[0]?.company||company;
+      // Section header: MedexCompanyBadge (live-scraped/cached CDN logo, white
+      // backing, initials fallback) at 'md' size with its own label baked in.
+      // flex items-center gap-3 on the wrapper keeps the logo, title, and the
+      // "N popular" pill on the same baseline.
+      html+=`<div class="col-span-full mt-3 mb-1 flex items-center gap-3">
+        ${pharmaCompanyLogoHtml(fullCompanyName, {size:'md', showLabel:true, extraClass:'text-white tracking-wide'})}
+        <span class="px-2.5 py-1 text-xs bg-white/10 text-sky-200 rounded-full font-medium leading-none">${meds.length} popular</span>
+      </div>`;
       meds.forEach(med=>{
+        // In-card sub-badge: same MedexCompanyBadge at 'sm' size with its own
+        // label baked in. flex items-center + shrink-0 + leading-none keep the
+        // "Square" style label from sagging below the logo's baseline.
         html+=`<div class="bg-white/10 backdrop-blur border border-white/20 rounded-xl p-3 flex gap-3 hover:bg-white/20 transition hover:-translate-y-0.5 hover:shadow-lg cursor-pointer">
-          <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm">
-          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${med.brand_name}</p><p class="text-[10px] text-white/70 truncate">${med.type} ${med.strength} • ${med.generic||''}</p><div class="flex items-center gap-1 mt-1"><img src="/static/images/companies/${safeCompany}.png" class="w-4 h-4 rounded-full bg-white object-contain" onerror="this.style.display='none'"><span class="text-[9px] font-medium">${company.split(' ')[0]}</span></div></div>
+          <img src="${med.image_url||med.pack_image||'https://medex.com.bd/img/dosage-forms/tablet.png'}" class="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-sm shrink-0">
+          <div class="min-w-0 flex-1"><p class="text-xs font-bold truncate">${esc(med.brand_name)}</p><p class="text-[10px] text-white/70 truncate">${esc(med.type)} ${esc(med.strength)} • ${esc(med.generic||'')}</p><div class="flex items-center gap-1.5 mt-2">${pharmaCompanyLogoHtml(med.company||fullCompanyName, {size:'sm', showLabel:true, extraClass:'text-slate-300 font-medium'})}</div></div>
         </div>`;
       });
     }
@@ -3439,6 +3657,7 @@ function initHubTabs(){
       if(id==='news') loadHubNews();
       if(id==='jobs') loadHubJobs();
       if(id==='healthdays') loadHealthDays();
+      if(id==='trips') loadTripsPortfolio();
     });
   });
   document.getElementById('newsRefresh')?.addEventListener('click',()=>loadHubNews(true));
