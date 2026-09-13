@@ -1,0 +1,10 @@
+{
+  "description": "Pharmaceutical field-intelligence app for Bangladeshi MPOs that scans prescriptions, verifies drugs, and reports competitive Share of Voice analytics.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
