@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  /* Brand ramp */
+  --color-brand-900: #0F172A;
+  --color-brand-800: #172554;
+  --color-brand-700: #1E40AF;
+  --color-brand-600: #1D4ED8;
+  --color-brand-500: #2563EB;
+  --color-brand-400: #94A3B8;
+  --color-brand-300: #CBD5E1;
+  --color-brand-200: #E2E8F0;
+  --color-brand-100: #F1F5F9;
+  --color-brand-50: #F8FAFC;
+
+  /* Semantic */
+  --color-ok-600: #047857;
+  --color-ok-500: #059669;
+  --color-ok-100: #D1FAE5;
+  --color-ok-50: #ECFDF5;
+
+  --color-warn-600: #B45309;
+  --color-warn-500: #D97706;
+  --color-warn-100: #FEF3C7;
+  --color-warn-50: #FFFBEB;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #F8FAFC;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbars by default */
+::-webkit-scrollbar { width: 0; height: 0; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; }
+
+/* Scan laser animation */
+@keyframes scanLaser {
+  0% { top: 8%; }
+  50% { top: 88%; }
+  100% { top: 8%; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes ping {
+  0% { transform: scale(1); opacity: 1; }
+  75%, 100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.scan-laser {
+  position: absolute;
+  left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #0284C7, #38BDF8, #0284C7, transparent);
+  box-shadow: 0 0 12px 4px rgba(6, 182, 212, 0.7);
+  animation: scanLaser 2.2s ease-in-out infinite;
+}
+
+.shimmer-block {
+  position: relative;
+  overflow: hidden;
+  background: #F1F5F9;
+}
+
+.shimmer-block::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.18) 50%, transparent 100%);
+  animation: shimmer 1.5s infinite;
+}
+
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: #10B981;
+  animation: ping 1.5s ease-in-out infinite;
+}
+
+/* Dark hero blurred circle */
+.hero-circle::before {
+  content: '';
+  position: absolute;
+  top: -80px; right: -80px;
+  width: 256px; height: 256px;
+  border-radius: 9999px;
+  background: rgba(255,255,255,0.10);
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+/* Bottom sheet overlay */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 40;
+}
+
+/* Scan corner brackets */
+.scan-bracket-tl { border-top: 3px solid #38BDF8; border-left: 3px solid #38BDF8; border-radius: 4px 0 0 0; }
+.scan-bracket-tr { border-top: 3px solid #38BDF8; border-right: 3px solid #38BDF8; border-radius: 0 4px 0 0; }
+.scan-bracket-bl { border-bottom: 3px solid #38BDF8; border-left: 3px solid #38BDF8; border-radius: 0 0 0 4px; }
+.scan-bracket-br { border-bottom: 3px solid #38BDF8; border-right: 3px solid #38BDF8; border-radius: 0 0 4px 0; }
+
+/* Progress bar */
+.progress-track { background: #E2E8F0; border-radius: 9999px; height: 6px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+
+/* Sparkline */
+.sparkline { display: inline-block; vertical-align: middle; }
+
+/* Map placeholder */
+.bangladesh-map {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
