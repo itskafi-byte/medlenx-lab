@@ -166,17 +166,10 @@ fun AnalyticsScreen(
                 title = "D. Generic vs Brand Matrix — Stacked Bar by Specialty",
                 icon = Icons.Filled.AutoGraph,
             )
-            // Widget D still renders the export's sample matrix: its aggregate,
-            // get_generic_brand_matrix, is the one widget not yet ported. Saying
-            // so beats showing fabricated specialty numbers as if they were real.
-            Text(
-                text = "Sample data — the generic-vs-brand matrix is not yet computed on device.",
-                style = MlxType.Footnote,
-                color = Mlx.Warn600,
-            )
             SpecialtyStackedBarChart(
-                data = StackedData,
-                series = StackedSeries,
+                data = vm.genericMatrix?.rows.orEmpty()
+                    .map { StackedDatum(it.specialty, it.values) },
+                series = vm.genericMatrix?.series.orEmpty(),
                 modifier = Modifier.padding(top = 12.dp),
             )
         }

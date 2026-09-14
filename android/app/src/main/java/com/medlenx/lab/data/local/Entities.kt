@@ -265,6 +265,9 @@ data class LiveScanFeedRow(
     val confidenceScore: Double,
 )
 
+/** Projection for [PrescriptionDao.genericMatrixRows] — widget D. */
+data class GenericMatrixRow(val specialty: String, val generic: String, val count: Int)
+
 /** Projection for [PrescriptionDao.mostPrescribedRows] — widget A. */
 data class MostPrescribedRow(
     val brandName: String,

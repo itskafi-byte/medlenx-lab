@@ -16,6 +16,7 @@ import com.medlenx.lab.data.repo.AnalyticsMetrics
 import com.medlenx.lab.data.repo.CompanySlice
 import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
+import com.medlenx.lab.data.repo.GenericMatrix
 import com.medlenx.lab.data.repo.MostPrescribed
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,6 +50,10 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     var mostPrescribed by mutableStateOf<List<MostPrescribed>>(emptyList())
         private set
     var companyShare by mutableStateOf<List<CompanySlice>>(emptyList())
+        private set
+
+    /** Widget D — generic vs brand matrix by specialty. */
+    var genericMatrix by mutableStateOf<GenericMatrix?>(null)
         private set
     var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
         private set
@@ -162,6 +167,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 companyShare = AnalyticsMetrics.companyShare(
                     prescriptionDao.companyShareRows(since = since),
+                )
+                genericMatrix = AnalyticsMetrics.genericBrandMatrix(
+                    prescriptionDao.genericMatrixRows(),
                 )
                 leaderTotal = prescriptionDao.doctorLeaderTotal(since = since)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0

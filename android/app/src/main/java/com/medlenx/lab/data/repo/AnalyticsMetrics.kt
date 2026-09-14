@@ -1,6 +1,7 @@
 package com.medlenx.lab.data.repo
 
 import com.medlenx.lab.data.local.CompanyShareRow
+import com.medlenx.lab.data.local.GenericMatrixRow
 import com.medlenx.lab.data.local.DoctorLeaderRow2
 import com.medlenx.lab.data.local.MostPrescribedRow
 import com.medlenx.lab.data.local.TopBrandRow
@@ -134,6 +135,42 @@ object AnalyticsMetrics {
     }
 
     /**
+     * Widget D: generic vs brand share matrix by specialty.
+     *
+     * **Deliberate divergence.** The Python selects its slices with
+     * `list(specialties)[:8]` and `list(generics_set)[:6]` — `list()` over a
+     * `set`, whose order is hash-arbitrary and varies between processes, despite
+     * the comments calling them "top 8 specialties" / "top 6 generics". They are
+     * not ranked at all. This keeps first-seen order instead, which is at least
+     * stable across renders; the slice sizes are unchanged.
+     */
+    fun genericBrandMatrix(
+        rows: List<GenericMatrixRow>,
+        maxSpecialties: Int = 8,
+        maxGenerics: Int = 6,
+    ): GenericMatrix {
+        val matrix = LinkedHashMap<String, MutableMap<String, Int>>()
+        val specialties = LinkedHashSet<String>()
+        val generics = LinkedHashSet<String>()
+        for (r in rows) {
+            val spec = r.specialty.ifBlank { "General" }
+            val gen = r.generic.ifBlank { "Unknown" }
+            matrix.getOrPut(spec) { LinkedHashMap() }
+                .merge(gen, r.count) { a, b -> a + b }
+            specialties += spec
+            generics += gen
+        }
+        val series = generics.take(maxGenerics)
+        val rowsOut = specialties.take(maxSpecialties).map { spec ->
+            GenericMatrixRowOut(
+                specialty = spec,
+                values = series.map { matrix[spec]?.get(it) ?: 0 },
+            )
+        }
+        return GenericMatrix(series = series, rows = rowsOut)
+    }
+
+    /**
      * Widget C. `total` is the count of *all* matching doctors, so the caller can
      * render a real "1–10 of N" caption instead of a hardcoded one.
      */
@@ -240,3 +277,7 @@ data class DoctorLeaderboard(
     val limit: Int,
     val offset: Int,
 )
+
+data class GenericMatrixRowOut(val specialty: String, val values: List<Int>)
+
+data class GenericMatrix(val series: List<String>, val rows: List<GenericMatrixRowOut>)

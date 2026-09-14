@@ -785,3 +785,40 @@ widget, and widget D (`get_generic_brand_matrix`) is still the export's sample
 matrix with its amber footnote. Those are the two known remaining gaps.
 
 **Unverified as always:** no compile has run here.
+
+---
+
+## Widget D — generic vs brand matrix (this commit)
+
+`get_generic_brand_matrix` (database.py:1227) ported to
+`AnalyticsMetrics.genericBrandMatrix`, with `PrescriptionDao.genericMatrixRows`.
+`StackedDatum` changed from five fixed company columns to a dynamic
+`(specialty, values)` pair, and the mock `StackedData` / `StackedSeries` are gone —
+the amber "sample data" footnote is no longer needed because the numbers are real.
+
+**Two backend bugs found.** (1) The comments say "top 8 specialties" / "top 6
+generics", but the code is `list(specialties)[:8]` and `list(generics_set)[:6]` —
+`list()` over a `set`, whose order is hash-arbitrary and varies between processes.
+They are not ranked at all. The Kotlin keeps first-seen order instead, which is
+stable across renders; slice sizes are unchanged. (2) The widget is described as
+generic vs *brand*, but the aggregate counts generics per specialty — there is no
+brand dimension, and the Figma chart's company series do not exist in the data.
+
+**Verification.** `parity_matrix.py`, 60 trials. Because the Python's slice is
+arbitrary, the two sides legitimately choose different subsets once more than 8
+specialties or 6 generics are present: 17 trials are compared cell-by-cell (no
+slice bites), the rest assert slice sizes and series order. **0 failures.**
+
+**The parity script itself needed two corrections.** It first passed a list of
+routes to a fake connection that calls `.items()`, so every `mx_py` call raised and
+nothing was verified — while the defect harness still printed "CAUGHT", because a
+crash is a non-zero exit. It then used `<=6` for the generic cap, which passes when
+loosened, and `sorted(...)` normalisation that made series order invisible. Both
+strengthened; the cap and order mutations are now caught, as is the sum bug.
+Planting a defect in the *assertion* rather than the code is not a valid check.
+
+**Remaining gap: the FilterSheet.** `onOpenFilters` still toasts, and the district /
+territory / specialty / MR dimensions are still unapplied to every Analytics and
+Team aggregate. Threading them means adding the filter columns to roughly twenty
+queries, which is a change big enough to want its own pass rather than a tail-end
+edit.

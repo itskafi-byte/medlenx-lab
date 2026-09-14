@@ -357,6 +357,26 @@ interface PrescriptionDao {
     )
     suspend fun liveScanRows(limit: Int): List<LiveScanFeedRow>
 
+    /**
+     * Widget D: generic counts per specialty, `get_generic_brand_matrix`.
+     *
+     * The backend joins a `doctors` table for the specialty; Android carries it on
+     * the prescription row.
+     */
+    @Query(
+        """
+        SELECT IFNULL(p.doctor_specialty, '') AS specialty,
+               sm.generic AS generic,
+               COUNT(*) AS count
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE sm.generic != '' AND IFNULL(p.doctor_specialty, '') != ''
+        GROUP BY p.doctor_specialty, sm.generic
+        ORDER BY p.doctor_specialty, count DESC
+        """
+    )
+    suspend fun genericMatrixRows(): List<GenericMatrixRow>
+
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 

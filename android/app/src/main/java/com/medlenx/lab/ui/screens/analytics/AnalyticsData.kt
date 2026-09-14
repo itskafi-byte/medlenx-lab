@@ -16,14 +16,7 @@ data class BarDatum(val name: String, val value: Int)
 data class DonutDatum(val name: String, val value: Int)
 
 /** One specialty row in the generic-vs-brand stacked matrix. */
-data class StackedDatum(
-    val specialty: String,
-    val square: Int,
-    val incepta: Int,
-    val beximco: Int,
-    val aci: Int,
-    val renata: Int,
-)
+data class StackedDatum(val specialty: String, val values: List<Int>)
 
 data class DoctorLeaderRow(
     val rank: Int,
@@ -69,18 +62,9 @@ data class KpiDatum(
 
 
 
-/** App.tsx:984 — Chart D, generic vs brand matrix by specialty. */
-val StackedData = listOf(
-    StackedDatum("Cardiology", 45, 20, 15, 10, 10),
-    StackedDatum("Gastro", 30, 35, 20, 5, 10),
-    StackedDatum("Medicine", 25, 30, 25, 12, 8),
-    StackedDatum("Orthopedics", 20, 25, 30, 15, 10),
-)
 
-/** The five stacked series, in drawing order, paired with their legend names. */
-val StackedSeries = listOf("Square", "Incepta", "Beximco", "ACI", "Renata")
 
-fun StackedDatum.seriesValues(): List<Int> = listOf(square, incepta, beximco, aci, renata)
+fun StackedDatum.seriesValues(): List<Int> = values
 
 
 
