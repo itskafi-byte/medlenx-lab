@@ -16,5 +16,21 @@ data class TerritoryVerdict(
     val gpsDistrict: String,
 )
 
+/**
+ * Where a captured coordinate came from.
+ *
+ * Kept on the record because the two sources carry different weight in a territory
+ * dispute: a live fix is stronger evidence than metadata embedded in a photo, and an
+ * RSM reviewing the audit is entitled to know which one they are looking at.
+ */
+enum class GpsSource(val label: String) {
+    Device("device GPS"),
+    PhotoExif("photo EXIF"),
+}
+
 /** GPS pin captured alongside a scan. */
-data class GpsFix(val lat: Double, val lng: Double)
+data class GpsFix(
+    val lat: Double,
+    val lng: Double,
+    val source: GpsSource = GpsSource.Device,
+)

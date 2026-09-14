@@ -2,12 +2,15 @@ package com.medlenx.lab.data.repo
 
 import android.annotation.SuppressLint
 import android.content.Context
+import androidx.exifinterface.media.ExifInterface
 import android.location.LocationManager
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.model.BdGeo
 import com.medlenx.lab.data.model.BdLocations
 import com.medlenx.lab.data.model.GpsFix
+import com.medlenx.lab.data.model.GpsSource
 import com.medlenx.lab.data.model.TerritoryVerdict
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.serializer
@@ -70,6 +73,25 @@ class LocationRepository(
                 ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
         }.getOrNull() ?: return@withContext null
         GpsFix(location.latitude, location.longitude)
+    }
+
+    /**
+     * Falls back to the coordinates embedded in the photo's own EXIF header.
+     *
+     * Reps scan indoors often enough that the last known fix is stale or the provider
+     * is switched off, and the audit then loses its GPS evidence entirely. The photo
+     * was taken at the visit, so its coordinates are better evidence than none - and
+     * they are labelled as photo EXIF rather than passed off as a live fix.
+     *
+     * Returns null when there is no GPS tag, which is normal for screenshots and for
+     * gallery images that were re-saved without their metadata.
+     */
+    suspend fun exifFix(file: File): GpsFix? = withContext(Dispatchers.IO) {
+        runCatching {
+            ExifInterface(file).getLatLong()
+                ?.takeIf { it.size >= 2 }
+                ?.let { GpsFix(it[0], it[1], GpsSource.PhotoExif) }
+        }.getOrNull()
     }
 
     suspend fun verdict(

@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.model.GpsFix
+import com.medlenx.lab.data.model.GpsSource
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
@@ -214,7 +215,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     /** Captures a GPS fix and immediately geofences it against the assigned territory. */
     fun pinGps() {
         viewModelScope.launch {
-            val fix = locationRepository.lastKnownFix()
+            val live = locationRepository.lastKnownFix()
+            // Indoors the last known fix is often stale or the provider is off. The
+            // photo carries its own coordinates, so fall back to those rather than
+            // dropping the GPS evidence from the audit altogether.
+            val fix = live ?: state.imageFile?.let { locationRepository.exifFix(it) }
             if (fix == null) {
                 state = state.copy(
                     geo = state.geo.copy(
@@ -256,6 +261,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 lat = fix.lat,
                 lng = fix.lng,
                 pinnedDistrict = verdict.gpsDistrict,
+                pinSource = fix.source,
                 offTerritory = verdict.offTerritory,
                 verdictReason = verdict.reason,
             ),
@@ -269,7 +275,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             officerTerritory = geo.territory,
             scanTerritory = geo.territory,
             scanDistrict = geo.district,
-            fix = fix ?: geo.lat?.let { lat -> geo.lng?.let { GpsFix(lat, it) } },
+            // Rebuilding the fix from the stored coordinates must carry the original
+            // provenance, or an EXIF pin would be relabelled as a live device fix.
+            fix = fix ?: geo.lat?.let { lat ->
+                geo.lng?.let { GpsFix(lat, it, geo.pinSource ?: GpsSource.Device) }
+            },
         )
         state = state.copy(
             geo = geo.copy(

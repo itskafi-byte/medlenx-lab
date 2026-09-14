@@ -215,3 +215,20 @@ Room 2.8.3 / compileSdk 36, sourced from Google's `android/nowinandroid` sample 
 set is known to build together. See README "Building" for the DSL changes that came
 with it (`android.kotlinOptions` is gone in AGP 9) and the haze 1.7.3 migration off
 `haze`/`hazeChild` onto `hazeSource`/`hazeEffect`.
+
+## EXIF provenance on the GPS pin (2026-09-14)
+
+`pinGps()` now falls back to the coordinates in the photo's EXIF header when
+`lastKnownFix()` returns null (providers off, or no cached fix). Indoors this is
+common, and the geofence was losing its GPS evidence entirely.
+
+`GpsFix` carries a `GpsSource` (`Device` / `PhotoExif`) and the geo strip caption
+says which one produced the pin, so an EXIF coordinate is never passed off as a
+live fix. `reverify()` preserves the provenance when it rebuilds the fix from the
+stored lat/lng.
+
+Note this is *not* an image-orientation fix. Coil's default `BitmapFactoryDecoder`
+already applies EXIF orientation (`ExifOrientationPolicy.RESPECT_PERFORMANCE`
+covers jpeg/webp/heic/heif), and the bytes sent to MedLenX VL are the original file
+untouched, so the tag survives. `exifinterface` was pinned but unused; it now has a
+job.

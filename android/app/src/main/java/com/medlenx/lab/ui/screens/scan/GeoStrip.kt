@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.scan
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.medlenx.lab.data.model.GpsSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,8 @@ data class GeoStripState(
     val lat: Double? = null,
     val lng: Double? = null,
     val pinnedDistrict: String = "",
+    /** Which source produced the pin, so the audit caption can say so. */
+    val pinSource: GpsSource? = null,
     val offTerritory: Boolean = false,
     val verdictReason: String = "",
 )
@@ -99,7 +102,12 @@ fun GeoStrip(
 
             state.lat != null && state.lng != null -> Text(
                 text = buildString {
-                    append("GPS pinned · ")
+                    append(
+                        when (val src = state.pinSource) {
+                            null -> "GPS pinned · "
+                            else -> "Pinned from ${src.label} · "
+                        }
+                    )
                     append("%.4f, %.4f".format(state.lat, state.lng))
                     if (state.pinnedDistrict.isNotBlank()) append(" · ${state.pinnedDistrict}")
                     if (state.verdictReason.isNotBlank()) append(" · ${state.verdictReason}")
