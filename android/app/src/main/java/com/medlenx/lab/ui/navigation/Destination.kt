@@ -2,7 +2,8 @@ package com.medlenx.lab.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoGraph
-import androidx.compose.material.icons.filled.Cog
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.ViewColumn
@@ -22,10 +23,10 @@ sealed class Destination(val route: String, val label: String, val icon: ImageVe
     data object Analytics : Destination("analytics", "Analytics", Icons.Filled.AutoGraph)
     data object Hub : Destination("hub", "Hub", Icons.Filled.Science)
     data object Team : Destination("team", "Team", Icons.Filled.AccountTree)
-    data object Settings : Destination("settings", "Settings", Icons.Filled.Cog)
+    data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 
     /** Not on the bottom bar; opened from Settings (web sidebar item #6). */
-    data object Help : Destination("help", "Help & Guide", Icons.Filled.Cog)
+    data object Help : Destination("help", "Help & Guide", Icons.Filled.HelpOutline)
 
     companion object {
         /** The five destinations rendered in the bottom navigation bar, in order. */

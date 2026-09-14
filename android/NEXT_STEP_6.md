@@ -173,3 +173,30 @@ The `copyMedLenXAssets` task pulls the nine JSON files from `../data/` into
 
 Without an API key the app runs in demo mode: `VlOutcome.NoKey` maps to
 `ScanPhase.NeedsKey`.
+
+## External API verification (done 2026-09-14, before Step 6)
+
+Gradle cannot run in this sandbox (no JVM, no reachable JDK/package mirror, no compiler
+download — all of `dl.google.com`, `repo.maven.apache.org`, `services.gradle.org`,
+`deb.debian.org` time out). So instead of a compile, the external symbols were resolved
+against **upstream GitHub source**, which is the same check a compiler does for name
+resolution.
+
+| Checked | Source of truth | Result |
+|---|---|---|
+| 37 `Icons.Filled.*` names | `google/material-design-icons`, 2,180 icon names | **36 OK, 1 invented** |
+| `drawLine` / `drawRect` / `drawRoundRect` / `drawArc` | `androidx` `DrawScope.kt` | all params match |
+| `CornerRadius(x, y)` | `androidx` `CornerRadius.kt` | factory fn confirmed |
+| `animateFloat` · `tween` · `infiniteRepeatable` · `rememberInfiniteTransition` | `androidx` animation-core | all confirmed |
+| `detectTransformGestures` | `androidx` `TransformGestureDetector.kt` | confirmed |
+| `FlowRow` (+ `@ExperimentalLayoutApi`) | `androidx` `FlowLayout.kt` | confirmed |
+| `DropdownMenu` · `DropdownMenuItem` | `androidx` m3 `Menu.kt` | confirmed |
+| `haze` / `hazeChild` / `HazeStyle` | `chrisbanes/haze` 1.0.2 | confirmed |
+
+**Bug found and fixed:** `Icons.Filled.Cog` does not exist in Material Icons. `Destination.kt`
+used it for both Settings and Help. Replaced with `Icons.Filled.Settings` and
+`Icons.Filled.HelpOutline` (both verified present upstream).
+
+**Still unverified:** Gradle/AGP plugin resolution, KSP code generation (the `*_Dao_Impl` and
+Room schema classes), `BuildConfig` generation, and every overload ambiguity that only a
+real type-checker resolves. Those need one local `./gradlew assembleDebug`.
