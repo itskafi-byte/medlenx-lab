@@ -635,3 +635,52 @@ figures cover this device's 30-day audits rather than a synced 50+ MPO team.
 `by mutableStateOf` consumes as operators and which the previous run reported 25 times
 as false positives. Cleaned 12 genuinely unused imports (mostly stale `GeoStrip.kt`
 leftovers from an earlier refactor); `GeoStrip` itself is live at `ScanScreen.kt:201`.
+
+---
+
+## Step 8 part 2 — Team/RSM: map, leaderboard, targets, off-territory (this commit)
+
+All six `TeamScreen` sections now render real aggregates.
+
+**Ported.** `get_geo_heatmap` (database.py:2428), `get_scan_points` (1805),
+`get_rsm_trends` (2176), `get_target_progress` (1564), `find_off_territory_audits`
+(1776) → `TeamMetrics.geoHeatmap` / `.scanPoints` / `.rsmTrends` /
+`.targetProgress`, plus five new `PrescriptionDao` queries and
+`ProfileDao.doctorTargetRows` / `.recentVisits` / `.deleteDoctorTarget`.
+
+**TeamMap was a placeholder in Figma** — three bubbles at hardcoded percentages,
+no data behind them. It now draws real regions from `get_geo_heatmap` (SoV mode)
+and `get_scan_points` clustered by district (density mode), projected
+equirectangularly over Bangladesh's bounds via `BoxWithConstraints`. No tile
+provider exists offline, so the backdrop is a labelled field, not a rendered map.
+
+**Third backend doc/code mismatch found.** `get_rsm_trends` documents `own_growth`
+as "last full vs previous", but the loop reassigns `growth` on every bucket, so it
+actually returns the final bucket's change over the one before. Ported as written
+and annotated.
+
+**`get_rsm_dashboard` is not portable.** It reads a `team_members` table with no
+Android equivalent, so the leaderboard's roster is one officer. The row is still
+the real aggregate — prescriptions, items, own/competitor split, SoV and the
+week-over-week sparkline — with a footnote saying why there is only one row.
+
+**Verification.** `parity_team2.py` (scan points 50, trends 40, targets 60) and
+`parity_geo.py` (60 trials × 14 regions) run the genuine Python over synthetic
+rows: **0 failures**. Six mutations were planted to prove the checkers bite —
+jitter modulus ×2, bucket count, the 999% cap, the remaining-clamp and the
+centroid fallback were all caught. One mutant (floor vs trunc division) survived;
+it is genuinely equivalent because both sides discard negative diffs, which was
+then confirmed directly.
+
+**Caught before shipping:** `first(flow) { true }` — Kotlin extension functions
+cannot be called with the receiver as a positional argument; now `.first()`. A
+dead `Box` with an `offset(x = ...dp.times(0) + Modifier.let { 0.dp })` expression,
+and an invented `remember_clusters()` call, both removed. The doctor-target
+delete button shipped with `onClick = { }` and is now wired to
+`removeDoctorTarget`.
+
+**Pre-existing defect found, not fixed here.** `AnalyticsScreen.kt` has seven
+inert controls from Step 5: Prev/Next pagination at lines 144/145 and 441/442, a
+CSV export button at 367, and two filter chips at 400/401 — all
+`onClick = { }`. The pagination header also shows a hardcoded "1–3 of 42".
+Left alone to keep this commit scoped to Team; needs a decision.

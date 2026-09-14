@@ -1,7 +1,11 @@
 package com.medlenx.lab.data.repo
 
+import com.medlenx.lab.data.local.BrandCapturedRow
 import com.medlenx.lab.data.local.DoctorTierRow
+import com.medlenx.lab.data.local.GeoRegionRow
+import com.medlenx.lab.data.local.ScanPointRow
 import com.medlenx.lab.data.local.StewardshipRow
+import com.medlenx.lab.data.local.TrendItemRow
 
 /**
  * Ports of the RSM aggregates in `app/database.py`.
@@ -156,6 +160,177 @@ object TeamMetrics {
             ),
         )
     }
+
+    /**
+     * `get_scan_points`: point-level scan locations for the density map.
+     *
+     * A scan with no GPS pin falls back to its district centroid with a
+     * deterministic jitter keyed on the prescription id, so district-level
+     * audits still spread out instead of stacking on one pixel. Points that
+     * still have no coordinates are dropped, exactly as the Python does.
+     */
+    fun scanPoints(
+        rows: List<ScanPointRow>,
+        centroids: Map<String, Centroid>,
+    ): List<ScanPoint> {
+        val out = ArrayList<ScanPoint>(rows.size)
+        for (r in rows) {
+            var lat = r.lat
+            var lng = r.lng
+            if (lat == null || lng == null) {
+                val c = centroids[r.district]
+                if (c != null) {
+                    lat = c.lat + ((r.id % 13) - 6) * 0.008
+                    lng = c.lng + ((r.id % 7) - 3) * 0.008
+                }
+            }
+            if (lat != null && lng != null) {
+                out += ScanPoint(
+                    id = r.id,
+                    createdAt = r.createdAt,
+                    mrId = r.mrId,
+                    doctorName = r.doctorName,
+                    district = r.district,
+                    territory = r.territory,
+                    lat = lat,
+                    lng = lng,
+                    offTerritory = r.offTerritory,
+                    duplicate = r.duplicateOf != null,
+                    items = r.items,
+                )
+            }
+        }
+        return out
+    }
+
+    /**
+     * `get_geo_heatmap`: prescriptions by district + upazila with own vs
+     * competitor counts and market penetration.
+     *
+     * Missing coordinates fall back to the district centroid. Unlike
+     * [scanPoints] there is no jitter here - the Python does not apply any, so
+     * same-district regions genuinely stack.
+     */
+    fun geoHeatmap(
+        rows: List<GeoRegionRow>,
+        centroids: Map<String, Centroid>,
+    ): List<GeoRegion> = rows.map { r ->
+        val items = r.items
+        val own = r.ownItems
+        val c = centroids[r.district]
+        GeoRegion(
+            district = r.district,
+            upazila = r.upazila.ifBlank { r.district },
+            territory = r.territory,
+            rx = r.rx,
+            items = items,
+            ownItems = own,
+            competitorItems = maxOf(items - own, 0),
+            sov = if (items != 0) PyMath.round1(own * 100.0 / items) else 0.0,
+            lat = r.lat ?: c?.lat,
+            lng = r.lng ?: c?.lng,
+        )
+    }
+
+    /**
+     * `get_rsm_trends`: week-over-week Share-of-Voice series.
+     *
+     * **Docstring/code mismatch preserved.** The Python docstring says the growth
+     * figure is "last full vs previous", but the loop reassigns `growth` on every
+     * bucket, so what it actually returns is the final bucket's change over the
+     * one before it. Ported as written, not as documented.
+     */
+    fun rsmTrends(
+        rows: List<TrendItemRow>,
+        ownCompany: String = "",
+        days: Int = 30,
+        baseMillis: Long = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000,
+    ): RsmTrends {
+        val bucketCount = maxOf(1, (days + 6) / 7)
+        val company = ownCompany.ifBlank { DEFAULT_OWN_COMPANY }
+        val ownToken = company.split(" ").first()
+
+        val own = IntArray(bucketCount)
+        val comp = IntArray(bucketCount)
+        val rx = IntArray(bucketCount)
+        for (r in rows) {
+            val diff = Math.floorDiv(r.createdAt - baseMillis, 86_400_000L)
+            val b = Math.floorDiv(diff, 7L).toInt()
+            if (b < 0 || b >= bucketCount) continue
+            rx[b] += 1
+            val name = r.companyName.orEmpty()
+            if (ownToken.isNotEmpty() && name.lowercase().contains(ownToken.lowercase())) {
+                own[b] += 1
+            } else {
+                comp[b] += 1
+            }
+        }
+
+        val series = (0 until bucketCount).map { b ->
+            val total = own[b] + comp[b]
+            TrendWeek(
+                week = b + 1,
+                label = "W${b + 1}",
+                own = own[b],
+                competitor = comp[b],
+                rx = rx[b],
+                sov = if (total != 0) PyMath.round1(own[b] * 100.0 / total) else 0.0,
+            )
+        }
+
+        var growth = 0.0
+        var prev: Int? = null
+        for (pt in series) {
+            val p = prev
+            if (p == null) {
+                prev = pt.own
+            } else {
+                if (p > 0) growth = PyMath.round1((pt.own - p) * 100.0 / p)
+                prev = pt.own
+            }
+        }
+        return RsmTrends(
+            ownCompany = company,
+            days = days,
+            bucketCount = bucketCount,
+            series = series,
+            ownGrowth = growth,
+        )
+    }
+
+    /**
+     * `get_target_progress`: this calendar month's captured Rx against the
+     * officer's brand targets.
+     *
+     * `percent` is capped at 999.0 by the Python; overachievement past that is
+     * clipped rather than reported.
+     */
+    fun targetProgress(
+        targets: List<BrandTarget>,
+        captured: List<BrandCapturedRow>,
+        month: String,
+    ): TargetProgress {
+        val byBrand = HashMap<String, Int>(captured.size)
+        for (c in captured) byBrand[c.brand.lowercase()] = c.captured
+
+        val brands = targets.map { t ->
+            val hit = byBrand[t.brand.lowercase()] ?: 0
+            val pct = if (t.monthlyTarget != 0) {
+                PyMath.round1(hit * 100.0 / t.monthlyTarget)
+            } else {
+                0.0
+            }
+            BrandProgress(
+                brandName = t.brand,
+                monthlyTarget = t.monthlyTarget,
+                captured = hit,
+                remaining = maxOf(t.monthlyTarget - hit, 0),
+                percent = minOf(pct, 999.0),
+                month = month,
+            )
+        }
+        return TargetProgress(month = month, brands = brands)
+    }
 }
 
 data class DoctorTier(
@@ -204,4 +379,64 @@ data class StewardshipSummary(
     val days: Int,
     val doctors: List<StewardshipDoctor>,
     val totals: StewardshipTotals,
+)
+
+/** District centroid from `bd_geo.json`. */
+data class Centroid(val lat: Double, val lng: Double)
+
+data class ScanPoint(
+    val id: Long,
+    val createdAt: Long,
+    val mrId: String,
+    val doctorName: String,
+    val district: String,
+    val territory: String,
+    val lat: Double,
+    val lng: Double,
+    val offTerritory: Boolean,
+    val duplicate: Boolean,
+    val items: Int,
+)
+
+data class TrendWeek(
+    val week: Int,
+    val label: String,
+    val own: Int,
+    val competitor: Int,
+    val rx: Int,
+    val sov: Double,
+)
+
+data class RsmTrends(
+    val ownCompany: String,
+    val days: Int,
+    val bucketCount: Int,
+    val series: List<TrendWeek>,
+    val ownGrowth: Double,
+)
+
+data class BrandTarget(val brand: String, val monthlyTarget: Int)
+
+data class BrandProgress(
+    val brandName: String,
+    val monthlyTarget: Int,
+    val captured: Int,
+    val remaining: Int,
+    val percent: Double,
+    val month: String,
+)
+
+data class TargetProgress(val month: String, val brands: List<BrandProgress>)
+
+data class GeoRegion(
+    val district: String,
+    val upazila: String,
+    val territory: String,
+    val rx: Int,
+    val items: Int,
+    val ownItems: Int,
+    val competitorItems: Int,
+    val sov: Double,
+    val lat: Double?,
+    val lng: Double?,
 )

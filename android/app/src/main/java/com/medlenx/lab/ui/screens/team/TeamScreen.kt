@@ -73,6 +73,15 @@ fun TeamScreen(
 
         vm.error?.let { MlxErrorLine(it, Modifier.padding(bottom = MlxD.SectionGap)) }
 
+        TeamMapSection(
+            regions = vm.geoRegions,
+            points = vm.scanPoints,
+            mode = vm.mapMode,
+            onModeChange = vm::setMapMode,
+        )
+
+        Spacer(Modifier.height(MlxD.SectionGap))
+
         TeamTiersSection(
             doctors = tiering.doctors,
             ownCompany = tiering.ownCompany,
@@ -80,6 +89,33 @@ fun TeamScreen(
             tierFilter = vm.tierFilter,
             onTierFilter = vm::setTierFilter,
         )
+
+        Spacer(Modifier.height(MlxD.SectionGap))
+
+        TeamLeaderboardSection(
+            officerName = vm.officerProfile?.fullName.orEmpty(),
+            officerRole = vm.officerProfile?.role.orEmpty(),
+            territory = vm.officerProfile?.territory.orEmpty(),
+            repCode = vm.officerProfile?.employeeId.orEmpty(),
+            trends = vm.trends,
+            prescriptions = tiering.doctors.sumOf { it.rx },
+            items = tiering.doctors.sumOf { it.items },
+            ownItems = tiering.doctors.sumOf { it.ownItems },
+        )
+
+        Spacer(Modifier.height(MlxD.SectionGap))
+
+        TeamTargetsSection(
+            brands = vm.targetProgress?.brands ?: emptyList(),
+            month = vm.targetProgress?.month ?: "",
+            doctorTargets = vm.doctorTargets,
+            visitLog = vm.visitLog,
+            onRemoveTarget = vm::removeDoctorTarget,
+        )
+
+        Spacer(Modifier.height(MlxD.SectionGap))
+
+        TeamOffTerritorySection(vm.offTerritory)
 
         Spacer(Modifier.height(MlxD.SectionGap))
 

@@ -204,3 +204,69 @@ data class StewardshipRow(
     val generic: String,
     val brandName: String,
 )
+
+/** Projection for [PrescriptionDao.offTerritoryRows] — `find_off_territory_audits`. */
+data class OffTerritoryRow(
+    val id: Long,
+    val createdAt: Long,
+    val mrId: String,
+    val doctorName: String,
+    val doctorSpecialty: String,
+    val upazila: String,
+    val district: String,
+    val territory: String,
+    val lat: Double?,
+    val lng: Double?,
+    val territoryNote: String?,
+    val totalMedicines: Int,
+)
+
+/** Projection for [PrescriptionDao.scanPointRows] — `get_scan_points`. */
+data class ScanPointRow(
+    val id: Long,
+    val createdAt: Long,
+    val mrId: String,
+    val doctorName: String,
+    val district: String,
+    val territory: String,
+    val lat: Double?,
+    val lng: Double?,
+    val offTerritory: Boolean,
+    val duplicateOf: Long?,
+    val items: Int,
+)
+
+/** Projection for [PrescriptionDao.brandCapturedRows] — `get_target_progress`. */
+data class BrandCapturedRow(val brand: String, val captured: Int)
+
+/** Projection for [PrescriptionDao.trendRows] — `get_rsm_trends`. */
+data class TrendItemRow(val createdAt: Long, val companyName: String?)
+
+/** Projection for [ProfileDao.doctorTargetRows] — doctor detailing tracker. */
+data class DoctorTargetRow(
+    val targetId: Long,
+    val doctorName: String,
+    val specialty: String,
+    val monthlyTarget: Int,
+    val visits: Int,
+)
+
+/** Projection for [PrescriptionDao.geoRegionRows] — `get_geo_heatmap`. */
+data class GeoRegionRow(
+    val district: String,
+    val upazila: String,
+    val territory: String,
+    val lat: Double?,
+    val lng: Double?,
+    val rx: Int,
+    val items: Int,
+    val ownItems: Int,
+)
+
+/** Projection for [ProfileDao.recentVisits] — the auto-logged detailing visit feed. */
+data class DoctorVisitRow(
+    val doctorName: String,
+    val mrId: String,
+    val visitedAt: Long,
+    val rxNo: String,
+)

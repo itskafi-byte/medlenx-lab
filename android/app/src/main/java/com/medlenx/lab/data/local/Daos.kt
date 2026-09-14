@@ -135,6 +135,86 @@ interface PrescriptionDao {
     )
     suspend fun stewardshipRows(since: Long): List<StewardshipRow>
 
+    /** `find_off_territory_audits`: geofence failures, newest first. */
+    @Query(
+        """
+        SELECT id, created_at AS createdAt, mr_id AS mrId,
+               doctor_name AS doctorName, doctor_specialty AS doctorSpecialty,
+               upazila, district, territory, lat, lng,
+               territory_note AS territoryNote, total_medicines AS totalMedicines
+        FROM prescriptions
+        WHERE off_territory = 1 AND created_at >= :since
+        ORDER BY created_at DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun offTerritoryRows(since: Long, limit: Int): List<OffTerritoryRow>
+
+    /** `get_scan_points`: point-level scan locations for the density map. */
+    @Query(
+        """
+        SELECT p.id AS id, p.created_at AS createdAt, p.mr_id AS mrId,
+               p.doctor_name AS doctorName, p.district AS district,
+               p.territory AS territory, p.lat AS lat, p.lng AS lng,
+               p.off_territory AS offTerritory, p.duplicate_of AS duplicateOf,
+               (SELECT COUNT(*) FROM scanned_medicines sm
+                 WHERE sm.prescription_id = p.id) AS items
+        FROM prescriptions p
+        WHERE p.created_at >= :since
+        ORDER BY p.id DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun scanPointRows(since: Long, limit: Int): List<ScanPointRow>
+
+    /** `get_rsm_trends`: one row per scanned item with its captured company. */
+    @Query(
+        """
+        SELECT p.created_at AS createdAt, sm.company_name AS companyName
+        FROM prescriptions p
+        LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since
+        """
+    )
+    suspend fun trendRows(since: Long): List<TrendItemRow>
+
+    /**
+     * `get_target_progress`: this calendar month's captured count per brand.
+     *
+     * Grouped case-insensitively to match the Python's `brand_name = ? COLLATE
+     * NOCASE`; the caller looks rows up by lowercased target brand.
+     */
+    @Query(
+        """
+        SELECT sm.brand_name AS brand, COUNT(*) AS captured
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since
+        GROUP BY sm.brand_name COLLATE NOCASE
+        """
+    )
+    suspend fun brandCapturedRows(since: Long): List<BrandCapturedRow>
+
+    /**
+     * `get_geo_heatmap`: prescriptions aggregated by district + upazila with the
+     * own/competitor split, for the territory penetration map.
+     */
+    @Query(
+        """
+        SELECT p.district AS district, p.upazila AS upazila, p.territory AS territory,
+               p.lat AS lat, p.lng AS lng,
+               COUNT(DISTINCT p.id) AS rx,
+               COUNT(sm.id) AS items,
+               IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
+        FROM prescriptions p
+        LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since AND IFNULL(p.district, '') != ''
+        GROUP BY p.district, p.upazila
+        ORDER BY items DESC
+        """
+    )
+    suspend fun geoRegionRows(since: Long, ownLike: String): List<GeoRegionRow>
+
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 
@@ -194,6 +274,34 @@ interface ProfileDao {
 
     @Query("DELETE FROM brand_targets")
     suspend fun clearTargets()
+
+    /** RSM-attached doctor detailing targets with their auto-logged visit counts. */
+    @Query(
+        """
+        SELECT t.id AS targetId, t.doctor_name AS doctorName, t.specialty AS specialty,
+               t.monthly_target AS monthlyTarget,
+               (SELECT COUNT(*) FROM doctor_visits v WHERE v.target_id = t.id) AS visits
+        FROM doctor_targets t
+        ORDER BY t.doctor_name
+        """
+    )
+    suspend fun doctorTargetRows(): List<DoctorTargetRow>
+
+    /** Auto-logged visits, newest first, with the Rx that produced each one. */
+    @Query(
+        """
+        SELECT v.doctor_name AS doctorName, v.mr_id AS mrId,
+               v.visited_at AS visitedAt, IFNULL(p.rx_no, '') AS rxNo
+        FROM doctor_visits v
+        LEFT JOIN prescriptions p ON p.id = v.prescription_id
+        ORDER BY v.visited_at DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun recentVisits(limit: Int): List<DoctorVisitRow>
+
+    @Query("DELETE FROM doctor_targets WHERE id = :targetId")
+    suspend fun deleteDoctorTarget(targetId: Long)
 }
 
 @Dao

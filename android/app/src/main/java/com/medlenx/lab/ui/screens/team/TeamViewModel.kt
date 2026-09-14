@@ -9,10 +9,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.DoctorTargetRow
 import com.medlenx.lab.data.local.DoctorTierRow
+import com.medlenx.lab.data.local.DoctorVisitRow
+import com.medlenx.lab.data.local.OffTerritoryRow
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.StewardshipRow
+import com.medlenx.lab.data.repo.BrandTarget
+import com.medlenx.lab.data.repo.Centroid
+import com.medlenx.lab.data.repo.GeoRegion
+import com.medlenx.lab.data.repo.RsmTrends
+import com.medlenx.lab.data.repo.ScanPoint
+import com.medlenx.lab.data.repo.TargetProgress
 import com.medlenx.lab.data.repo.TeamMetrics
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -78,6 +91,48 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
         limit = 100,
     )
 
+    /** `get_scan_points`, after the district-centroid fallback has been applied. */
+    var scanPoints by mutableStateOf<List<ScanPoint>>(emptyList())
+        private set
+
+    /** `get_rsm_trends` for this officer. */
+    var trends by mutableStateOf<RsmTrends?>(null)
+        private set
+
+    /** `get_target_progress` for the current calendar month. */
+    var targetProgress by mutableStateOf<TargetProgress?>(null)
+        private set
+
+    /** `get_geo_heatmap` — the SoV map's regions. */
+    var geoRegions by mutableStateOf<List<GeoRegion>>(emptyList())
+        private set
+
+    /** `find_off_territory_audits`. */
+    var offTerritory by mutableStateOf<List<OffTerritoryRow>>(emptyList())
+        private set
+
+    var doctorTargets by mutableStateOf<List<DoctorTargetRow>>(emptyList())
+        private set
+    var visitLog by mutableStateOf<List<DoctorVisitRow>>(emptyList())
+        private set
+
+    /** TeamMap's SoV / density-cluster toggle. */
+    var mapMode by mutableStateOf(MapMode.SOV)
+        private set
+
+    fun setMapMode(mode: MapMode) {
+        mapMode = mode
+    }
+
+    /** Removes an RSM doctor detailing target and reloads the tracker. */
+    fun removeDoctorTarget(targetId: Long) {
+        viewModelScope.launch {
+            runCatching { app.graph.profileDao.deleteDoctorTarget(targetId) }
+                .onFailure { error = it.message ?: "Could not remove the target" }
+            load()
+        }
+    }
+
     fun setTierFilter(tier: String) {
         tierFilter = tier
     }
@@ -104,6 +159,38 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                     limit = 200,
                 )
                 stewardshipRows = prescriptionDao.stewardshipRows(since = since)
+
+                val centroids = app.graph.locationRepository.geo().districts
+                    .mapValues { Centroid(it.value.lat, it.value.lng) }
+                geoRegions = TeamMetrics.geoHeatmap(
+                    rows = prescriptionDao.geoRegionRows(since = since, ownLike = ownLike),
+                    centroids = centroids,
+                )
+                scanPoints = TeamMetrics.scanPoints(
+                    rows = prescriptionDao.scanPointRows(since = since, limit = 2000),
+                    centroids = centroids,
+                )
+                trends = TeamMetrics.rsmTrends(
+                    rows = prescriptionDao.trendRows(since = since),
+                    ownCompany = ownCompany,
+                    days = days,
+                    baseMillis = since,
+                )
+                offTerritory = prescriptionDao.offTerritoryRows(since = since, limit = 50)
+
+                // `get_target_progress` measures the calendar month, not a rolling
+                // 30 days, so it gets its own boundary.
+                val monthStart = LocalDate.now().withDayOfMonth(1)
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val month = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
+                targetProgress = TeamMetrics.targetProgress(
+                    targets = app.graph.profileDao.observeTargets().first()
+                        .map { BrandTarget(it.brand, it.target) },
+                    captured = prescriptionDao.brandCapturedRows(since = monthStart),
+                    month = month,
+                )
+                doctorTargets = app.graph.profileDao.doctorTargetRows()
+                visitLog = app.graph.profileDao.recentVisits(limit = 20)
             }.onFailure { e ->
                 error = e.message ?: "Could not load team aggregates"
             }
@@ -133,4 +220,10 @@ class TeamViewModelFactory(private val application: Application) : ViewModelProv
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         TeamViewModel(application) as T
+}
+
+/** TeamMap's two clustering modes, matching the web app's segmented control. */
+enum class MapMode(val label: String) {
+    SOV("SoV"),
+    DENSITY("Density clusters"),
 }
