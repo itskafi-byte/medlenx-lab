@@ -11,10 +11,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.model.HealthCalendar
+import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.HealthDays
 import com.medlenx.lab.data.model.JobBoard
 import com.medlenx.lab.data.model.PharmaJobs
+import com.medlenx.lab.data.repo.BrowseResult
 import com.medlenx.lab.data.repo.PharmaHub
+import com.medlenx.lab.data.repo.toProduct
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -27,7 +30,9 @@ import java.time.LocalDate
  */
 class HubViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val catalogue = (application as MedLenXApp).graph.catalogue
+    private val app = application as MedLenXApp
+    private val catalogue = app.graph.catalogue
+    private val scanRepository = app.graph.scanRepository
 
     /** Fixed at construction so a Hub left open across midnight does not reshuffle. */
     val today: LocalDate = LocalDate.now()
@@ -35,6 +40,23 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     var healthDays by mutableStateOf<HealthDays?>(null)
         private set
     var jobs by mutableStateOf<PharmaJobs?>(null)
+        private set
+
+    /**
+     * The catalogue, read once from Room.
+     *
+     * Empty until the app's catalogue import finishes, so the drug index shows
+     * its importing state rather than claiming the catalogue has zero rows.
+     */
+    var products by mutableStateOf<List<MedexProduct>>(emptyList())
+        private set
+
+    var browseCategory by mutableStateOf("top10")
+        private set
+    var indexQuery by mutableStateOf("")
+        private set
+    /** Search results; null means "show the browse slice". */
+    var searchResults by mutableStateOf<List<MedexProduct>?>(null)
         private set
 
     /** Month being displayed in the health-day calendar (1-12). */
@@ -53,6 +75,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             healthDays = catalogue.readAsset("health_days.json", HealthDays.serializer())
             jobs = catalogue.readAsset("pharma_jobs.json", PharmaJobs.serializer())
+            products = scanRepository.medexIndex().all
         }
     }
 
@@ -61,6 +84,33 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         today = today,
         year = today.year,
     )
+
+    fun browse(): BrowseResult = PharmaHub.medexBrowse(
+        category = browseCategory,
+        medexDb = products,
+        limit = 24,
+    )
+
+    /** The rows the index tab lists: search hits when querying, else the slice. */
+    fun indexRows(): List<MedexProduct> = searchResults ?: browse().results
+
+    fun setBrowseCategory(value: String) {
+        browseCategory = value
+        searchResults = null
+    }
+
+    /** Blank query falls back to the curated slice rather than searching for "". */
+    fun searchIndex(query: String) {
+        indexQuery = query
+        val q = query.trim()
+        if (q.isEmpty()) {
+            searchResults = null
+            return
+        }
+        viewModelScope.launch {
+            searchResults = scanRepository.searchCatalogue(q, 40).map { it.toProduct() }
+        }
+    }
 
     fun board(): JobBoard = PharmaHub.pharmaJobs(
         jobs = jobs?.jobs ?: emptyList(),

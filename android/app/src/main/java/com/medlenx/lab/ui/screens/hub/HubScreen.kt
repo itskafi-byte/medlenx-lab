@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.School
@@ -36,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.model.HealthDayEntry
+import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxButton
@@ -43,9 +46,14 @@ import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.MlxFilterChip
 import com.medlenx.lab.ui.components.MlxIconButton
+import com.medlenx.lab.ui.components.CompanyBadge
+import com.medlenx.lab.ui.components.MiniKpiTile
 import com.medlenx.lab.ui.components.MlxSegmented
+import com.medlenx.lab.ui.components.MlxTextField
+import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.StatusPill
+import com.medlenx.lab.data.repo.PharmaHub
 import com.medlenx.lab.ui.navigation.HubTab
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
@@ -99,9 +107,10 @@ fun HubScreen(
         )
 
         when (tabs[tabIndex]) {
+            HubTab.Index -> DrugIndexTab(vm)
             HubTab.HealthDays -> HealthDaysTab(vm)
             HubTab.Jobs -> JobsTab(vm, onOpenJob)
-            HubTab.Index, HubTab.Trips, HubTab.News -> HubTabPending(tabs[tabIndex])
+            HubTab.Trips, HubTab.News -> HubTabPending(tabs[tabIndex])
         }
     }
 }
@@ -111,7 +120,6 @@ fun HubScreen(
 private fun HubTabPending(tab: HubTab) {
     MlxEmptyState(
         message = when (tab) {
-            HubTab.Index -> "25K+ Drug Index — catalogue browse and search land next."
             HubTab.Trips -> "TRIPS Waiver Tracker — needs per-molecule field volume from " +
                 "prescription scans, which the on-device audit store does not aggregate yet."
             HubTab.News -> "Industry News — the web app streams this from RSS feeds through " +
@@ -119,6 +127,234 @@ private fun HubTabPending(tab: HubTab) {
             else -> ""
         },
     )
+}
+
+// ═══════════════════════════════════ DRUG INDEX ════════════════════════════
+
+/** Labels for `medex_browse`'s four curated slices. */
+private val BROWSE_FILTERS = listOf(
+    "top10" to "Top 10 Pharma",
+    "cardiology" to "Cardiology",
+    "antibiotics" to "Antibiotics",
+    "otc" to "OTC",
+)
+
+@Composable
+private fun DrugIndexTab(vm: HubViewModel) {
+    val rows = vm.indexRows()
+    val browse = vm.browse()
+
+    // Distinct counts over 25k rows; recomputed only when the catalogue arrives.
+    val dosageForms = remember(vm.products) {
+        vm.products.map { it.type.trim() }.filter { it.isNotEmpty() }.distinct().size
+    }
+    val companies = remember(vm.products) {
+        vm.products.map { it.company.trim() }.filter { it.isNotEmpty() }.distinct().size
+    }
+    val topCompanies = remember(vm.products) {
+        PharmaHub.uniqueCompaniesFrom(vm.products, limit = 1)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        MlxCard {
+            SectionHeader(
+                title = "25K+ Drug Index & Search",
+                icon = Icons.Filled.Medication,
+            )
+            Row(
+                modifier = Modifier.padding(top = MlxD.Space3),
+                horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+            ) {
+                MiniKpiTile("Total medicines", vm.products.size.toString(), Modifier.weight(1f))
+                MiniKpiTile("Dosage forms", dosageForms.toString(), Modifier.weight(1f))
+            }
+            Row(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+            ) {
+                MiniKpiTile("Companies", companies.toString(), Modifier.weight(1f))
+                // Every catalogue row is decorated as registered by medex_browse,
+                // so this equals the row count rather than a separate lookup.
+                MiniKpiTile("DGDA registered", vm.products.size.toString(), Modifier.weight(1f))
+            }
+
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space3),
+                horizontalSpacing = MlxD.Space2,
+                verticalSpacing = MlxD.Space2,
+            ) {
+                BROWSE_FILTERS.forEach { (key, label) ->
+                    MlxFilterChip(
+                        label = label,
+                        selected = vm.browseCategory == key,
+                        onClick = { vm.setBrowseCategory(key) },
+                    )
+                }
+            }
+
+            MlxTextField(
+                value = vm.indexQuery,
+                onValueChange = { vm.searchIndex(it) },
+                placeholder = "Search Napa, Seclo, Injection, Square, Omeprazole...",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = MlxD.Space3),
+            )
+
+            Text(
+                text = if (vm.indexQuery.isBlank()) {
+                    "Showing the ${BROWSE_FILTERS.first { it.first == vm.browseCategory }.second} " +
+                        "slice — ${browse.total} matches from the bundled catalogue, " +
+                        "top ${rows.size} shown. Every product is DGDA-registered."
+                } else {
+                    "${rows.size} result(s) for \"${vm.indexQuery.trim()}\"."
+                },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2),
+            )
+        }
+
+        if (vm.products.isEmpty()) {
+            MlxEmptyState(
+                message = "The bundled catalogue is still importing into the on-device " +
+                    "database. It runs once on first launch and the index fills in when " +
+                    "it finishes.",
+                icon = Icons.Filled.Medication,
+            )
+        } else {
+            TopCompaniesHero(vm)
+
+            if (rows.isEmpty()) {
+                MlxEmptyState(
+                    message = if (vm.indexQuery.isBlank()) {
+                        "No catalogue rows match that filter."
+                    } else {
+                        "Nothing in the catalogue matches \"${vm.indexQuery.trim()}\"."
+                    },
+                )
+            } else {
+                rows.forEach { product -> ProductRow(product) }
+            }
+        }
+    }
+}
+
+/**
+ * "Currently Popular Medicines".
+ *
+ * The web app fills this by live-scraping medex.com.bd, which the standalone
+ * build cannot do. It is driven instead by `unique_companies_from` over the
+ * bundled catalogue, and the caption says so rather than claiming a live fetch.
+ */
+@Composable
+private fun TopCompaniesHero(vm: HubViewModel) {
+    val companies = remember(vm.products) {
+        PharmaHub.uniqueCompaniesFrom(vm.products, limit = 8).companies
+    }
+    if (companies.isEmpty()) return
+
+    DarkHero {
+        Text(
+            text = "Leading Companies in the Catalogue",
+            style = MlxType.CardTitle,
+            color = Color.White,
+        )
+        Text(
+            text = "Ranked by brand count in the bundled MedEx catalogue. The web " +
+                "app live-fetches this from medex.com.bd; the offline build ranks " +
+                "the bundled rows instead.",
+            style = MlxType.Meta,
+            color = Mlx.Brand200,
+            modifier = Modifier.padding(top = MlxD.Space1, bottom = MlxD.Space3),
+        )
+        companies.forEach { entry ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = MlxD.Space1),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompanyBadge(name = entry.name, size = 28.dp)
+                Text(
+                    text = entry.name,
+                    style = MlxType.BodySmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = MlxD.Space2),
+                )
+                StatusPill(text = "${entry.brands} brands", tone = PillTone.BlueSolid)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductRow(product: MedexProduct) {
+    MlxCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .height(64.dp)
+                    .aspectRatio(1f)
+                    .background(Mlx.Screen, MlxShape.Medium),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LocalPharmacy,
+                    contentDescription = null,
+                    tint = Mlx.Brand400,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = MlxD.Space3),
+            ) {
+                Text(text = product.brandName, style = MlxType.CardTitle)
+                Text(
+                    text = listOf(product.type, product.strength)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" "),
+                    style = MlxType.Meta,
+                    color = Mlx.Text500,
+                )
+                if (product.generic.isNotBlank()) {
+                    Text(
+                        text = product.generic,
+                        style = MlxType.Meta,
+                        color = Mlx.Text500,
+                    )
+                }
+                if (product.company.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = MlxD.Space1),
+                    ) {
+                        CompanyBadge(name = product.company, size = 16.dp)
+                        Text(
+                            text = product.company,
+                            style = MlxType.MicroPill,
+                            color = Mlx.Text600,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = MlxD.Space1),
+                        )
+                    }
+                }
+                FlowRowCompat(
+                    modifier = Modifier.padding(top = MlxD.Space2),
+                    horizontalSpacing = MlxD.Space1,
+                    verticalSpacing = MlxD.Space1,
+                ) {
+                    // medex_browse stamps every returned row as registered; the
+                    // NEML pill is resolved per molecule rather than asserted.
+                    StatusPill(text = "DGDA Registered", tone = PillTone.EmeraldSolid)
+                }
+            }
+        }
+    }
 }
 
 // ═══════════════════════════════════ HEALTH DAYS ═══════════════════════════

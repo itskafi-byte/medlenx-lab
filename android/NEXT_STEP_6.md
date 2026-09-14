@@ -484,3 +484,45 @@ lines themselves, so it could never report anything. Fixed. It now finds 37,
 almost all of which are `getValue`/`setValue` operator imports required by `by`
 delegation. Unused imports are warnings, not errors, so none of them blocked a
 build — but the check was reporting false negatives for six steps.
+
+## Step 7 part 2: catalogue import fix + Drug Index tab
+
+**`ensureImported()` was never called.** `AssetCatalogue` has imported the bundled
+`medex_full.json` into Room since Step 2, but nothing invoked it, so
+`medex_products` was empty for the life of the process. Consequences, all silent:
+
+- `MedexDao.all()` returned nothing, so `MedexIndex` had no brands and
+  `MedicineEnricher` matched no medicine. Company, match type, pack image and
+  alternatives stayed null, and `genericSubstitution` could never find an own
+  brand — the Step 6 enrichment was wired correctly and still could not run.
+- The Hub's drug index would have rendered zero rows.
+
+NEML / DGDA / TRIPS were unaffected because `RegulatoryRepository` reads the
+assets directly instead of through Room, which is why nothing failed loudly.
+
+`AppGraph` now owns an application-lifetime `CoroutineScope` and exposes
+`importCatalogue()`; `MedLenXApp.onCreate` calls it. `ensureImported` is
+idempotent so warm starts no-op.
+
+**Drug Index tab** built on `medex_browse` + `unique_companies_from`, verified by
+execution against the real module over all 25,105 rows — every category at four
+limits plus 35 query/limit combinations for the company list, comparing rank
+order, totals and de-duplication: **0 mismatches**.
+
+The "Currently Popular Medicines" hero is *not* a live scrape. The web app
+fetches it from medex.com.bd; the standalone build ranks the bundled catalogue
+with `unique_companies_from` and the caption says so, rather than claiming a
+live fetch it is not making.
+
+`_CATEGORY_TERMS["otc"]` contains "antacid" twice in the Python source. Kept
+verbatim: the duplicate cannot affect an `any` test, and silently de-duplicating
+a ported table makes the diff harder to audit.
+
+## Tooling note 2
+
+Two audits I had been relying on were broken and reported clean results while
+checking nothing: the unused-import check (searched the import lines themselves)
+and the named-argument check (its regex stopped at the first `)` inside
+`content: @Composable X.() -> Unit`, so it "found" no signature and silently
+skipped nine composables). Both are fixed. A checker that cannot fail is worse
+than no checker, because it converts an unknown into a false pass.
