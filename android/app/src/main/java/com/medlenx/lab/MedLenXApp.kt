@@ -18,5 +18,9 @@ class MedLenXApp : Application() {
     override fun onCreate() {
         super.onCreate()
         graph = AppGraph.create(this)
+        // Kicks off the ~16 MB catalogue import on the graph's IO scope. Nothing
+        // else triggers it, and the matcher, the enrichment step and the Hub's
+        // drug index all read the resulting Room rows.
+        graph.importCatalogue()
     }
 }

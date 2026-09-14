@@ -1,6 +1,10 @@
 package com.medlenx.lab.data.config
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.ProfileDao
@@ -29,7 +33,27 @@ class AppGraph private constructor(
     val scanRepository: ScanRepository,
     val profileDao: ProfileDao,
     val regulatoryRepository: RegulatoryRepository,
+    /**
+     * Application-lifetime scope for work that must outlive any screen.
+     *
+     * There is no ViewModel to hang the catalogue import on: it has to start the
+     * moment the process does, because the matcher, the drug index and the
+     * enrichment step all read Room and would otherwise see an empty table.
+     */
+    val scope: CoroutineScope,
 ) {
+    /**
+     * Imports the bundled catalogue into Room if it is not already there.
+     *
+     * Without this call `medex_products` is empty for the life of the process:
+     * the matcher finds no brand, so no scanned medicine ever gets a verified
+     * company, match type or pack image, and the drug index renders nothing.
+     * Idempotent - `ensureImported` no-ops once rows exist.
+     */
+    fun importCatalogue() {
+        scope.launch { catalogue.ensureImported() }
+    }
+
     companion object {
         fun create(context: Context): AppGraph {
             val appContext = context.applicationContext
@@ -58,6 +82,7 @@ class AppGraph private constructor(
                 ),
                 profileDao = db.profileDao(),
                 regulatoryRepository = RegulatoryRepository(catalogue),
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
             )
         }
     }

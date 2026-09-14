@@ -4,6 +4,7 @@ import com.medlenx.lab.data.model.EnrichedJob
 import com.medlenx.lab.data.model.HealthCalendar
 import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.HealthDays
+import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.JobBoard
 import com.medlenx.lab.data.model.PharmaJob
 import java.time.LocalDate
@@ -127,6 +128,136 @@ object PharmaHub {
         )
     }
 
+    /** Python's `_TOP_COMPANY_TOKENS` — the leading companies for the top10 slice. */
+    val TOP_COMPANY_TOKENS: List<String> = listOf(
+        "square", "incepta", "beximco", "renata", "aci limited",
+        "healthcare pharmaceuticals", "opsonin", "eskayef", "acme",
+        "beacon", "aristopharma", "drug international",
+    )
+
+    /**
+     * Python's `_CATEGORY_TERMS`.
+     *
+     * "antacid" appears twice under `otc` in the original. Kept verbatim: the
+     * duplicate cannot change an `any` test, and silently de-duplicating a ported
+     * table makes the diff against the Python harder to audit.
+     */
+    val CATEGORY_TERMS: Map<String, List<String>> = mapOf(
+        "cardiology" to listOf(
+            "atorvastatin", "amlodipine", "losartan", "valsartan", "telmisartan",
+            "metoprolol", "bisoprolol", "carvedilol", "nebivolol", "clopidogrel",
+            "aspirin", "rosuvastatin", "nitroglycerin", "isosorbide", "ramipril",
+            "enalapril", "digoxin", "furosemide", "diltiazem", "verapamil",
+            "rivaroxaban", "warfarin", "trimetazidine", "ivabradine", "sacubitril",
+        ),
+        "antibiotics" to listOf(
+            "amoxicillin", "ciprofloxacin", "azithromycin", "cephalexin",
+            "cefixime", "cefuroxime", "ceftriaxone", "ceftazidime", "cefepime",
+            "meropenem", "levofloxacin", "clarithromycin", "doxycycline",
+            "cephradine", "cloxacillin", "moxifloxacin", "cefaclor", "flucloxacillin",
+            "amikacin", "gentamicin", "nitrofurantoin", "cotrimoxazole", "metronidazole",
+        ),
+        "otc" to listOf(
+            "paracetamol", "antacid", "vitamin", "calcium", "multivitamin",
+            "cough", "cold", "antihistamine", "fertile", "ferrous", "folic acid",
+            "zinc", "domperidone", "ors", "oral rehydration", "digestive", "antacid",
+            "hydrocortisone", "emollient", "sunscreen", "multimineral", "b-complex",
+            "dextromethorphan", "loratadine", "cetirizine", "chlorpheniramine",
+            "nasal", "expectorant", "mucolytic", "probiotic",
+        ),
+    )
+
+    val BROWSE_CATEGORIES: List<String> = listOf("top10", "cardiology", "antibiotics", "otc")
+
+    /** Rows whose pack image came from the MedEx CDN carry a pack photo. */
+    private fun packScore(row: MedexProduct): Int =
+        if ((row.packImage ?: row.imageUrl ?: "").contains("medex.com.bd/storage")) 1 else 0
+
+    /**
+     * Python's `medex_browse`: a curated slice of the catalogue for the index
+     * tab's quick-filter pills.
+     *
+     * Ranking is `rank + pack_score`, then by brand-name length; ties keep
+     * catalogue order because both Python's `list.sort` and Kotlin's `sortedWith`
+     * are stable. Results are de-duplicated on brand+strength+company.
+     *
+     * The Python source comments "cap 2 rows per company for top10", but the code
+     * under it does no such capping - it only de-duplicates. The code is what was
+     * ported, and `total` is the pre-dedupe match count, as in the original.
+     */
+    fun medexBrowse(
+        category: String = "top10",
+        medexDb: List<MedexProduct>,
+        limit: Int = 24,
+    ): BrowseResult {
+        val cat = category.lowercase().trim()
+        if (cat !in BROWSE_CATEGORIES) return BrowseResult(cat, 0, emptyList())
+        if (medexDb.isEmpty()) return BrowseResult(cat, 0, emptyList())
+
+        val scored = mutableListOf<Pair<Int, MedexProduct>>()
+        for (row in medexDb) {
+            val company = row.company.lowercase()
+            val blob = listOf(row.generic, row.category, row.ingredient)
+                .joinToString(" ").lowercase()
+            val rank = when {
+                cat == "top10" ->
+                    if (TOP_COMPANY_TOKENS.any { company.contains(it) }) 5 else 0
+                else ->
+                    if (CATEGORY_TERMS[cat].orEmpty().any { blob.contains(it) }) {
+                        // An exact category-field match outranks a substring hit.
+                        // Note row.category may be blank, and "" is a substring of
+                        // every string, so a blank category scores the higher rank -
+                        // exactly as Python's `"" in blob` does.
+                        if (blob.contains(row.category.lowercase())) 6 else 4
+                    } else {
+                        0
+                    }
+            }
+            if (rank != 0) scored += (rank + packScore(row)) to row
+        }
+
+        scored.sortWith(
+            compareByDescending<Pair<Int, MedexProduct>> { it.first }
+                .thenBy { it.second.brandName.length }
+        )
+
+        val results = mutableListOf<MedexProduct>()
+        val seen = HashSet<Triple<String, String, String>>()
+        for ((_, row) in scored) {
+            val key = Triple(row.brandName, row.strength, row.company)
+            if (!seen.add(key)) continue
+            results += row
+            if (results.size >= limit) break
+        }
+        return BrowseResult(category = cat, total = scored.size, results = results)
+    }
+
+    /**
+     * Python's `unique_companies_from`: distinct manufacturers with a brand count,
+     * ranked by volume then name.
+     */
+    fun uniqueCompaniesFrom(
+        medexDb: List<MedexProduct>,
+        q: String = "",
+        limit: Int = 25,
+    ): CompanyList {
+        val qLower = q.lowercase().trim()
+        val seen = LinkedHashMap<String, Int>()
+        for (row in medexDb) {
+            val name = row.company.trim()
+            if (name.isEmpty()) continue
+            if (qLower.isNotEmpty() && !name.lowercase().contains(qLower)) continue
+            seen[name] = (seen[name] ?: 0) + 1
+        }
+        val ranked = seen.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { CompanyCount(it.key, it.value) }
+        return CompanyList(
+            total = ranked.size,
+            companies = ranked.take(maxOf(1, minOf(limit, 200))),
+        )
+    }
+
     /**
      * Python's `get_health_days`: resolve every entry against a real calendar
      * year and classify it as today / upcoming / past.
@@ -175,3 +306,15 @@ object PharmaHub {
         )
     }
 }
+
+/** Python's `medex_browse` return shape. Every row is DGDA-registered. */
+data class BrowseResult(
+    val category: String,
+    val total: Int,
+    val results: List<MedexProduct>,
+)
+
+data class CompanyCount(val name: String, val brands: Int)
+
+/** Python's `unique_companies_from` return shape. */
+data class CompanyList(val total: Int, val companies: List<CompanyCount>)
