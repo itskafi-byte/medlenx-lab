@@ -95,7 +95,12 @@ fun ScanScreen(modifier: Modifier = Modifier) {
         ScanPhase.Empty -> UploadZone(
             onChooseFile = {
                 galleryLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    // Builder, not the constructor: the PickVisualMediaRequest(mediaType)
+                    // ctor is deprecated and is gone from the current androidx API surface.
+                    // Builder() + setMediaType() exists in both 1.9.3 and current.
+                    PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        .build(),
                 )
             },
             onOpenCamera = {
