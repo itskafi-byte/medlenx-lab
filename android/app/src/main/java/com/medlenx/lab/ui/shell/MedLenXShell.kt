@@ -26,8 +26,8 @@ import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
 import com.medlenx.lab.ui.screens.scan.ScanScreen
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 
 /**
  * The app shell: translucent top bar, scrolling content area, bottom navigation.
@@ -43,7 +43,7 @@ fun MedLenXShell(
 ) {
     var query by remember { mutableStateOf("") }
     // The scrolling content below is the haze source; the app bar is the haze child.
-    val hazeState = remember { HazeState() }
+    val hazeState = rememberHazeState()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val selected = Destination.fromRoute(backStackEntry?.destination?.route)
 
@@ -85,7 +85,7 @@ fun MedLenXShell(
                 // Deliberately NOT .padding(inner): content has to reach y=0 and pass
                 // *behind* the app bar, or the backdrop blur has nothing to sample.
                 // Only the bottom-bar inset is applied, so nothing hides under the nav.
-                .haze(state = hazeState)
+                .hazeSource(state = hazeState)
                 .padding(bottom = inner.calculateBottomPadding()),
         ) {
             // NOTE: no verticalScroll() here. Wrapping the NavHost in a scrollable

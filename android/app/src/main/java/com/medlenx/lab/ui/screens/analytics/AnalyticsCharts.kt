@@ -30,12 +30,10 @@ import com.medlenx.lab.ui.theme.MlxType
 /**
  * The four analytics charts.
  *
- * These are drawn with Compose `Canvas` rather than Vico, even though Vico is pinned
- * in the version catalog. Vico's API changes substantially between minor versions and
- * nothing in this repository can be compiled to confirm which overload set resolves;
- * `Canvas` is part of Compose Foundation, is stable, and gives exact control over the
- * look the recharts original produces. If you would rather use Vico, these four
- * functions are the whole surface to replace.
+ * These are drawn with Compose `Canvas` rather than a charting library. A charting
+ * dependency's API changes substantially between minor versions, while `Canvas` is
+ * stable Foundation and gives exact control over the strokes, corner radii and grid
+ * lines that reproduce the recharts original.
  *
  * Axis labels are real `Text` composables rather than canvas-drawn glyphs — that keeps
  * them selectable, correctly scaled for font settings, and free of the experimental

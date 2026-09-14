@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -27,18 +28,16 @@ val openRouterKey: String = secret("OPENROUTER_API_KEY")
 
 android {
     namespace = "com.medlenx.lab"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.medlenx.lab"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables { useSupportLibrary = true }
-
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
         buildConfigField("String", "OPENROUTER_BASE_URL", "\"https://openrouter.ai/api/v1/chat/completions\"")
         buildConfigField("String", "VL_MODEL_PRIMARY", "\"qwen/qwen3-vl-235b-a22b-instruct\"")
@@ -59,7 +58,7 @@ android {
                 "proguard-rules.pro"
             )
             // Signed with the debug key until a real keystore is supplied.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.named("debug").get()
         }
     }
 
@@ -67,7 +66,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
 
     buildFeatures {
         compose = true
@@ -82,6 +80,17 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+}
+
+/*
+ * AGP 9 removed the `android.kotlinOptions` block; the JVM target now lives on the
+ * Kotlin extension. Pattern taken from android/nowinandroid's KotlinAndroid.kt,
+ * which compiles under this exact AGP/Kotlin pair.
+ */
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
@@ -168,7 +177,6 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.osmdroid.android)
-    implementation(libs.vico.compose.m3)
     // Only haze core is needed: the bar uses an explicit HazeStyle to match
     // Figma's rgba(255,255,255,0.92) + blur(12px), not a HazeMaterials preset.
     implementation(libs.haze)

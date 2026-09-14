@@ -25,8 +25,8 @@ incomplete rather than silently missing features.
 **Read `NEXT_STEP_6.md` before continuing** — it records what is stubbed, what is
 deliberately not ported, and the open questions carried out of Step 5.
 
-> **If your Android Studio ships JDK 25, read "Building" below first.** The pinned
-> Gradle version cannot run on it.
+> The toolchain is pinned to **Gradle 9.7.1 / AGP 9.3.2 / Kotlin 2.3.0**, which runs on
+> the JDK 25 that Android Studio Quail 4 (2026.1.4) bundles. See "Building" below.
 
 ### Scan flow (Step 3)
 
@@ -72,8 +72,7 @@ amber→orange gradient for unverified, and `#2563EB` with a 16dp monogram for v
 ## Building — read this if your Android Studio ships JDK 25
 
 Android Studio Quail 4 (2026.1.4) bundles JetBrains Runtime **25.0.3**, and that is what
-Gradle runs on by default. This project is pinned to a late-2024 toolchain and the two
-are **not** compatible.
+Gradle runs on by default. The pins in this repo were bumped to a set that supports it.
 
 Verified against Gradle's own compatibility documentation
 (`platforms/documentation/docs/src/docs/userguide/releases/compatibility.adoc`, read
@@ -89,24 +88,46 @@ from the `gradle/gradle` repo at each tag):
 So **Gradle 9.1.0 is the minimum that runs on JDK 25.** Gradle 8.9 fails before it ever
 reaches the Kotlin compiler.
 
-Two ways forward - pick one:
+### Where the pins came from
 
-**A. Point Gradle at an older JDK.** Keeps the verified pins, zero code risk.
-`Settings -> Build, Execution, Deployment -> Build Tools -> Gradle -> Gradle JDK`,
-choose 17 or 21 (Studio can download one). Nothing in the repo changes.
+AGP, Kotlin, KSP, Room, the Compose BOM and every androidx / kotlinx version are copied
+from **Google's own `android/nowinandroid` sample** (`gradle/libs.versions.toml`, last
+updated 2026-09-02), which builds with exactly this set. Gradle 9.7.1 is both the newest
+stable tag on `gradle/gradle` and the version nowinandroid's own wrapper pins.
 
-**B. Let Android Studio upgrade the toolchain.** Open the project and take the *AGP
-Upgrade Assistant* prompt - it picks a mutually compatible AGP + Gradle + Kotlin. Take
-this route if Studio refuses AGP 8.5.2 as too old, which it may.
+| Pinned | Was | Now |
+|---|---|---|
+| Gradle | 8.9 | **9.7.1** |
+| AGP | 8.5.2 | **9.3.2** |
+| Kotlin | 2.0.20 | **2.3.0** |
+| KSP | 2.0.20-1.0.25 | **2.3.4** |
+| Room | 2.6.1 | **2.8.3** |
+| Compose BOM | 2024.09.02 | **2025.09.01** |
+| compileSdk / targetSdk | 34 | **36** |
 
-The pins were deliberately **not** bumped here. AGP and KSP versions cannot be verified
-from this sandbox (Google Maven and Maven Central are both unreachable), and guessing
-them wrong produces a worse failure than a clear instruction. Everything in
-`gradle/libs.versions.toml` moves as a set - see the comment at the top of that file.
+Code and DSL changes that came with the bump:
 
-If you do upgrade, the things most likely to need attention are Room/KSP codegen, the
-Compose compiler plugin (a separate Gradle plugin since Kotlin 2.0), and Vico - which is
-pinned but currently unused, because the Step 5 charts are drawn with Compose `Canvas`.
+- `android.kotlinOptions` **was removed in AGP 9**. The JVM target now lives on the
+  top-level `kotlin { compilerOptions { jvmTarget = JvmTarget.JVM_17 } }` extension.
+- `vectorDrawables { useSupportLibrary = true }` dropped - it is a no-op at `minSdk 26`.
+- `signingConfigs.getByName(...)` -> `signingConfigs.named(...).get()`.
+- haze moved off its deprecated API: `haze` -> `hazeSource`, `hazeChild` -> `hazeEffect`,
+  `remember { HazeState() }` -> `rememberHazeState()`. Pinned at **1.7.3**, the newest
+  stable in the 1.x line; haze 2.0 renames the whole API again.
+- **Vico removed from the catalog.** It was pinned but never used - the analytics charts
+  are drawn with Compose `Canvas`.
+
+### If the build still objects to the toolchain
+
+The one thing that cannot be verified without a network connection to Google Maven is
+whether Studio accepts AGP 9.3.2 as-is. If it does not:
+
+- Take the **AGP Upgrade Assistant** prompt on first sync - it picks a mutually
+  compatible AGP + Gradle + Kotlin.
+- Or point Gradle at an older JDK instead:
+  `Settings -> Build, Execution, Deployment -> Build Tools -> Gradle -> Gradle JDK`,
+  choose 17 or 21. Everything in `gradle/libs.versions.toml` moves as a set - see the
+  comment at the top of that file.
 
 ## First build
 
@@ -117,7 +138,7 @@ cp local.properties.example local.properties
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
-If the Gradle wrapper JAR is absent, run `gradle wrapper --gradle-version 8.9` once, or
+If the Gradle wrapper JAR is absent, run `gradle wrapper --gradle-version 9.7.1` once, or
 let Android Studio generate it on first sync.
 
 ### Bundled datasets
@@ -144,9 +165,9 @@ environment, and compiled into `BuildConfig`.
 
 ## Versions
 
-`gradle/libs.versions.toml` pins AGP 8.5.2 / Kotlin 2.0.20 / KSP 2.0.20-1.0.25 /
-Room 2.6.1 — a mutually compatible set. If Android Studio offers upgrades, take them
-together or codegen will break.
+`gradle/libs.versions.toml` pins Gradle 9.7.1 / AGP 9.3.2 / Kotlin 2.3.0 / KSP 2.3.4 /
+Room 2.8.3 — a mutually compatible set, sourced from Google's `android/nowinandroid`
+sample. If Android Studio offers upgrades, take them together or codegen will break.
 
 ## Design tokens
 

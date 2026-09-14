@@ -65,8 +65,8 @@ Everything Step 6 needs, with exact ranges in `App.tsx`:
 | `DarkHero` | 251–260 | 10 |
 | `ProgressBar` | 240–250 | 11 |
 
-Charts are **recharts 3.10.1** (8 chart elements in the file). The Vico ports must
-match recharts' visual output, not an abstract spec.
+Charts are **recharts 3.10.1** (8 chart elements in the file). The Compose `Canvas`
+charts must match recharts' visual output, not an abstract spec.
 
 Step 7 for planning: the Hub sub-tabs (`HubScreen` 1560-1590, `HubDrugIndex`,
 `HubTrips`, `HubNews`, `HubJobs`, `HubHealthDays`). `SearchOverlay` 321-358 is Step 9.
@@ -200,3 +200,18 @@ used it for both Settings and Help. Replaced with `Icons.Filled.Settings` and
 **Still unverified:** Gradle/AGP plugin resolution, KSP code generation (the `*_Dao_Impl` and
 Room schema classes), `BuildConfig` generation, and every overload ambiguity that only a
 real type-checker resolves. Those need one local `./gradlew assembleDebug`.
+
+## Toolchain bump + confidence fix (2026-09-14)
+
+**Confidence.** `EnrichedMedicine.lowConfidence` used a hardcoded `< 80` while the
+rendered `ConfBadge` (App.tsx:70-75) flips at 85, so the property contradicted the badge
+on screen. Five more sites duplicated the 70/85 magic numbers. All now derive from
+`confidenceBand()` in `data/model/Confidence.kt` - the single source of truth.
+`skinFor` is an exhaustive `when` over the enum, so a future fourth band is a compile
+error rather than a silently mis-skinned card.
+
+**Toolchain.** Bumped to Gradle 9.7.1 / AGP 9.3.2 / Kotlin 2.3.0 / KSP 2.3.4 /
+Room 2.8.3 / compileSdk 36, sourced from Google's `android/nowinandroid` sample so the
+set is known to build together. See README "Building" for the DSL changes that came
+with it (`android.kotlinOptions` is gone in AGP 9) and the haze 1.7.3 migration off
+`haze`/`hazeChild` onto `hazeSource`/`hazeEffect`.

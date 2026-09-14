@@ -42,7 +42,7 @@ import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.hazeEffect
 
 /**
  * Placeholder is kept at the web's full length on purpose. The Figma export shortens
@@ -95,7 +95,7 @@ fun MlxTopBar(
             // border-box globally). MedLenXShell draws that border as a separate 1dp
             // Divider, so the bar itself is 63dp and the pair totals 64.
             .height(MlxD.AppBarHeight - 1.dp)
-            .hazeChild(state = hazeState, style = AppBarHaze)
+            .hazeEffect(state = hazeState, style = AppBarHaze)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
