@@ -177,3 +177,30 @@ data class ScannedItemRow(
     val district: String,
     val createdAt: Long,
 )
+
+/**
+ * Projection for [PrescriptionDao.doctorTierRows].
+ *
+ * The aggregation itself is the GROUP BY; tier classification, SoV and the
+ * at-risk flag are computed in [com.medlenx.lab.data.repo.TeamMetrics] so they
+ * stay testable without a database.
+ */
+data class DoctorTierRow(
+    val doctorName: String,
+    val specialty: String,
+    val district: String,
+    val territory: String,
+    val rx: Int,
+    val items: Int,
+    val ownItems: Int,
+)
+
+/** Projection for [PrescriptionDao.stewardshipRows]: one row per scanned item. */
+data class StewardshipRow(
+    val prescriptionId: Long,
+    val doctorName: String,
+    val specialty: String,
+    val district: String,
+    val generic: String,
+    val brandName: String,
+)

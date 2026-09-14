@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
-import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 
 /** Base white card — `bg-white rounded-xl border border-slate-200 shadow-sm`. */

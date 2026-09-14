@@ -84,6 +84,57 @@ interface PrescriptionDao {
     )
     suspend fun scannedSince(since: Long): List<ScannedItemRow>
 
+    /**
+     * Per-doctor prescribing volumes for the tiering matrix.
+     *
+     * Grouped by doctor *name* rather than id: the Android prescription row
+     * carries the name and BMDC number but no doctor primary key, unlike the
+     * backend's `prescriptions.doctor_id`.
+     *
+     * Own-brand items are matched on the first token of the officer's company,
+     * exactly as `get_doctor_tiers` does with `company_name LIKE '%token%'`.
+     */
+    @Query(
+        """
+        SELECT p.doctor_name AS doctorName,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(p.district, '') AS district,
+               IFNULL(p.territory, '') AS territory,
+               COUNT(DISTINCT p.id) AS rx,
+               COUNT(sm.id) AS items,
+               IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
+        FROM prescriptions p
+        LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
+        GROUP BY p.doctor_name
+        HAVING rx >= :minRx
+        ORDER BY rx DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun doctorTierRows(
+        since: Long,
+        ownLike: String,
+        minRx: Int,
+        limit: Int,
+    ): List<DoctorTierRow>
+
+    /** One row per scanned item, for the antibiotic stewardship aggregate. */
+    @Query(
+        """
+        SELECT p.id AS prescriptionId,
+               p.doctor_name AS doctorName,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(p.district, '') AS district,
+               sm.generic AS generic,
+               sm.brand_name AS brandName
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
+        """
+    )
+    suspend fun stewardshipRows(since: Long): List<StewardshipRow>
+
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 

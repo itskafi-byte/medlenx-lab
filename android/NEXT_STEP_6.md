@@ -576,3 +576,62 @@ The named-argument checker reports false positives on nested calls: it attribute
 `SectionHeader` call sites pass only `title` / `icon` / `modifier` / `trailing`,
 all of which exist. The checker needs a nesting-aware pass before its output can
 be trusted unattended.
+
+---
+
+## Step 8 part 1 — Team/RSM: doctor tiering + antibiotic stewardship (this commit)
+
+Ported two of the six RSM aggregates and built the Team screen shell.
+
+**`data/repo/TeamMetrics.kt`** (new) — `doctorTiers` (`get_doctor_tiers`, database.py:2331)
+and `stewardshipSummary` (`get_stewardship_summary`, database.py:1959). Post-query
+arithmetic only; the SQL lives in `PrescriptionDao.doctorTierRows` /
+`stewardshipRows`.
+
+**Re-implementation, not transliteration.** The backend joins a `doctors` table for
+specialty/district/territory; Android stores all three on the prescription row, and
+has no doctor primary key, so tiering groups by `doctor_name`. Consequently the
+Kotlin model drops the one field the backend returns that has no Android equivalent:
+`doctor_id`.
+
+**Two backend bugs found; one deliberately not reproduced.**
+
+1. `get_stewardship_summary` builds its per-doctor set with `d["rx_ids"].add(True)` —
+   the literal `True`, not the prescription id — so `len(rx_ids)` is always 1 and the
+   "Rx audited" column reads 1 for every doctor regardless of volume. Reproducing that
+   would ship a metric that is always wrong, so the Kotlin counts distinct
+   prescription ids. `parity_team.py` asserts both halves: the Kotlin counter returns 9
+   for a 9-prescription doctor, and the Python still returns 1.
+2. Its grouping key `doctor_id or doctor_name` falls through to the name whenever
+   `doctor_id` is falsy. SQLite AUTOINCREMENT starts at 1, so this cannot fire in
+   production, but it is latent. Left alone; noted here.
+
+**Verification.** `parity_team.py` monkeypatches `get_db` so the genuine Python
+functions run over synthetic rows: 240 tier comparisons across 4 filter states and 40
+stewardship comparisons, **0 failures**. The script also self-checks — reverting the
+fixed counter to `add(True)` trips an `AssertionError`, so the checker cannot pass
+silently. A first run showed "fixed rx = 1" which proved the *transcription* was adding
+`doctor_id`; that was the test's bug, not the port's.
+
+**Race fixed before it shipped.** `TeamViewModel.load()` originally read the observed
+`officerProfile`, which has not necessarily emitted when `init` kicks off the first
+load — every brand would have been tiered against `DEFAULT_OWN_COMPANY`. It now reads
+`profileDao.current()`, captures the value into `ownCompanyUsed` so the header cannot
+disagree with the rows, and the profile collector re-runs the aggregates only when the
+company actually changes (`haveLoadedOnce` guards the null-on-fresh-install case,
+because `null != null` is false).
+
+**Figma copy not carried over.** The at-risk badge in `App.tsx` reads
+"Duplicate Rx Detected", which describes a different failure; the flag actually means
+*high volume, own-brand share below 30%*. Rendered as "At risk". Hero KPIs keep all four
+slots but the roster is one officer on a standalone build, so a footnote states the
+figures cover this device's 30-day audits rather than a synced 50+ MPO team.
+
+**Still outstanding for Step 8:** `TeamMap`, `TeamLeaderboard`, `TeamTargets`,
+`TeamOffTerritory` — needs `get_rsm_dashboard`, `get_rsm_trends`, `get_scan_points`,
+`find_off_territory_audits`, `get_target_progress` ported first.
+
+**Tooling note 4.** The unused-import audit now excludes `getValue`/`setValue`, which
+`by mutableStateOf` consumes as operators and which the previous run reported 25 times
+as false positives. Cleaned 12 genuinely unused imports (mostly stale `GeoStrip.kt`
+leftovers from an earlier refactor); `GeoStrip` itself is live at `ScanScreen.kt:201`.

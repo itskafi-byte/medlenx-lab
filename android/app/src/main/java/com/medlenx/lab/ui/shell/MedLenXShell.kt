@@ -42,6 +42,9 @@ import com.medlenx.lab.ui.screens.rx.RxAuditScreen
 import com.medlenx.lab.ui.screens.scan.ScanScreen
 import com.medlenx.lab.ui.screens.scan.ScanViewModel
 import com.medlenx.lab.ui.screens.scan.ScanViewModelFactory
+import com.medlenx.lab.ui.screens.team.TeamScreen
+import com.medlenx.lab.ui.screens.team.TeamViewModel
+import com.medlenx.lab.ui.screens.team.TeamViewModelFactory
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import dev.chrisbanes.haze.hazeSource
@@ -78,6 +81,11 @@ fun MedLenXShell(
     /** Same reasoning as [scanVm]: the Hub's filters and month must survive navigation. */
     val hubVm: HubViewModel = viewModel(
         factory = HubViewModelFactory(context.applicationContext as Application),
+    )
+
+    /** Same reasoning as [scanVm] and [hubVm]: the tier filter must survive navigation. */
+    val teamVm: TeamViewModel = viewModel(
+        factory = TeamViewModelFactory(context.applicationContext as Application),
     )
     // The scrolling content below is the haze source; the app bar is the haze child.
     val hazeState = rememberHazeState()
@@ -161,6 +169,16 @@ fun MedLenXShell(
                                 dest == Destination.Hub -> HubScreen(
                                     vm = hubVm,
                                     onOpenJob = { url -> openUrl(context, url) },
+                                )
+                                dest == Destination.Team -> TeamScreen(
+                                    vm = teamVm,
+                                    onExportPdf = {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "PDF export is unavailable in the offline build.",
+                                            android.widget.Toast.LENGTH_LONG,
+                                        ).show()
+                                    },
                                 )
                                 else -> PendingScreen(destination = dest)
                             }
