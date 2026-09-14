@@ -1,0 +1,181 @@
+package com.medlenx.lab.data.repo
+
+import com.medlenx.lab.data.model.EnrichedMedicine
+import java.math.BigDecimal
+import java.math.RoundingMode
+
+/**
+ * Prescription Audit Summary helpers, ported from `app/rx_audit.py`.
+ *
+ * Pure and deterministic: nothing here touches the DB, the network or the UI, so
+ * every function stays unit-testable and the drawer's numbers are reproducible.
+ *
+ * Covers the duplicate-Rx fraud alert ([isDuplicateHash]), the own-vs-competitor
+ * footer ([buildMarketShare]) and the two export payloads ([itemsToCsv],
+ * [itemsToClipboard]).
+ */
+object RxAudit {
+
+    /**
+     * Two scans whose pHashes differ by this many bits or fewer are the same
+     * physical prescription. For a 64-bit DCT pHash, <= 8 bits is the sweet spot for
+     * "same image, different capture pipeline" - re-compression, a rotated phone
+     * shot, a slightly different crop.
+     */
+    const val DUPLICATE_THRESHOLD = 8
+
+    /** Mirrors `CSV_HEADERS` in rx_audit.py, including the column order. */
+    val CSV_HEADERS = listOf(
+        "Brand Name", "Strength", "Dosage Form", "Generic Composition",
+        "Pharmaceutical Company", "Confidence %", "Own/Competitor",
+    )
+
+    // ------------------------------------------------------- duplicates ----
+
+    /** True when both digests exist and sit within [threshold] bits of each other. */
+    fun isDuplicateHash(hexA: String, hexB: String, threshold: Int = DUPLICATE_THRESHOLD): Boolean {
+        val distance = PHash.hammingDistance(hexA, hexB) ?: return false
+        return distance <= threshold
+    }
+
+    // --------------------------------------------------- market share -----
+
+    /**
+     * Own-vs-competitor split for the drawer footer.
+     *
+     * A medicine counts as "own" only when an own company is set *and* matches
+     * loosely; with no own company configured everything is a competitor, which is
+     * what the web drawer shows before the rep picks a company.
+     */
+    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): MarketShare {
+        val ownBrands = mutableListOf<String>()
+        val competitorBrands = mutableListOf<String>()
+        for (med in medicines) {
+            if (ownCompany.isNotBlank() && sameCompanyLoose(med.company, ownCompany)) {
+                ownBrands += med.brandName
+            } else {
+                competitorBrands += med.brandName
+            }
+        }
+        val total = medicines.size
+        return MarketShare(
+            ownCompany = ownCompany,
+            totalMedicines = total,
+            ownCount = ownBrands.size,
+            competitorCount = competitorBrands.size,
+            ownSharePct = if (total == 0) 0.0 else round1(ownBrands.size * 100.0 / total),
+            competitorSharePct = if (total == 0) 0.0 else round1(competitorBrands.size * 100.0 / total),
+            ownBrands = ownBrands,
+            competitorBrands = competitorBrands,
+        )
+    }
+
+    /**
+     * Cheap company equality used when the full matcher helpers are not loaded.
+     *
+     * Catches "Healthcare Pharmaceuticals Ltd." vs "Healthcare Pharmaceuticals",
+     * which is the common real-world case on a prescription line.
+     */
+    fun sameCompanyLoose(a: String?, b: String?): Boolean {
+        val ak = norm(a)
+        val bk = norm(b)
+        if (ak.isEmpty() || bk.isEmpty()) return false
+        return ak == bk || ak.startsWith(bk) || bk.startsWith(ak)
+    }
+
+    // -------------------------------------------------------- exports -----
+
+    /**
+     * CSV payload for the drawer's "Export Rx Items as CSV" button.
+     *
+     * Confidence is normalised the way the Python does it - a value <= 1 is treated
+     * as a fraction, anything above as an already-percentage number - so both the
+     * 0..1 model output and a stray 0..100 value land in the same column.
+     */
+    fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
+        buildString {
+            appendLine(CSV_HEADERS.joinToString(",") { csvEscape(it) })
+            for (med in medicines) {
+                val own = ownCompany.isNotBlank() && sameCompanyLoose(med.company, ownCompany)
+                val row = listOf(
+                    med.brandName,
+                    med.strength,
+                    med.type.ifBlank { med.form },
+                    med.genericName,
+                    med.company.orEmpty(),
+                    pyRound(confidencePercentOf(med)).toString(),
+                    if (own) "Own" else "Competitor",
+                )
+                appendLine(row.joinToString(",") { csvEscape(it) })
+            }
+        }
+
+    /**
+     * Plain-text audit list a field rep can paste into a reporting channel.
+     *
+     * The em dashes and the "(NN%)" suffix are reproduced verbatim from the web
+     * version, and a missing company reads "Unknown Brand" rather than blank.
+     */
+    fun itemsToClipboard(medicines: List<EnrichedMedicine>, header: String = ""): String =
+        buildList {
+            if (header.isNotBlank()) add(header)
+            medicines.forEachIndexed { i, med ->
+                val brand = listOf(
+                    med.brandName,
+                    med.strength,
+                    med.type.ifBlank { med.form },
+                ).filter { it.isNotBlank() }.joinToString(" ")
+                val company = med.company?.takeIf { it.isNotBlank() } ?: "Unknown Brand"
+                add("${i + 1}. $brand — ${med.genericName} — $company (${pyRound(confidencePercentOf(med))}%)")
+            }
+        }.joinToString("\n")
+
+    // -------------------------------------------------------- internals ----
+
+    /** Python's `round()` is half-to-even; `Math.round` is half-up and would drift. */
+    private fun pyRound(v: Double): Int = Math.rint(v).toInt()
+
+    /**
+     * `round(x, 1)`.
+     *
+     * BigDecimal(double), not rint(v * 10) / 10: Python rounds on the exact decimal
+     * value of the double, and scaling by ten first loses that. They disagree at the
+     * halfway point - Python's round(0.05, 1) is 0.1, while rint(0.05 * 10) / 10 is
+     * 0.0, because 0.05 * 10 lands exactly on 0.5 in binary.
+     */
+    private fun round1(v: Double): Double =
+        BigDecimal(v).setScale(1, RoundingMode.HALF_EVEN).toDouble()
+
+    /**
+     * `round(conf * 100) if conf <= 1 else round(conf)` — a value at or below 1 is a
+     * fraction, anything above is already a percentage. Reproduced exactly, including
+     * how a stray negative falls into the fraction branch.
+     */
+    private fun confidencePercentOf(med: EnrichedMedicine): Double {
+        val conf = med.confidence
+        return if (conf <= 1.0) conf * 100.0 else conf
+    }
+
+    private fun norm(text: String?): String =
+        (text.orEmpty()).lowercase().split(WHITESPACE).filter { it.isNotBlank() }.joinToString(" ")
+
+    /** csv.writer's QUOTE_MINIMAL: quote only when the field needs it. */
+    private fun csvEscape(field: String): String {
+        val needsQuotes = field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }
+        return if (needsQuotes) "\"${field.replace("\"", "\"\"")}\"" else field
+    }
+
+    private val WHITESPACE = Regex("\\s+")
+}
+
+/** Own-vs-competitor summary for one prescription. Mirrors `build_market_share`. */
+data class MarketShare(
+    val ownCompany: String,
+    val totalMedicines: Int,
+    val ownCount: Int,
+    val competitorCount: Int,
+    val ownSharePct: Double,
+    val competitorSharePct: Double,
+    val ownBrands: List<String>,
+    val competitorBrands: List<String>,
+)

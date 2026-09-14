@@ -232,3 +232,33 @@ already applies EXIF orientation (`ExifOrientationPolicy.RESPECT_PERFORMANCE`
 covers jpeg/webp/heic/heif), and the bytes sent to MedLenX VL are the original file
 untouched, so the tag survives. `exifinterface` was pinned but unused; it now has a
 job.
+
+## rx_audit.py ported (2026-09-14)
+
+`app/rx_audit.py` (187 lines) is now `data/repo/PHash.kt` + `data/repo/RxAudit.kt`.
+Pure and deterministic, nothing touches the DB or network, so Step 6's drawer can be
+built straight on top of it.
+
+Ported: `compute_phash` (DCT-II pHash), `hamming_distance`, `is_duplicate_hash`,
+`same_company_loose`, `build_market_share`, `items_to_csv`, `items_to_clipboard`.
+
+Three details that would have silently diverged, each checked against the Python:
+
+- **`round()` is half-to-even.** `round(94.5)` is 94, half-up gives 95. Ported as
+  `Math.rint`, not `Math.round`.
+- **`round(x, 1)` rounds on the exact decimal value of the double.** `rint(v*10)/10`
+  disagrees at halfway points (`round(0.05,1)` is 0.1, the scaled form gives 0.0).
+  Ported as `BigDecimal(v).setScale(1, HALF_EVEN)`. Across all 860 share values
+  `build_market_share` can actually produce the two agree, so this was not a live bug -
+  it is correct in general rather than correct by luck.
+- **A 16-hex-char digest overflows a signed Long** whenever its first digit is 8 or
+  higher, so `toLongOrNull(16)` would return null and `is_duplicate_hash` would report
+  "not a duplicate" for a genuine match. Ported with `BigInteger`.
+
+NOT byte-identical: the pHash digest. Pillow resizes BICUBIC, `createScaledBitmap` uses
+bilinear. The 8-bit threshold absorbs that, and a standalone app only ever compares
+hashes it computed itself - but do not compare these against hashes stored by the
+FastAPI backend. Documented in PHash.kt.
+
+Still unported: `database.py` (2,528), `pharma_hub.py` (589), `medicine_matcher.py`
+(362), `intelligence.py` (271).
