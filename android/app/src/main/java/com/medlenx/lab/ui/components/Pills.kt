@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.data.model.ConfidenceBand
+import com.medlenx.lab.data.model.confidenceBand
 import com.medlenx.lab.ui.theme.Mlx
 
 /** Pill tone. Each maps to one exact colour triple from the web app. */
@@ -133,32 +135,12 @@ fun RegulatoryPillRow(
 }
 
 /**
- * Confidence badge with the web app's three distinct bands — these must never be
- * collapsed into one neutral style:
- *   >= 85%  emerald          high confidence
- *   <  80%  orange + robot   "NN% AI Guess"
- *   <  70%  amber  + flag    "NN% manual flag"
- *   else    amber            "NN%"
- */
-/**
- * Three bands, exactly as Figma's `ConfBadge` (App.tsx:70-75):
- *   >= 85        emerald, plain "NN%"
- *   70 .. 84     orange,  "NN% AI Guess"
- *   <  70        amber,   "NN% manual flag"
+ * Confidence badge — Figma `ConfBadge` (App.tsx:70-75).
  *
- * Note the web app's legend (templates/index.html:320) describes the AI-guess band as
- * "<80%", while Figma's ConfBadge puts the boundary at 85. Figma is followed here
- * because it is total - every value maps to exactly one band - whereas the previous
- * port left 80..84 falling into a fourth, unlabelled amber state that matches neither
- * design.
+ * The bands live in [com.medlenx.lab.data.model.confidenceBand]; this composable only
+ * maps them to tone, suffix and icon. Keeping the threshold out of the UI means the
+ * badge and `EnrichedMedicine.lowConfidence` can never drift apart again.
  */
-enum class ConfidenceBand { High, AiGuess, ManualFlag }
-
-fun confidenceBand(percent: Int): ConfidenceBand = when {
-    percent >= 85 -> ConfidenceBand.High
-    percent < 70 -> ConfidenceBand.ManualFlag
-    else -> ConfidenceBand.AiGuess
-}
 
 @Composable
 fun ConfidenceBadge(percent: Int, modifier: Modifier = Modifier) {

@@ -105,11 +105,19 @@ data class EnrichedMedicine(
 ) {
     val confidencePercent: Int get() = (confidence * 100).toInt()
 
-    /** Web threshold: below 80% the row flips into the orange AI-guess state. */
-    val lowConfidence: Boolean get() = confidencePercent < 80
+    /**
+     * True for anything outside the emerald high-confidence band, i.e. the orange
+     * "AI Guess" and amber "manual flag" states.
+     *
+     * Derived from [confidenceBand] rather than a local comparison: the web caption
+     * says "<80%" but the rendered ConfBadge flips at 85, and the earlier hardcoded
+     * `< 80` here contradicted the badge the user was actually looking at.
+     */
+    val lowConfidence: Boolean get() = confidenceBand(confidencePercent) != ConfidenceBand.High
 
     val needsReview: Boolean
-        get() = companyAmbiguous || companyConflict || confidencePercent < 70 ||
+        get() = companyAmbiguous || companyConflict ||
+            confidenceBand(confidencePercent) == ConfidenceBand.ManualFlag ||
             (company != null && !companyVerified)
 }
 

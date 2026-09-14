@@ -43,6 +43,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.medlenx.lab.data.model.ConfidenceBand
+import com.medlenx.lab.data.model.confidenceBand
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
@@ -140,7 +142,7 @@ private fun ConfidenceField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val confident = confidence >= 85
+    val confident = confidenceBand(confidence) == ConfidenceBand.High
     Column(modifier = modifier.fillMaxWidth()) {
         FieldLabel(label)
         Box(

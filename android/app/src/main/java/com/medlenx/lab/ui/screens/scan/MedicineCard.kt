@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.medlenx.lab.data.model.ConfidenceBand
+import com.medlenx.lab.data.model.confidenceBand
 import com.medlenx.lab.ui.components.CompanyPill
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.ConfidenceBadge
@@ -63,12 +65,12 @@ data class MedicineCardData(
 /** The three card variants Figma derives from the confidence band. */
 private data class CardSkin(val bg: Color, val border: Color)
 
-private fun skinFor(confidencePct: Int): CardSkin = when {
-    // < 70 is the manual-flag band: amber wash, amber border.
-    confidencePct < 70 -> CardSkin(Mlx.Warn50, Mlx.Warn200)
-    // 70..84 is the AI-guess band: orange wash, orange border.
-    confidencePct < 85 -> CardSkin(Mlx.GuessBg, Mlx.GuessBorder)
-    else -> CardSkin(Mlx.Surface, Mlx.Brand200)
+private fun skinFor(confidencePct: Int): CardSkin = when (confidenceBand(confidencePct)) {
+    // Exhaustive over the band, so a future fourth state is a compile error, not a
+    // silently mis-skinned card.
+    ConfidenceBand.ManualFlag -> CardSkin(Mlx.Warn50, Mlx.Warn200)     // amber wash
+    ConfidenceBand.AiGuess -> CardSkin(Mlx.GuessBg, Mlx.GuessBorder)   // orange wash
+    ConfidenceBand.High -> CardSkin(Mlx.Surface, Mlx.Brand200)
 }
 
 /**
@@ -174,7 +176,7 @@ fun MedicineCard(
             modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
         )
 
-        if (data.confidencePct < 85) {
+        if (confidenceBand(data.confidencePct) != ConfidenceBand.High) {
             NoteStrip(
                 icon = Icons.Filled.SmartToy,
                 fg = Mlx.GuessAccent,
