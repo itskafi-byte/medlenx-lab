@@ -28,12 +28,20 @@ sealed class Destination(val route: String, val label: String, val icon: ImageVe
     /** Not on the bottom bar; opened from Settings (web sidebar item #6). */
     data object Help : Destination("help", "Help & Guide", Icons.Filled.HelpOutline)
 
+    /**
+     * Not on the bottom bar. Opened from the scan workspace over a completed read -
+     * the audit is about *that* prescription, so it has no standalone home.
+     */
+    data object RxAudit : Destination("rx-audit", "Prescription Audit", Icons.Filled.Description)
+
     companion object {
         /** The five destinations rendered in the bottom navigation bar, in order. */
         val bottomBar: List<Destination> = listOf(Scan, Analytics, Hub, Team, Settings)
 
         fun fromRoute(route: String?): Destination? =
-            bottomBar.firstOrNull { it.route == route } ?: Help.takeIf { it.route == route }
+            bottomBar.firstOrNull { it.route == route }
+                ?: Help.takeIf { it.route == route }
+                ?: RxAudit.takeIf { it.route == route }
     }
 }
 

@@ -323,3 +323,33 @@ The missing stage is `app/medicine_matcher.py` (362 lines), still unported. Wiri
 the route before that would mean fabricating `EnrichedMedicine` instances, i.e.
 shipping mock data into a compliance screen. Recommended order: port
 `medicine_matcher.py`, populate `ScanUiState` with the enriched list, then route.
+
+## Step 6 wiring — partially done
+
+Landed and committed:
+
+| Piece | Commit |
+|---|---|
+| `MedicineMatcher.kt` — port of `app/medicine_matcher.py` (`sequenceRatio` verified against `difflib` on 36 pairs, 0 mismatches) | `97d0d7d` |
+| `MedicineEnricher.kt` + `MedexDao.all()` + `ScanRepository.medexIndex()` (cached) + `ScanUiState.enriched`, populated in a now-suspend `enterVerification` | `21aa9aa` |
+| `Destination.RxAudit` (`"rx-audit"`) + `fromRoute` | this commit |
+
+`EnrichedMedicine` is now actually constructed, so the company/match-type/image
+fields the audit drawer reads are real instead of defaulted. `neml`, `dgdaAlert`,
+`isAntibiotic`, `broadSpectrum`, `therapeuticClass`, `tripsWatch` and
+`substitution` remain at defaults until `database.py` / `pharma_hub.py` are
+ported — deliberately null, not guessed.
+
+**Still unwired:** the `composable(Destination.RxAudit.route)` block in
+`MedLenXShell`, the hoisting of `ScanViewModel` out of `ScanScreen` (it is still
+created inside `ScanScreen`, so each navigation recreates the store), and the
+on-screen trigger. `ScanScreen`'s real signature is
+`fun ScanScreen(modifier: Modifier = Modifier)`; an attempt to patch it against
+assumed text failed and was abandoned rather than forced. Next pass should read
+`ScanScreen.kt` and `MedLenXShell.kt` fresh before editing.
+
+Data the route will need: `rxId` = `SavedReceipt.rxNumber`, `repId` =
+`SavedReceipt.repCode`, `ownCompany` = `appGraph.deviceState.companyName`,
+`medicines` = `ScanUiState.enriched`, `offTerritory` = `ScanUiState.geo.offTerritory`.
+There is no officer-profile reader in `AppGraph` yet; `OfficerProfileEntity`
+(`company`, `employeeId`) exists in Room and is the better long-term source.
