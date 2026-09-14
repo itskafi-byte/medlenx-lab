@@ -734,3 +734,54 @@ silently.
 **Unverified as always:** no compile has run. 14 new `@Query` methods, including
 `GROUP BY ... COLLATE NOCASE` and a nested `SELECT COUNT(*) FROM (...)`
 subquery, have never been validated by Room.
+
+---
+
+## Step 9 — Settings, Help, global search, and a dispatch bug (this commit)
+
+**Built.** `SettingsScreen` + `SettingsViewModel` (company autocomplete over the
+distinct companies in the bundled catalogue, the five profile fields plus role,
+editable monthly brand targets with real captured-count progress from
+`brandCapturedRows`, save, the offline-first note and the Help entry);
+`HelpScreen` + `HelpViewModel` (five scan steps, the error escalation form writing
+to `error_reports` via `RsmDao.reportError`, and the BMDC & DGDA reference);
+`SearchOverlay` + `SearchViewModel` (debounced search over the 25,105-row
+catalogue via `MedexDao.search`, replacing the export's six hardcoded brands).
+`PendingScreen` is now unreachable from the bottom bar.
+
+### The Analytics tab never rendered
+
+`MedLenXShell` dispatched with
+
+```kotlin
+when {
+    scrollsUnderBar -> ScanScreen(...)          // scrollsUnderBar == Scan || Analytics
+    dest == Destination.Analytics -> AnalyticsScreen(...)
+```
+
+`scrollsUnderBar` is true for `Destination.Analytics`, and it was the first branch,
+so **the Analytics tab rendered the Scan screen and every `AnalyticsScreen` branch
+was unreachable**. Step 5's UI, and the whole real-data rewrite in `7f44819`, had
+never once been on screen. Fixed by dispatching on `when (dest)` and keeping
+`scrollsUnderBar` as the padding concern it always was. This was not caught by any
+audit because brace balance, theme refs, named args and parity all pass on code
+that is simply never called — a reachability check is the missing audit.
+
+### Other corrections in this commit
+
+- `HelpViewModel` initially called `queueDao().reportError(...)`. `reportError` is
+  on **`RsmDao`**, not `QueueDao`. I also briefly reported a suspected overload
+  clash between `ProfileDao.recentVisits` and `RsmDao.recentVisits`; that was
+  **wrong** — they are on different DAOs, so there is no conflict.
+- The search panel used `.clickable(enabled = false, onClick = {})` to stop taps
+  reaching the scrim. That does not consume the tap, so the results list would
+  have dismissed itself on touch. Replaced with a `MutableInteractionSource` +
+  `indication = null` clickable, which does consume it.
+- `SettingsViewModel` had no setters; `vm.update { field = it }` did not exist.
+
+**Not built: the FilterSheet.** `onOpenFilters` still toasts. The Analytics filter
+dimensions (district / territory / specialty / MR) remain unapplied to every
+widget, and widget D (`get_generic_brand_matrix`) is still the export's sample
+matrix with its amber footnote. Those are the two known remaining gaps.
+
+**Unverified as always:** no compile has run here.

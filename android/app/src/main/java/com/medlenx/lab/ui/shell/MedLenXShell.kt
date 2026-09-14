@@ -33,6 +33,15 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
+import com.medlenx.lab.ui.screens.help.HelpScreen
+import com.medlenx.lab.ui.screens.help.HelpViewModel
+import com.medlenx.lab.ui.screens.help.HelpViewModelFactory
+import com.medlenx.lab.ui.screens.search.SearchOverlay
+import com.medlenx.lab.ui.screens.search.SearchViewModel
+import com.medlenx.lab.ui.screens.search.SearchViewModelFactory
+import com.medlenx.lab.ui.screens.settings.SettingsScreen
+import com.medlenx.lab.ui.screens.settings.SettingsViewModel
+import com.medlenx.lab.ui.screens.settings.SettingsViewModelFactory
 import com.medlenx.lab.ui.screens.analytics.AnalyticsViewModel
 import com.medlenx.lab.ui.screens.analytics.AnalyticsViewModelFactory
 import com.medlenx.lab.ui.screens.hub.HubScreen
@@ -94,6 +103,18 @@ fun MedLenXShell(
     val analyticsVm: AnalyticsViewModel = viewModel(
         factory = AnalyticsViewModelFactory(context.applicationContext as Application),
     )
+    val settingsVm: SettingsViewModel = viewModel(
+        factory = SettingsViewModelFactory(context.applicationContext as Application),
+    )
+    val helpVm: HelpViewModel = viewModel(
+        factory = HelpViewModelFactory(context.applicationContext as Application),
+    )
+    val searchVm: SearchViewModel = viewModel(
+        factory = SearchViewModelFactory(context.applicationContext as Application),
+    )
+
+    /** Global search overlay; the top bar's search field drives it. */
+    var searchOpen by remember { mutableStateOf(false) }
     // The scrolling content below is the haze source; the app bar is the haze child.
     val hazeState = rememberHazeState()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -106,8 +127,12 @@ fun MedLenXShell(
             Column {
                 MlxTopBar(
                     query = query,
-                    onQueryChange = { query = it },
-                    onSearchClick = { /* global search overlay - Step 9 */ },
+                    onQueryChange = {
+                        query = it
+                        searchVm.search(it)
+                        searchOpen = true
+                    },
+                    onSearchClick = { searchOpen = true },
                     state = topBarState,
                     hazeState = hazeState,
                 )
@@ -165,14 +190,19 @@ fun MedLenXShell(
                                 ),
                             ),
                         ) {
-                            when {
-                                scrollsUnderBar -> ScanScreen(
+                            // Dispatch on the destination itself. This used to be
+                            // `when { scrollsUnderBar -> ScanScreen(...) }`, which also
+                            // matched Analytics and so rendered the Scan screen on the
+                            // Analytics tab - every AnalyticsScreen branch below it was
+                            // unreachable. `scrollsUnderBar` is a padding concern only.
+                            when (dest) {
+                                Destination.Scan -> ScanScreen(
                                     vm = scanVm,
                                     onOpenAudit = {
                                         navController.navigate(Destination.RxAudit.route)
                                     },
                                 )
-                                dest == Destination.Analytics -> AnalyticsScreen(
+                                Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
                                     onOpenFilters = {
                                         // The FilterSheet is Step 9; until it exists,
@@ -191,11 +221,11 @@ fun MedLenXShell(
                                         ).show()
                                     },
                                 )
-                                dest == Destination.Hub -> HubScreen(
+                                Destination.Hub -> HubScreen(
                                     vm = hubVm,
                                     onOpenJob = { url -> openUrl(context, url) },
                                 )
-                                dest == Destination.Team -> TeamScreen(
+                                Destination.Team -> TeamScreen(
                                     vm = teamVm,
                                     onExportPdf = {
                                         android.widget.Toast.makeText(
@@ -203,6 +233,12 @@ fun MedLenXShell(
                                             "PDF export is unavailable in the offline build.",
                                             android.widget.Toast.LENGTH_LONG,
                                         ).show()
+                                    },
+                                )
+                                Destination.Settings -> SettingsScreen(
+                                    vm = settingsVm,
+                                    onOpenHelp = {
+                                        navController.navigate(Destination.Help.route)
                                     },
                                 )
                                 else -> PendingScreen(destination = dest)
@@ -221,7 +257,12 @@ fun MedLenXShell(
                             ),
                         ),
                     ) {
-                        PendingScreen(destination = Destination.Help)
+                        HelpScreen(
+                            vm = helpVm,
+                            onTryScan = {
+                                navController.navigate(Destination.Scan.route)
+                            },
+                        )
                     }
                 }
 
@@ -298,6 +339,14 @@ fun MedLenXShell(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+            }
+
+            if (searchOpen) {
+                SearchOverlay(
+                    vm = searchVm,
+                    onClose = { searchOpen = false },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }
