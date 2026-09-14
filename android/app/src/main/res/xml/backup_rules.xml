@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Never back up captured prescription images: patient-adjacent clinical data. -->
+    <exclude domain="file" path="rx/" />
+    <exclude domain="database" path="medlenx.db" />
+</full-backup-content>

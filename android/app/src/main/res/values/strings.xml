@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MedLenX Lab</string>
+    <string name="app_tagline">Prescription Intelligence</string>
+
+    <!-- Bottom navigation: the web sidebar has 6 destinations, mobile nav has 5,
+         Help & Guide is reached from Settings. -->
+    <string name="nav_scan">Scan</string>
+    <string name="nav_analytics">Analytics</string>
+    <string name="nav_hub">Hub</string>
+    <string name="nav_team">Team</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="global_search_hint">Search medicines, doctors, generics - always accessible from anywhere…</string>
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+    <string name="company_default">Set company in Settings</string>
+
+    <string name="upload_title">Drop prescription image here</string>
+    <string name="upload_body">Drag &amp; drop or click to upload. Supports camera capture, rotation, contrast adjustment for cursive handwriting.</string>
+    <string name="upload_choose_file">Choose File</string>
+    <string name="upload_open_camera">Open Camera</string>
+
+    <string name="scanning">Scanning…</string>
+    <string name="extracting">Extracting with MedLenX VL…</string>
+
+    <string name="verify_title">Data Verification - Side-by-side</string>
+    <string name="viewer_title">Prescription Image Viewer</string>
+    <string name="pending_verification">Pending Verification</string>
+    <string name="verify_save">Verify &amp; Save to DB</string>
+    <string name="cancel">Cancel</string>
+</resources>

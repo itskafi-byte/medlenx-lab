@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="rx_cache" path="rx/" />
+    <files-path name="rx_files" path="rx/" />
+    <external-cache-path name="rx_ext_cache" path="rx/" />
+</paths>

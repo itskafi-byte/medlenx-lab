@@ -1,0 +1,8 @@
+# Copy to android/local.properties (git-ignored) and fill in.
+#   sdk.dir is written automatically by Android Studio.
+sdk.dir=/absolute/path/to/Android/sdk
+
+# Your OpenRouter key - https://openrouter.ai/keys
+# Also accepted as the OPENROUTER_API_KEY environment variable.
+# WARNING: compiled into the APK and extractable. Use a rate-limited key.
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
