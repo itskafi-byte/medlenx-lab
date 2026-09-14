@@ -430,3 +430,57 @@ Two bugs this caught or that review found alongside it:
 Still unported, and correctly still blank: nothing in Step 6. `database.py` (2,528 lines,
 SQLite aggregates) is Steps 5/8 and `pharma_hub.py` (589 lines, RSS/HTTP news, jobs,
 health days) is Step 7.
+
+## Step 7 — Hub (part 1 of 3): Health Days + Jobs
+
+Ported the data-driven half of `pharma_hub.py`: `get_pharma_jobs` and
+`get_health_days`, plus the `_COMPANY_CAREER_URL` / `_CATEGORY_DEPT` /
+`_CATEGORY_TAGS` tables and `_job_apply_url`. Verified by execution against the
+real module — 360 job-filter combinations and the full health-day calendar
+(today/upcoming/past across several years, `upcoming_only` both ways):
+**0 mismatches**.
+
+New files: `data/model/HubData.kt`, `data/repo/PharmaHub.kt`,
+`ui/screens/hub/HubViewModel.kt`, `ui/screens/hub/HubScreen.kt`. `HubViewModel`
+is hoisted into `MedLenXShell` alongside `ScanViewModel` so filters and the
+selected month survive navigation. Apply links open in the browser via
+`ACTION_VIEW`, with a toast when no browser is present.
+
+**The Figma health-day calendar is fabricated and has been replaced.** Its mock
+lists six November days; `data/health_days.json` for 2026 holds four, on
+different dates:
+
+| | Figma mock | `health_days.json` (2026) |
+|---|---|---|
+| World Pneumonia Day | 1 Nov | **12 Nov** |
+| World Cancer Day | 5 Nov | not present |
+| World COPD Day | 10 Nov | **18 Nov** (org: GOLD) |
+| World Diabetes Day | 14 Nov | 14 Nov |
+| World Prematurity Day | 17 Nov | not present |
+| World Children's Day | 20 Nov | not present |
+| AMR Awareness Week | — | **18 Nov** |
+
+The dataset has 33 days for the year and the Figma mock invented the rest, so
+the grid renders from `byMonth` and shows an empty state for months with no
+entries rather than padding the calendar.
+
+**Not built yet.** The Drug Index, TRIPS and News tabs render an explicit
+placeholder explaining why:
+
+- *Drug Index* needs `medex_browse` / `unique_companies_from` ported against the
+  Room catalogue, plus the "Currently Popular Medicines" hero, which the web app
+  fills by live-scraping medex.com.bd.
+- *TRIPS* needs per-molecule field volume aggregated from prescription scans;
+  the Figma numbers (47 items, +38%) are invented and there is no on-device
+  aggregate to replace them with yet.
+- *News* is RSS fetched server-side. The standalone build has no proxy, so this
+  needs a decision: fetch on-device over HTTPS, or ship the bundled
+  `pharma_news.json` seed as static content and say so.
+
+## Tooling note
+
+The unused-import audit used for Steps 1-6 was broken: it searched the import
+lines themselves, so it could never report anything. Fixed. It now finds 37,
+almost all of which are `getValue`/`setValue` operator imports required by `by`
+delegation. Unused imports are warnings, not errors, so none of them blocked a
+build — but the check was reporting false negatives for six steps.

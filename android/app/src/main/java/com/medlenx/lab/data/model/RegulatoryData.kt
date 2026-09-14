@@ -19,6 +19,18 @@ data class NemlMolecule(
     val category: String = "",
 )
 
+/**
+ * `data/neml_list.json`.
+ *
+ * The file's own `version` string advertises "~295 molecules" but the array holds
+ * 165. That is an upstream data discrepancy, not a decoding bug, and it is left
+ * alone deliberately: padding the list to match the label would mint "NEML
+ * Listed" pills for molecules the DGDA list does not actually contain, which in a
+ * regulatory audit drawer is worse than an absent pill.
+ *
+ * `version` is decoded but never rendered - the web app does not show it either
+ * (its only "~295" is a code comment at `main.py:1001`).
+ */
 @Serializable
 data class NemlList(
     val version: String = "",

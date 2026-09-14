@@ -1,0 +1,97 @@
+package com.medlenx.lab.data.model
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+/*
+ * Wire models for the Hub's bundled datasets: health_days.json (33 days, year
+ * 2026) and pharma_jobs.json (18 vacancies).
+ *
+ * Field sets were read off the files themselves rather than the Figma mock,
+ * which invents most of its content - see HubHealthDays for the specifics.
+ */
+
+@Serializable
+data class HealthDay(
+    val id: String = "",
+    val name: String = "",
+    val month: Int = 1,
+    val day: Int = 1,
+    val org: String = "",
+    val focus: List<String> = emptyList(),
+    val color: String = "#64748B",
+    val summary: String = "",
+    @SerialName("mpo_tip") val mpoTip: String = "",
+)
+
+@Serializable
+data class HealthDays(
+    val source: String = "",
+    val year: Int = 0,
+    val days: List<HealthDay> = emptyList(),
+)
+
+@Serializable
+data class PharmaJob(
+    val id: String = "",
+    val title: String = "",
+    val company: String = "",
+    val location: String = "",
+    val division: String = "",
+    val category: String = "",
+    val type: String = "",
+    val experience: String = "",
+    val education: String = "",
+    val salary: String = "",
+    @SerialName("posted_days_ago") val postedDaysAgo: Int = 0,
+    val deadline: String = "",
+    val description: String = "",
+)
+
+@Serializable
+data class PharmaJobs(
+    val source: String = "",
+    val jobs: List<PharmaJob> = emptyList(),
+)
+
+/** A job after `pharma_hub.get_pharma_jobs` has decorated it. */
+data class EnrichedJob(
+    val job: PharmaJob,
+    val postedOn: String,
+    val fresh: Boolean,
+    val department: String,
+    val tags: List<String>,
+    val applyUrl: String,
+)
+
+/** Python's `get_pharma_jobs` return shape. */
+data class JobBoard(
+    val total: Int,
+    val categories: List<String>,
+    val locations: List<String>,
+    val departments: List<String>,
+    val jobs: List<EnrichedJob>,
+)
+
+/** A health day after `pharma_hub.get_health_days` has resolved it against a date. */
+data class HealthDayEntry(
+    val day: HealthDay,
+    /** ISO yyyy-MM-dd. */
+    val date: String,
+    val year: Int,
+    /** Full English weekday name, as Python's `%A` produces. */
+    val weekday: String,
+    val daysUntil: Long,
+    /** today | upcoming | past */
+    val status: String,
+)
+
+/** Python's `get_health_days` return shape. */
+data class HealthCalendar(
+    val year: Int,
+    val today: String,
+    val next: HealthDayEntry?,
+    val count: Int,
+    val days: List<HealthDayEntry>,
+    val byMonth: Map<Int, List<HealthDayEntry>>,
+)

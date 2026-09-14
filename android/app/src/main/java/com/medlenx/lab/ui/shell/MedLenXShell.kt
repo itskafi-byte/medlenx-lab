@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,9 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
+import com.medlenx.lab.ui.screens.hub.HubScreen
+import com.medlenx.lab.ui.screens.hub.HubViewModel
+import com.medlenx.lab.ui.screens.hub.HubViewModelFactory
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.ui.screens.rx.DoctorPitchCard
 import com.medlenx.lab.ui.screens.rx.RxAuditScreen
@@ -68,6 +73,11 @@ fun MedLenXShell(
     var pitchTarget by remember { mutableStateOf<EnrichedMedicine?>(null) }
     val scanVm: ScanViewModel = viewModel(
         factory = ScanViewModelFactory(context.applicationContext as Application),
+    )
+
+    /** Same reasoning as [scanVm]: the Hub's filters and month must survive navigation. */
+    val hubVm: HubViewModel = viewModel(
+        factory = HubViewModelFactory(context.applicationContext as Application),
     )
     // The scrolling content below is the haze source; the app bar is the haze child.
     val hazeState = rememberHazeState()
@@ -148,6 +158,10 @@ fun MedLenXShell(
                                     },
                                 )
                                 dest == Destination.Analytics -> AnalyticsScreen()
+                                dest == Destination.Hub -> HubScreen(
+                                    vm = hubVm,
+                                    onOpenJob = { url -> openUrl(context, url) },
+                                )
                                 else -> PendingScreen(destination = dest)
                             }
                         }
@@ -253,6 +267,25 @@ fun MedLenXShell(
  * here. That is deliberate: a clipboard result the officer can paste into
  * WhatsApp is genuinely useful, whereas a half-wired SAF picker is not.
  */
+/**
+ * Hands a URL to the browser.
+ *
+ * The job board's apply links are external career pages; there is no in-app
+ * WebView, so a missing browser is reported rather than silently swallowed.
+ */
+private fun openUrl(context: Context, url: String) {
+    val opened = runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }.isSuccess
+    if (!opened) {
+        Toast.makeText(
+            context,
+            "No browser available to open $url",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+}
+
 private fun copyToClipboard(context: Context, text: String, label: String) {
     val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     manager.setPrimaryClip(ClipData.newPlainText(label, text))
