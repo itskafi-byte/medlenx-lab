@@ -71,17 +71,17 @@ object RxAudit {
     }
 
     /**
-     * Cheap company equality used when the full matcher helpers are not loaded.
+     * Company equality, delegated to [MedicineMatcher.sameCompany].
      *
-     * Catches "Healthcare Pharmaceuticals Ltd." vs "Healthcare Pharmaceuticals",
-     * which is the common real-world case on a prescription line.
+     * `rx_audit.py` carries its own cheap `same_company_loose` because that module
+     * cannot assume the matcher is importable. Kotlin has no such constraint, so this
+     * delegates instead: two subtly different notions of "same company" in one app is
+     * exactly how the audit drawer ends up disagreeing with the match that produced
+     * the row. The matcher's version also strips corporate noise, so
+     * "Healthcare Pharmaceuticals Ltd." == "Healthcare Pharmaceuticals".
      */
-    fun sameCompanyLoose(a: String?, b: String?): Boolean {
-        val ak = norm(a)
-        val bk = norm(b)
-        if (ak.isEmpty() || bk.isEmpty()) return false
-        return ak == bk || ak.startsWith(bk) || bk.startsWith(ak)
-    }
+    fun sameCompanyLoose(a: String?, b: String?): Boolean =
+        MedicineMatcher.sameCompany(a, b)
 
     // -------------------------------------------------------- exports -----
 
@@ -156,16 +156,11 @@ object RxAudit {
         return if (conf <= 1.0) conf * 100.0 else conf
     }
 
-    private fun norm(text: String?): String =
-        (text.orEmpty()).lowercase().split(WHITESPACE).filter { it.isNotBlank() }.joinToString(" ")
-
     /** csv.writer's QUOTE_MINIMAL: quote only when the field needs it. */
     private fun csvEscape(field: String): String {
         val needsQuotes = field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }
         return if (needsQuotes) "\"${field.replace("\"", "\"\"")}\"" else field
     }
-
-    private val WHITESPACE = Regex("\\s+")
 }
 
 /** Own-vs-competitor summary for one prescription. Mirrors `build_market_share`. */
