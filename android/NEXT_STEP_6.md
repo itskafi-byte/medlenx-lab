@@ -526,3 +526,53 @@ and the named-argument check (its regex stopped at the first `)` inside
 `content: @Composable X.() -> Unit`, so it "found" no signature and silently
 skipped nine composables). Both are fixed. A checker that cannot fail is worse
 than no checker, because it converts an unknown into a false pass.
+
+## Step 7 part 3: TRIPS + News, all five Hub tabs live
+
+**TRIPS** (`database.get_trips_portfolio` → `TripsPortfolio.kt` +
+`PrescriptionDao.scannedSince`). The join moves to SQL and the aggregation is
+ported. Figma's numbers (47 items, +38%, "Dhaka South (9)") are invented and are
+not reproduced; a fresh install shows every molecule at zero volume with the
+full 26-molecule watch list still listed, because the Python appends zero-volume
+molecules in dataset order so nothing is hidden.
+
+One asymmetry preserved: index keys are built with `Compliance.norm` but the
+lookup key is only lowercased and collapsed. Normalising both sides would change
+which generics match.
+
+Verified by execution — the Python aggregation lifted verbatim and diffed against
+the Kotlin transliteration over 4,000 synthetic rows at five window boundaries,
+plus empty / blank-generic / no-match edges: **0 mismatches** in molecule list,
+territory ranking, delta percentages and totals.
+
+**News** (`_parse_rss_items` + `get_pharma_news` → `NewsRepository.kt`). On-device
+fetch of the WHO RSS feed with the bundled seed as fallback, per the decision to
+prefer live news over a static snapshot. `_fetch_medex_news` and
+`_fetch_dgda_news` are **deliberately not ported**: they regex-match HTML out of
+medex.com.bd and the DGDA site rather than reading RSS, and an on-device HTML
+scraper breaks silently whenever either site changes markup, with no server to
+patch it. The curated seed covers regulatory and market headlines; the caption
+says which items are live.
+
+The port caught a real ordering bug: Python tries `%Z` before `%z`, so a
+`GMT` stamp produces a naive ISO string with no offset while `+0000` produces
+one ending `+00:00` — and `get_pharma_news` sorts the merged feed by that
+string. Emitting a single format would reorder live items against seed items
+stamped in the same second. Both formats are kept.
+
+Known immaterial divergence: an unparseable pubDate falls back to "now" with
+millisecond precision, where Python emits microseconds (`SimpleDateFormat` caps
+at `SSS`). Only affects sub-second tie-breaks.
+
+`XmlPullParser` itself could not be executed here — no JVM — so the parser is
+verified by construction against Python's `findall(".//item")` semantics
+(skip items with no title, 320-char summary, HTML stripped) rather than by run.
+
+## Tooling note 3
+
+The named-argument checker reports false positives on nested calls: it attributed
+`MlxButton`'s `text` / `onClick` / `enabled` / `textStyle` to the enclosing
+`SectionHeader`. Verified separately by stripping nested groups — all three
+`SectionHeader` call sites pass only `title` / `icon` / `modifier` / `trailing`,
+all of which exist. The checker needs a nesting-aware pass before its output can
+be trusted unattended.

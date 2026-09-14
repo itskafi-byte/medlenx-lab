@@ -22,7 +22,9 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Work
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.NewsItem
 import com.medlenx.lab.data.repo.TripsMoleculeVolume
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
@@ -110,24 +113,177 @@ fun HubScreen(
 
         when (tabs[tabIndex]) {
             HubTab.Index -> DrugIndexTab(vm)
-            HubTab.HealthDays -> HealthDaysTab(vm)
-            HubTab.Jobs -> JobsTab(vm, onOpenJob)
             HubTab.Trips -> TripsTab(vm)
-            HubTab.News -> HubTabPending(tabs[tabIndex])
+            HubTab.News -> NewsTab(vm, onOpenJob)
+            HubTab.Jobs -> JobsTab(vm, onOpenJob)
+            HubTab.HealthDays -> HealthDaysTab(vm)
         }
     }
 }
 
-/** Honest placeholder for the three tabs still to be built, not an empty card. */
+// ═══════════════════════════════════════ NEWS ══════════════════════════════
+
 @Composable
-private fun HubTabPending(tab: HubTab) {
-    MlxEmptyState(
-        message = when (tab) {
-            HubTab.News -> "Industry News — the web app streams this from RSS feeds through " +
-                "the FastAPI backend. The standalone build is offline-first and has no proxy."
-            else -> ""
-        },
-    )
+private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
+    val feed = vm.news
+
+    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        MlxCard {
+            SectionHeader(
+                title = "Industry News",
+                icon = Icons.Filled.Article,
+                trailing = MlxButton(
+                    text = if (vm.newsLoading) "Refreshing…" else "Refresh",
+                    onClick = vm::refreshNews,
+                    icon = Icons.Filled.Refresh,
+                    enabled = !vm.newsLoading,
+                    textStyle = MlxType.Meta,
+                ),
+            )
+            Text(
+                text = if (feed == null) {
+                    "Loading headlines…"
+                } else if (feed.liveCount == 0) {
+                    "Live RSS unreachable — showing the bundled snapshot only. " +
+                        "${feed.curatedCount} curated item(s)."
+                } else {
+                    "${feed.liveCount} live from the WHO feed · " +
+                        "${feed.curatedCount} curated. Live items are marked."
+                },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2),
+            )
+        }
+
+        val items = feed?.items.orEmpty()
+        if (items.isEmpty()) {
+            MlxEmptyState(
+                message = "No headlines available. The bundled feed could not be read " +
+                    "and no live items came through.",
+                icon = Icons.Filled.Article,
+            )
+        } else {
+            items.forEachIndexed { index, item ->
+                if (index == 0) FeaturedNewsCard(item, onOpenUrl) else NewsRow(item, onOpenUrl)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeaturedNewsCard(item: NewsItem, onOpenUrl: (String) -> Unit) {
+    DarkHero {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
+                if (item.live) {
+                    StatusPill(text = "LIVE", tone = PillTone.EmeraldSolid)
+                }
+                StatusPill(text = item.source, tone = PillTone.BlueSolid)
+            }
+        }
+        Text(
+            text = item.title,
+            style = MlxType.CardTitle,
+            color = Color.White,
+            modifier = Modifier.padding(top = MlxD.Space2),
+        )
+        if (item.summary.isNotBlank()) {
+            Text(
+                text = item.summary,
+                style = MlxType.BodySmall,
+                color = Mlx.Brand100,
+                modifier = Modifier.padding(top = MlxD.Space2),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = MlxD.Space3),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = item.publishedAt.take(10),
+                style = MlxType.Meta,
+                color = Mlx.Brand200,
+            )
+            if (item.url.isNotBlank()) {
+                MlxButton(
+                    text = "Read",
+                    onClick = { onOpenUrl(item.url) },
+                    icon = Icons.Filled.OpenInNew,
+                    textStyle = MlxType.Meta,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewsRow(item: NewsItem, onOpenUrl: (String) -> Unit) {
+    MlxCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = item.source,
+                    style = MlxType.SectionLabel,
+                    color = Mlx.Text600,
+                )
+                if (item.live) {
+                    StatusPill(
+                        text = "LIVE",
+                        tone = PillTone.EmeraldSolid,
+                        modifier = Modifier.padding(start = MlxD.Space2),
+                    )
+                }
+            }
+            Text(
+                text = item.publishedAt.take(10),
+                style = MlxType.Meta,
+                color = Mlx.Text400,
+            )
+        }
+        Text(
+            text = item.title,
+            style = MlxType.CardTitle,
+            modifier = Modifier.padding(top = MlxD.Space1),
+        )
+        if (item.summary.isNotBlank()) {
+            Text(
+                text = item.summary,
+                style = MlxType.BodySmall,
+                color = Mlx.Text600,
+                modifier = Modifier.padding(top = MlxD.Space1),
+            )
+        }
+        if (item.tags.isNotEmpty()) {
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalSpacing = MlxD.Space1,
+                verticalSpacing = MlxD.Space1,
+            ) {
+                item.tags.forEach { tag -> StatusPill(text = tag, tone = PillTone.Slate) }
+            }
+        }
+        if (item.url.isNotBlank()) {
+            MlxButton(
+                text = "Open",
+                onClick = { onOpenUrl(item.url) },
+                icon = Icons.Filled.OpenInNew,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = MlxD.Space3),
+                textStyle = MlxType.Meta,
+            )
+        }
+    }
 }
 
 // ═══════════════════════════════════════ TRIPS ═════════════════════════════

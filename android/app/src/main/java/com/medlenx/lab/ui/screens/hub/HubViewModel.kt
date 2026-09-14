@@ -13,6 +13,7 @@ import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.model.HealthCalendar
 import com.medlenx.lab.data.local.ScannedItemRow
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.NewsFeed
 import com.medlenx.lab.data.model.RegulatoryData
 import com.medlenx.lab.data.model.HealthDays
 import com.medlenx.lab.data.model.JobBoard
@@ -39,6 +40,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     private val scanRepository = app.graph.scanRepository
     private val regulatory = app.graph.regulatoryRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
+    private val newsRepository = app.graph.newsRepository
 
     /** Fixed at construction so a Hub left open across midnight does not reshuffle. */
     val today: LocalDate = LocalDate.now()
@@ -77,6 +79,11 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     private var tripsData by mutableStateOf<RegulatoryData?>(null)
         private set
 
+    var news by mutableStateOf<NewsFeed?>(null)
+        private set
+    var newsLoading by mutableStateOf(false)
+        private set
+
     /** Month being displayed in the health-day calendar (1-12). */
     var month by mutableIntStateOf(today.monthValue)
         private set
@@ -96,6 +103,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
             products = scanRepository.medexIndex().all
             tripsData = regulatory.data()
             loadScannedRows()
+            refreshNews()
         }
     }
 
@@ -143,6 +151,21 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         val now = System.currentTimeMillis()
         scannedRows = prescriptionDao.scannedSince(now - 2 * windowMs)
         tripsBoundary = now - windowMs
+    }
+
+    /**
+     * Fetches the live RSS feed and merges it with the bundled seed.
+     *
+     * A failed fetch is not an error state: the seed still renders, and
+     * [NewsFeed.liveCount] being zero is what tells the reader nothing live
+     * came through.
+     */
+    fun refreshNews() {
+        newsLoading = true
+        viewModelScope.launch {
+            news = newsRepository.load(live = true)
+            newsLoading = false
+        }
     }
 
     fun setTripsDays(days: Int) {

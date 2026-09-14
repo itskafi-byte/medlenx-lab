@@ -11,6 +11,7 @@ import com.medlenx.lab.data.local.ProfileDao
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.repo.DeviceStateRepository
 import com.medlenx.lab.data.repo.LocationRepository
+import com.medlenx.lab.data.repo.NewsRepository
 import com.medlenx.lab.data.repo.RegulatoryRepository
 import com.medlenx.lab.data.repo.ScanRepository
 import kotlinx.serialization.json.Json
@@ -33,6 +34,7 @@ class AppGraph private constructor(
     val scanRepository: ScanRepository,
     val profileDao: ProfileDao,
     val regulatoryRepository: RegulatoryRepository,
+    val newsRepository: NewsRepository,
     /**
      * Application-lifetime scope for work that must outlive any screen.
      *
@@ -82,6 +84,10 @@ class AppGraph private constructor(
                 ),
                 profileDao = db.profileDao(),
                 regulatoryRepository = RegulatoryRepository(catalogue),
+                newsRepository = NewsRepository(
+                    catalogue = catalogue,
+                    httpClient = MedLenXVlClient.defaultHttpClient(),
+                ),
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
             )
         }
