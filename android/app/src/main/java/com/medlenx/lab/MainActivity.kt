@@ -15,7 +15,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val deviceState = (application as MedLenXApp).graph.deviceState
+        val graph = (application as MedLenXApp).graph
+        val deviceState = graph.deviceState
 
         setContent {
             MedLenXTheme {
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
                         companyName = deviceState.companyName,
                         latencyMs = null,
                     ),
+                    appGraph = graph,
                 )
             }
         }

@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
@@ -17,6 +18,7 @@ import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -67,11 +69,27 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf(ScanUiState())
         private set
 
+    /**
+     * The signed-in officer. Drives the Rx Audit header (rep code) and decides
+     * which catalogue brands count as "own pharma" rather than competitors.
+     *
+     * This is the authoritative source for the officer's company. `deviceState
+     * .companyName` only reflects whatever the last scan header happened to show
+     * and stays null until then.
+     */
+    var officerProfile by mutableStateOf<OfficerProfileEntity?>(null)
+        private set
+
     init {
         viewModelScope.launch {
             // Loads the district/upazila/territory cascade and the geo centroids.
             locationRepository.locations()
             locationRepository.geo()
+        }
+        viewModelScope.launch {
+            // Separate launch: `observe()` never completes, so collecting it in the
+            // same coroutine would stop the location cascade from ever being reached.
+            app.graph.profileDao.observe().collect { officerProfile = it }
         }
     }
 

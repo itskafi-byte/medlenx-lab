@@ -1,6 +1,5 @@
 package com.medlenx.lab.ui.screens.scan
 
-import android.app.Application
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -42,7 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
@@ -66,11 +64,12 @@ import java.io.File
  * stack: viewer on top, verification beneath, with 24dp bottom clearance.
  */
 @Composable
-fun ScanScreen(modifier: Modifier = Modifier) {
+fun ScanScreen(
+    vm: ScanViewModel,
+    onOpenAudit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
-    val vm: ScanViewModel = viewModel(
-        factory = ScanViewModelFactory(context.applicationContext as Application),
-    )
     val state = vm.state
     val transform = remember(state.imageUri) { ViewerTransform() }
 
@@ -182,7 +181,7 @@ fun ScanScreen(modifier: Modifier = Modifier) {
             toastMessage = "Prescription saved and synced — Rx #" +
                 (state.receipt?.rxNumber.orEmpty()),
             onScanAnother = vm::scanAnother,
-            onOpenAudit = { /* Rx Audit Summary - Step 6 */ },
+            onOpenAudit = onOpenAudit,
             modifier = modifier.padding(top = topInset),
         )
 

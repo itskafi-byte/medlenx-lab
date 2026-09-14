@@ -353,3 +353,31 @@ Data the route will need: `rxId` = `SavedReceipt.rxNumber`, `repId` =
 `medicines` = `ScanUiState.enriched`, `offTerritory` = `ScanUiState.geo.offTerritory`.
 There is no officer-profile reader in `AppGraph` yet; `OfficerProfileEntity`
 (`company`, `employeeId`) exists in Room and is the better long-term source.
+
+## Step 6 wiring — complete
+
+| Change | File |
+|---|---|
+| `profileDao` added to the composition root | `data/config/AppGraph.kt` |
+| `officerProfile` observed from Room in its own coroutine (`observe()` never completes, so collecting it alongside the location cascade would have starved it) | `ui/screens/scan/ScanViewModel.kt` |
+| `fun ScanScreen(vm, onOpenAudit, modifier)` — VM no longer created inside; `onOpenAudit` reaches the existing `ScanSavedSection` callback | `ui/screens/scan/ScanScreen.kt` |
+| `MedLenXShell(topBarState, appGraph, …)` hoists `ScanViewModel`, renders `Destination.RxAudit`, hosts the `DoctorPitchCard` overlay, adds `copyToClipboard` | `ui/shell/MedLenXShell.kt` |
+| Passes `appGraph` | `MainActivity.kt` |
+
+Route inputs, each against the real signature (not assumed):
+`rxId` = `SavedReceipt.rxNumber` · `repId` = `officerProfile.employeeId` falling back to
+`SavedReceipt.repCode` · `ownCompany` = `officerProfile.company` · `medicines` =
+`ScanUiState.enriched` · `offTerritory` = `ScanUiState.geo.offTerritory`.
+
+`ownCompany` deliberately moved off `DeviceStateRepository.companyName`: that value only
+mirrors whatever the last scan header showed and stays null until a scan runs, which
+would have classified every brand as a competitor. `OfficerProfileEntity` is the
+authoritative source.
+
+`onPitchCard` is wired, not stubbed: it opens `DoctorPitchCard` when
+`EnrichedMedicine.substitution` is present and toasts an explanation when it is not —
+`substitution` is always null today because `pharma_hub.py` is still unported, so a
+silent no-op would have looked like a dead button.
+
+`onExportCsv` / `onCopyClipboard` both write to the system clipboard. There is no
+DocumentsUI write path yet; a pasteable result beats a half-wired SAF picker.

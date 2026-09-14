@@ -3,6 +3,7 @@ package com.medlenx.lab.data.config
 import android.content.Context
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.MedLenXDatabase
+import com.medlenx.lab.data.local.ProfileDao
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.repo.DeviceStateRepository
 import com.medlenx.lab.data.repo.LocationRepository
@@ -25,6 +26,7 @@ class AppGraph private constructor(
     val deviceState: DeviceStateRepository,
     val locationRepository: LocationRepository,
     val scanRepository: ScanRepository,
+    val profileDao: ProfileDao,
 ) {
     companion object {
         fun create(context: Context): AppGraph {
@@ -51,6 +53,7 @@ class AppGraph private constructor(
                     queueDao = db.queueDao(),
                     medexDao = db.medexDao(),
                 ),
+                profileDao = db.profileDao(),
             )
         }
     }
