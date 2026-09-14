@@ -11,12 +11,16 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.model.HealthCalendar
+import com.medlenx.lab.data.local.ScannedItemRow
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.RegulatoryData
 import com.medlenx.lab.data.model.HealthDays
 import com.medlenx.lab.data.model.JobBoard
 import com.medlenx.lab.data.model.PharmaJobs
 import com.medlenx.lab.data.repo.BrowseResult
 import com.medlenx.lab.data.repo.PharmaHub
+import com.medlenx.lab.data.repo.TripsPortfolio
+import com.medlenx.lab.data.repo.TripsPortfolioResult
 import com.medlenx.lab.data.repo.toProduct
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -33,9 +37,15 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MedLenXApp
     private val catalogue = app.graph.catalogue
     private val scanRepository = app.graph.scanRepository
+    private val regulatory = app.graph.regulatoryRepository
+    private val prescriptionDao = app.graph.database.prescriptionDao()
 
     /** Fixed at construction so a Hub left open across midnight does not reshuffle. */
     val today: LocalDate = LocalDate.now()
+
+    /** Epoch millis separating the current TRIPS window from the previous one. */
+    private var tripsBoundary by mutableStateOf(System.currentTimeMillis())
+        private set
 
     var healthDays by mutableStateOf<HealthDays?>(null)
         private set
@@ -59,6 +69,14 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     var searchResults by mutableStateOf<List<MedexProduct>?>(null)
         private set
 
+    /** TRIPS window in days: 30 / 90 / 180. */
+    var tripsDays by mutableIntStateOf(90)
+        private set
+    private var scannedRows by mutableStateOf<List<ScannedItemRow>>(emptyList())
+        private set
+    private var tripsData by mutableStateOf<RegulatoryData?>(null)
+        private set
+
     /** Month being displayed in the health-day calendar (1-12). */
     var month by mutableIntStateOf(today.monthValue)
         private set
@@ -76,6 +94,8 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
             healthDays = catalogue.readAsset("health_days.json", HealthDays.serializer())
             jobs = catalogue.readAsset("pharma_jobs.json", PharmaJobs.serializer())
             products = scanRepository.medexIndex().all
+            tripsData = regulatory.data()
+            loadScannedRows()
         }
     }
 
@@ -112,6 +132,38 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Pulls the scan window for the current TRIPS period.
+     *
+     * Two windows are fetched in one query: rows at or after `boundary` count
+     * towards the current period, the rest towards the previous one.
+     */
+    private suspend fun loadScannedRows() {
+        val windowMs = tripsDays.toLong() * MILLIS_PER_DAY
+        val now = System.currentTimeMillis()
+        scannedRows = prescriptionDao.scannedSince(now - 2 * windowMs)
+        tripsBoundary = now - windowMs
+    }
+
+    fun setTripsDays(days: Int) {
+        tripsDays = days
+        viewModelScope.launch { loadScannedRows() }
+    }
+
+    fun portfolio(): TripsPortfolioResult {
+        val data = tripsData ?: RegulatoryData.Empty
+        return TripsPortfolio.build(
+            tripsIndex = data.tripsIndex,
+            molecules = data.trips.molecules,
+            rows = scannedRows,
+            boundary = tripsBoundary,
+            days = tripsDays,
+            waiverExpiry = data.trips.waiverExpiry,
+            ldcGraduation = data.trips.ldcGraduation,
+            context = data.trips.context,
+        )
+    }
+
     fun board(): JobBoard = PharmaHub.pharmaJobs(
         jobs = jobs?.jobs ?: emptyList(),
         today = today,
@@ -146,3 +198,5 @@ class HubViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
 }
+
+private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L

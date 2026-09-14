@@ -163,3 +163,17 @@ data class ErrorReportEntity(
     val raw: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )
+
+/**
+ * Projection for [PrescriptionDao.scannedSince].
+ *
+ * Not an `@Entity`: it exists only to carry the five columns the TRIPS
+ * aggregate reads across the scanned-medicine / prescription join.
+ */
+data class ScannedItemRow(
+    val generic: String,
+    val brandName: String,
+    val territory: String,
+    val district: String,
+    val createdAt: Long,
+)

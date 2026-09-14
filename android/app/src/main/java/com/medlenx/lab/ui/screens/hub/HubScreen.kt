@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Work
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.repo.TripsMoleculeVolume
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxButton
@@ -110,7 +112,8 @@ fun HubScreen(
             HubTab.Index -> DrugIndexTab(vm)
             HubTab.HealthDays -> HealthDaysTab(vm)
             HubTab.Jobs -> JobsTab(vm, onOpenJob)
-            HubTab.Trips, HubTab.News -> HubTabPending(tabs[tabIndex])
+            HubTab.Trips -> TripsTab(vm)
+            HubTab.News -> HubTabPending(tabs[tabIndex])
         }
     }
 }
@@ -120,13 +123,177 @@ fun HubScreen(
 private fun HubTabPending(tab: HubTab) {
     MlxEmptyState(
         message = when (tab) {
-            HubTab.Trips -> "TRIPS Waiver Tracker — needs per-molecule field volume from " +
-                "prescription scans, which the on-device audit store does not aggregate yet."
             HubTab.News -> "Industry News — the web app streams this from RSS feeds through " +
                 "the FastAPI backend. The standalone build is offline-first and has no proxy."
             else -> ""
         },
     )
+}
+
+// ═══════════════════════════════════════ TRIPS ═════════════════════════════
+
+@Composable
+private fun TripsTab(vm: HubViewModel) {
+    val p = vm.portfolio()
+
+    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        MlxCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionHeader(
+                    title = "TRIPS Waiver Portfolio Tracker",
+                    icon = Icons.Filled.Public,
+                    modifier = Modifier.weight(1f),
+                )
+                StatusPill(
+                    text = "LDC waiver → ${p.waiverExpiry.ifBlank { "unknown" }}",
+                    tone = PillTone.Amber,
+                )
+            }
+            Text(
+                text = p.context,
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2, bottom = MlxD.Space3),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
+                MiniKpiTile("Molecules on watch", p.totals.watched.toString(), Modifier.weight(1f))
+                MiniKpiTile(
+                    "With field volume (${p.days}d)",
+                    p.totals.withFieldVolume.toString(),
+                    Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+            ) {
+                MiniKpiTile("Watch-list items scanned", p.totals.volume.toString(), Modifier.weight(1f))
+                MiniKpiTile("Rising vs prev period", "+${p.totals.rising}", Modifier.weight(1f))
+            }
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space3),
+                horizontalSpacing = MlxD.Space2,
+                verticalSpacing = MlxD.Space2,
+            ) {
+                listOf(30, 90, 180).forEach { d ->
+                    MlxFilterChip(
+                        label = "$d days",
+                        selected = vm.tripsDays == d,
+                        onClick = { vm.setTripsDays(d) },
+                    )
+                }
+            }
+        }
+
+        if (p.totals.volume == 0) {
+            MlxEmptyState(
+                message = "No watch-list molecules in scans from the last ${p.days} days on " +
+                    "this device. The full watch list is listed below at zero volume so " +
+                    "nothing is hidden - the counts rise as prescriptions are scanned here.",
+                icon = Icons.Filled.Public,
+            )
+        }
+
+        p.molecules.forEach { mol -> TripsMoleculeCard(mol, p.waiverExpiry) }
+    }
+}
+
+@Composable
+private fun TripsMoleculeCard(mol: TripsMoleculeVolume, waiverExpiry: String) {
+    MlxCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = mol.molecule, style = MlxType.CardTitle)
+                Text(
+                    text = listOf(mol.therapeuticClass, mol.originator)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • "),
+                    style = MlxType.Meta,
+                    color = Mlx.Text500,
+                )
+            }
+            StatusPill(
+                text = mol.watchLevel.uppercase(),
+                tone = when (mol.watchLevel) {
+                    "critical" -> PillTone.Red
+                    "high" -> PillTone.Amber
+                    else -> PillTone.Slate
+                },
+                modifier = Modifier.padding(start = MlxD.Space2),
+            )
+        }
+
+        FlowRowCompat(
+            modifier = Modifier.padding(top = MlxD.Space2),
+            horizontalSpacing = MlxD.Space4,
+            verticalSpacing = MlxD.Space1,
+        ) {
+            Text(
+                text = "Window → ${waiverExpiry.ifBlank { "unknown" }}",
+                style = MlxType.MicroPill,
+                color = Mlx.Text400,
+            )
+            Text(
+                text = "${mol.currentVolume} items",
+                style = MlxType.BodySmall,
+                color = Mlx.Text900,
+            )
+            Text(
+                text = when {
+                    mol.delta > 0 -> buildString {
+                        append("▲ +${mol.delta}")
+                        mol.deltaPct?.let { append(" (+$it%)") }
+                    }
+                    mol.delta < 0 -> buildString {
+                        append("▼ ${kotlin.math.abs(mol.delta)}")
+                        mol.deltaPct?.let { append(" ($it%)") }
+                    }
+                    else -> "—"
+                },
+                style = MlxType.BodySmall,
+                color = when {
+                    mol.delta > 0 -> Mlx.Ok600
+                    mol.delta < 0 -> Mlx.Danger
+                    else -> Mlx.Text400
+                },
+            )
+        }
+
+        if (mol.topTerritories.isNotEmpty()) {
+            Text(
+                text = mol.topTerritories.joinToString(", ") { "${it.name} (${it.count})" },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2),
+            )
+        }
+        if (mol.brands.isNotEmpty()) {
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalSpacing = MlxD.Space1,
+                verticalSpacing = MlxD.Space1,
+            ) {
+                mol.brands.forEach { brand ->
+                    StatusPill(text = brand, tone = PillTone.Slate)
+                }
+            }
+        }
+        if (mol.note.isNotBlank()) {
+            Text(
+                text = mol.note,
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2),
+            )
+        }
+    }
 }
 
 // ═══════════════════════════════════ DRUG INDEX ════════════════════════════

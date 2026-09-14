@@ -62,6 +62,28 @@ interface PrescriptionDao {
     @Query("SELECT * FROM prescriptions WHERE image_hash = :hash AND id != :excludeId LIMIT 1")
     suspend fun findByHash(hash: String, excludeId: Long = -1): PrescriptionEntity?
 
+    /**
+     * Scanned items joined to their prescription, for the TRIPS portfolio
+     * aggregate - the on-device equivalent of the backend's
+     * `prescribed_medicines JOIN prescriptions`.
+     *
+     * Returns a projection rather than entities because the aggregate only needs
+     * five columns and the join spans two tables.
+     */
+    @Query(
+        """
+        SELECT sm.generic AS generic,
+               sm.brand_name AS brandName,
+               p.territory AS territory,
+               p.district AS district,
+               p.created_at AS createdAt
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since
+        """
+    )
+    suspend fun scannedSince(since: Long): List<ScannedItemRow>
+
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 
