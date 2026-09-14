@@ -1,8 +1,6 @@
 package com.medlenx.lab.data.repo
 
 import com.medlenx.lab.data.model.EnrichedMedicine
-import java.math.BigDecimal
-import java.math.RoundingMode
 
 /**
  * Prescription Audit Summary helpers, ported from `app/rx_audit.py`.
@@ -132,19 +130,10 @@ object RxAudit {
 
     // -------------------------------------------------------- internals ----
 
-    /** Python's `round()` is half-to-even; `Math.round` is half-up and would drift. */
-    private fun pyRound(v: Double): Int = Math.rint(v).toInt()
+    /** Delegated to [PyMath] so the rounding semantics live in exactly one place. */
+    private fun pyRound(v: Double): Int = PyMath.round(v)
 
-    /**
-     * `round(x, 1)`.
-     *
-     * BigDecimal(double), not rint(v * 10) / 10: Python rounds on the exact decimal
-     * value of the double, and scaling by ten first loses that. They disagree at the
-     * halfway point - Python's round(0.05, 1) is 0.1, while rint(0.05 * 10) / 10 is
-     * 0.0, because 0.05 * 10 lands exactly on 0.5 in binary.
-     */
-    private fun round1(v: Double): Double =
-        BigDecimal(v).setScale(1, RoundingMode.HALF_EVEN).toDouble()
+    private fun round1(v: Double): Double = PyMath.round1(v)
 
     /**
      * `round(conf * 100) if conf <= 1 else round(conf)` — a value at or below 1 is a

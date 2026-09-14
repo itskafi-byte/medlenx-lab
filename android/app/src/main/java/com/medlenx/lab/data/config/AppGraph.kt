@@ -7,6 +7,7 @@ import com.medlenx.lab.data.local.ProfileDao
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.repo.DeviceStateRepository
 import com.medlenx.lab.data.repo.LocationRepository
+import com.medlenx.lab.data.repo.RegulatoryRepository
 import com.medlenx.lab.data.repo.ScanRepository
 import kotlinx.serialization.json.Json
 
@@ -27,6 +28,7 @@ class AppGraph private constructor(
     val locationRepository: LocationRepository,
     val scanRepository: ScanRepository,
     val profileDao: ProfileDao,
+    val regulatoryRepository: RegulatoryRepository,
 ) {
     companion object {
         fun create(context: Context): AppGraph {
@@ -37,10 +39,11 @@ class AppGraph private constructor(
                 httpClient = MedLenXVlClient.defaultHttpClient(),
                 json = json,
             )
+            val catalogue = AssetCatalogue(appContext, json, db.medexDao())
             return AppGraph(
                 json = json,
                 database = db,
-                catalogue = AssetCatalogue(appContext, json, db.medexDao()),
+                catalogue = catalogue,
                 vlClient = vlClient,
                 deviceState = DeviceStateRepository(appContext, db.queueDao()),
                 locationRepository = LocationRepository(
@@ -54,6 +57,7 @@ class AppGraph private constructor(
                     medexDao = db.medexDao(),
                 ),
                 profileDao = db.profileDao(),
+                regulatoryRepository = RegulatoryRepository(catalogue),
             )
         }
     }

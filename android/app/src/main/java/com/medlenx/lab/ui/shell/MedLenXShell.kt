@@ -190,8 +190,9 @@ fun MedLenXShell(
                                 // No silent no-op: say why there is nothing to pitch.
                                 Toast.makeText(
                                     context,
-                                    "No substitution computed for ${med.brandName}. " +
-                                        "The substitution engine lands with the pharma hub port.",
+                                    "No own-portfolio equivalent for ${med.brandName} - " +
+                                        "either this is already our brand, or the " +
+                                        "catalogue holds no matching molecule.",
                                     Toast.LENGTH_LONG,
                                 ).show()
                             }

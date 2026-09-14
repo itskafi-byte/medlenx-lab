@@ -381,3 +381,52 @@ silent no-op would have looked like a dead button.
 
 `onExportCsv` / `onCopyClipboard` both write to the system clipboard. There is no
 DocumentsUI write path yet; a pasteable result beats a half-wired SAF picker.
+
+## Backend port: compliance.py + intelligence.py
+
+All seven previously-blank `EnrichedMedicine` fields are now populated.
+
+| New file | Port of |
+|---|---|
+| `data/model/RegulatoryData.kt` | wire models for `neml_list.json` (165 molecules), `trips_waiver.json` (26), `dgda_prices.json` (32 prices / 4 banned / 3 adjusted) |
+| `data/repo/Compliance.kt` | `app/compliance.py` (515 lines) minus the geofence half, already ported as `Geofence.kt` |
+| `data/repo/Intelligence.kt` | `app/intelligence.py` (271 lines) |
+| `data/repo/PyMath.kt` | Python `round()`/`f"{x:.2f}"` semantics, extracted so `RxAudit` no longer keeps a private copy |
+| `data/repo/RegulatoryRepository.kt` | the module-level `_NEM_CACHE` / `_TRIPS_CACHE` / `_DGDA_CACHE` dicts, as one process-lifetime holder |
+
+Three rules taken from `main.py`'s assembly rather than the module docstrings, because
+the docstrings are misleading:
+
+- `broadSpectrum = abx && isBroadSpectrum(...)` — gated on the antibiotic test, so a
+  broad-spectrum keyword on a non-antibiotic row does not set it.
+- `therapeuticClass` uses the NEML class *directly* when the molecule is listed, even
+  when that class is blank, and only falls through to keyword resolution otherwise.
+- `Compliance.norm` strips punctuation; `Intelligence.normaliseKey` does not. They are
+  different functions in Python and stay different here — collapsing them would break
+  brand matching on names like "Co-trimoxazole".
+
+**Parity was verified by execution, not review.** Both Python modules were run against
+the real datasets with the Kotlin transliterated back into Python and diffed:
+
+| Check | Cases | Mismatches |
+|---|---|---|
+| `norm` | 205 molecule probes | 0 |
+| `moleculeKeyMatch` | ~42,000 pairs | 0 |
+| `nemlLookup` / `tripsLookup` | 400 pairs | 0 |
+| `isAntibiotic` / `isBroadSpectrum` / `resolveTherapeuticClass` | 420 | 0 |
+| `dgdaCheck` + `priceCeilingAlert` | 880 (44 brands x 4 generics x 5 MRPs) | 0 |
+| `findOwnBrand` | 440 over 25,105 catalogue rows | 0 |
+| `genericSubstitution` (unit diff, pitch text, label) | 401 | 0 |
+| `therapyBreakdown` incl. `.05`/`.15` rounding boundary | 104 | 0 |
+
+Two bugs this caught or that review found alongside it:
+
+1. `unitDifferenceLabel` was built as `"… BDT " + if (x) "higher" else "lower" + " per unit"`.
+   Kotlin binds the else branch greedily, so the positive case rendered without its
+   " per unit" suffix. Parenthesised.
+2. `smartPitchNote` was handed the trimmed generic; `main.py` passes the original
+   detected dict. Now untrimmed.
+
+Still unported, and correctly still blank: nothing in Step 6. `database.py` (2,528 lines,
+SQLite aggregates) is Steps 5/8 and `pharma_hub.py` (589 lines, RSS/HTTP news, jobs,
+health days) is Step 7.

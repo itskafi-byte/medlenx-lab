@@ -191,6 +191,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             enriched = MedicineEnricher.enrich(
                 medicines = result.medicines,
                 index = scanRepository.medexIndex(),
+                regulatory = app.graph.regulatoryRepository.data(),
+                // Own-company basis for the substitution engine. Blank when no
+                // officer profile is saved, which makes genericSubstitution
+                // return null rather than guessing a manufacturer.
+                ownCompany = officerProfile?.company.orEmpty(),
             ),
         )
     }

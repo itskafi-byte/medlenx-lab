@@ -298,6 +298,14 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
     val distinctBrands: Int get() = brandKeys.size
     val variantCount: Int get() = byBrand.values.sumOf { it.size }
 
+    /**
+     * Every indexed product, in catalogue order.
+     *
+     * [Intelligence.findOwnBrand] has to scan by company rather than by brand,
+     * which the brand-keyed map cannot serve.
+     */
+    val all: List<MedexProduct> get() = byBrand.values.flatten()
+
     /** All catalogue variants whose normalised brand equals this one. */
     fun exact(brand: String): List<MedexProduct> =
         byBrand[MedicineMatcher.normalizeBrand(brand)].orEmpty()
