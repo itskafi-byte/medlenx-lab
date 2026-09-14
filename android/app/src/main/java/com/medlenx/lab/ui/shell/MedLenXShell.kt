@@ -33,6 +33,7 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
+import com.medlenx.lab.ui.screens.analytics.FilterSheet
 import com.medlenx.lab.ui.screens.help.HelpScreen
 import com.medlenx.lab.ui.screens.help.HelpViewModel
 import com.medlenx.lab.ui.screens.help.HelpViewModelFactory
@@ -115,6 +116,9 @@ fun MedLenXShell(
 
     /** Global search overlay; the top bar's search field drives it. */
     var searchOpen by remember { mutableStateOf(false) }
+
+    /** Analytics global filter sheet. */
+    var filterOpen by remember { mutableStateOf(false) }
     // The scrolling content below is the haze source; the app bar is the haze child.
     val hazeState = rememberHazeState()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -204,15 +208,7 @@ fun MedLenXShell(
                                 )
                                 Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
-                                    onOpenFilters = {
-                                        // The FilterSheet is Step 9; until it exists,
-                                        // say so rather than accepting the tap silently.
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Global filters are not wired up yet.",
-                                            android.widget.Toast.LENGTH_SHORT,
-                                        ).show()
-                                    },
+                                    onOpenFilters = { filterOpen = true },
                                     onExport = {
                                         android.widget.Toast.makeText(
                                             context,
@@ -339,6 +335,19 @@ fun MedLenXShell(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+            }
+
+            if (filterOpen) {
+                FilterSheet(
+                    options = analyticsVm.filterOptions,
+                    initial = analyticsVm.filters,
+                    onApply = {
+                        analyticsVm.setFilters(it)
+                        filterOpen = false
+                    },
+                    onClose = { filterOpen = false },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
 
             if (searchOpen) {

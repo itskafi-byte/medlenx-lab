@@ -217,64 +217,134 @@ interface PrescriptionDao {
 
     // ---- Analytics aggregates ------------------------------------------
 
-    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions WHERE created_at >= :since")
-    suspend fun prescriptionCountSince(since: Long): Int
+    @Query(
+        "SELECT COUNT(DISTINCT id) FROM prescriptions p WHERE p.created_at >= :since" +
+            RX_FILTER_SQL
+    )
+    suspend fun prescriptionCountSince(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
-        "SELECT COUNT(DISTINCT id) FROM prescriptions " +
-            "WHERE created_at >= :from AND created_at < :to"
+        "SELECT COUNT(DISTINCT id) FROM prescriptions p " +
+            "WHERE p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
-    suspend fun prescriptionCountBetween(from: Long, to: Long): Int
+    suspend fun prescriptionCountBetween(
+        from: Long,
+        to: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
-    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions")
-    suspend fun prescriptionCountAll(): Int
+    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions p WHERE 1=1" + RX_FILTER_SQL)
+    suspend fun prescriptionCountAll(
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
-            "WHERE p.created_at >= :since"
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL
     )
-    suspend fun itemCountSince(since: Long): Int
+    suspend fun itemCountSince(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
-            "WHERE sm.company_name LIKE :ownLike AND p.created_at >= :since"
+            "WHERE sm.company_name LIKE :ownLike AND p.created_at >= :since" + RX_FILTER_SQL
     )
-    suspend fun ownItemCountSince(since: Long, ownLike: String): Int
+    suspend fun ownItemCountSince(
+        since: Long,
+        ownLike: String,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "WHERE sm.company_name LIKE :ownLike " +
-            "AND p.created_at >= :from AND p.created_at < :to"
+            "AND p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
-    suspend fun ownItemCountBetween(from: Long, to: Long, ownLike: String): Int
+    suspend fun ownItemCountBetween(
+        from: Long,
+        to: Long,
+        ownLike: String,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
-            "WHERE p.created_at >= :from AND p.created_at < :to"
+            "WHERE p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
-    suspend fun itemCountBetween(from: Long, to: Long): Int
+    suspend fun itemCountBetween(
+        from: Long,
+        to: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     @Query(
         "SELECT sm.brand_name AS brandName, sm.company_name AS companyName, COUNT(*) AS count " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "WHERE IFNULL(sm.brand_name, '') != '' AND p.created_at >= :since " +
-            "GROUP BY sm.brand_name ORDER BY count DESC LIMIT 1"
+            RX_FILTER_SQL +
+            " GROUP BY sm.brand_name ORDER BY count DESC LIMIT 1"
     )
-    suspend fun topBrandRow(since: Long): TopBrandRow?
+    suspend fun topBrandRow(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): TopBrandRow?
 
     @Query(
-        "SELECT COUNT(DISTINCT doctor_name) FROM prescriptions " +
-            "WHERE created_at >= :since AND IFNULL(doctor_name, '') != ''"
+        "SELECT COUNT(DISTINCT p.doctor_name) FROM prescriptions p " +
+            "WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL
     )
-    suspend fun activeDoctorCount(since: Long): Int
+    suspend fun activeDoctorCount(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
-    @Query("SELECT COUNT(DISTINCT doctor_name) FROM prescriptions WHERE IFNULL(doctor_name, '') != ''")
-    suspend fun allDoctorCount(): Int
+    @Query(
+        "SELECT COUNT(DISTINCT p.doctor_name) FROM prescriptions p " +
+            "WHERE IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL
+    )
+    suspend fun allDoctorCount(
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     /** Widget A: most prescribed brands. */
     @Query(
@@ -284,12 +354,23 @@ interface PrescriptionDao {
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
         WHERE p.created_at >= :since
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY sm.brand_name, sm.company_name
         ORDER BY captureCount DESC
         LIMIT :limit
         """
     )
-    suspend fun mostPrescribedRows(since: Long, limit: Int): List<MostPrescribedRow>
+    suspend fun mostPrescribedRows(
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<MostPrescribedRow>
 
     /** Widget B: company share of voice, before the Others bucket is formed. */
     @Query(
@@ -301,11 +382,21 @@ interface PrescriptionDao {
           AND sm.company_name NOT LIKE '%Unknown%'
           AND sm.company_name NOT LIKE '%Live search failed%'
           AND p.created_at >= :since
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY sm.company_name
         ORDER BY count DESC
         """
     )
-    suspend fun companyShareRows(since: Long): List<CompanyShareRow>
+    suspend fun companyShareRows(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<CompanyShareRow>
 
     /** Widget C: doctor conversion leaderboard, one page. */
     @Query(
@@ -319,6 +410,10 @@ interface PrescriptionDao {
         FROM prescriptions p
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
         WHERE p.created_at >= :since
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY p.doctor_name
         ORDER BY prescriptions DESC, totalMeds DESC
         LIMIT :limit OFFSET :offset
@@ -329,14 +424,24 @@ interface PrescriptionDao {
         ownLike: String,
         limit: Int,
         offset: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
     ): List<DoctorLeaderRow2>
 
     /** Widget C: total matching doctors, for the pagination caption. */
     @Query(
-        "SELECT COUNT(*) FROM (SELECT doctor_name FROM prescriptions " +
-            "WHERE created_at >= :since GROUP BY doctor_name)"
+        "SELECT COUNT(*) FROM (SELECT p.doctor_name FROM prescriptions p " +
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL + " GROUP BY p.doctor_name)"
     )
-    suspend fun doctorLeaderTotal(since: Long): Int
+    suspend fun doctorLeaderTotal(
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
 
     /** The Live Recent Scans feed: newest scanned item first, with its Rx context. */
     @Query(
@@ -371,11 +476,45 @@ interface PrescriptionDao {
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
         WHERE sm.generic != '' AND IFNULL(p.doctor_specialty, '') != ''
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY p.doctor_specialty, sm.generic
         ORDER BY p.doctor_specialty, count DESC
         """
     )
-    suspend fun genericMatrixRows(): List<GenericMatrixRow>
+    suspend fun genericMatrixRows(
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<GenericMatrixRow>
+
+    /** `get_filter_options`: distinct values actually present in the data. */
+    @Query(
+        "SELECT DISTINCT district FROM prescriptions " +
+            "WHERE IFNULL(district, '') != '' ORDER BY district"
+    )
+    suspend fun filterDistricts(): List<String>
+
+    @Query(
+        "SELECT DISTINCT territory FROM prescriptions " +
+            "WHERE IFNULL(territory, '') != '' ORDER BY territory"
+    )
+    suspend fun filterTerritories(): List<String>
+
+    @Query(
+        "SELECT DISTINCT doctor_specialty FROM prescriptions " +
+            "WHERE IFNULL(doctor_specialty, '') != '' ORDER BY doctor_specialty"
+    )
+    suspend fun filterSpecialties(): List<String>
+
+    @Query(
+        "SELECT DISTINCT mr_id FROM prescriptions " +
+            "WHERE IFNULL(mr_id, '') != '' ORDER BY mr_id"
+    )
+    suspend fun filterMrIds(): List<String>
 
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)

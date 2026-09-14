@@ -10,6 +10,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.FilterOptions
+import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.local.LiveScanFeedRow
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.repo.AnalyticsMetrics
@@ -38,9 +40,12 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private val app = application as MedLenXApp
     private val prescriptionDao = app.graph.database.prescriptionDao()
 
-    /** `days` in the Python; the filter sheet will make this selectable. */
-    private val days = 30
-    private val windowMillis = days * 24L * 60 * 60 * 1000
+    /** The global filter bar's dimensions. Null dimensions contribute no clause. */
+    var filters by mutableStateOf(FilterState.None)
+        private set
+
+    var filterOptions by mutableStateOf(FilterOptions(emptyList(), emptyList(), emptyList(), emptyList()))
+        private set
 
     /** Widget C page size, matching `get_top_doctor_prescribers(limit=10)`. */
     private val pageSize = 10
@@ -132,46 +137,62 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         loadLeaderPage()
     }
 
+    fun setFilters(next: FilterState) {
+        filters = next
+        leaderOffset = 0
+        load()
+    }
+
+    fun clearFilters() = setFilters(FilterState.None)
+
     fun load() {
         viewModelScope.launch {
             error = null
             runCatching {
+                val f = filters
+                filterOptions = FilterOptions(
+                    districts = prescriptionDao.filterDistricts(),
+                    territories = prescriptionDao.filterTerritories(),
+                    specialties = prescriptionDao.filterSpecialties(),
+                    mrIds = prescriptionDao.filterMrIds(),
+                )
                 val now = System.currentTimeMillis()
-                val since = now - windowMillis
-                val prevStart = now - windowMillis * 2
+                val span = filters.days?.let { it * 24L * 60 * 60 * 1000 } ?: now
+                val since = now - span
+                val prevStart = since - span
                 val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
                 val ownLike = "%$ownToken%"
 
-                val itemsTotal = prescriptionDao.itemCountSince(since)
+                val itemsTotal = prescriptionDao.itemCountSince(since, f.district, f.territory, f.specialty, f.mrId)
                 kpis = AnalyticsMetrics.dashboardKpis(
-                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday()),
-                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000),
-                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000),
-                    totalAll = prescriptionDao.prescriptionCountAll(),
-                    scansCur = prescriptionDao.prescriptionCountSince(since),
-                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since),
+                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday(), f.district, f.territory, f.specialty, f.mrId),
+                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId),
+                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId),
+                    totalAll = prescriptionDao.prescriptionCountAll(f.district, f.territory, f.specialty, f.mrId),
+                    scansCur = prescriptionDao.prescriptionCountSince(since, f.district, f.territory, f.specialty, f.mrId),
+                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId),
                     itemsTotal = itemsTotal,
-                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike),
-                    prevItems = prescriptionDao.itemCountBetween(prevStart, since),
-                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike),
-                    topBrand = prescriptionDao.topBrandRow(since),
-                    activeDoctors = prescriptionDao.activeDoctorCount(since),
-                    totalDoctors = prescriptionDao.allDoctorCount(),
+                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike, f.district, f.territory, f.specialty, f.mrId),
+                    prevItems = prescriptionDao.itemCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId),
+                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId),
+                    topBrand = prescriptionDao.topBrandRow(since, f.district, f.territory, f.specialty, f.mrId),
+                    activeDoctors = prescriptionDao.activeDoctorCount(since, f.district, f.territory, f.specialty, f.mrId),
+                    totalDoctors = prescriptionDao.allDoctorCount(f.district, f.territory, f.specialty, f.mrId),
                     ownCompanyName = ownCompany,
                 )
 
                 mostPrescribed = AnalyticsMetrics.mostPrescribed(
-                    prescriptionDao.mostPrescribedRows(since = since, limit = 10),
+                    prescriptionDao.mostPrescribedRows(since = since, limit = 10, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId),
                 )
                 companyShare = AnalyticsMetrics.companyShare(
-                    prescriptionDao.companyShareRows(since = since),
+                    prescriptionDao.companyShareRows(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId),
                 )
                 genericMatrix = AnalyticsMetrics.genericBrandMatrix(
-                    prescriptionDao.genericMatrixRows(),
+                    prescriptionDao.genericMatrixRows(f.district, f.territory, f.specialty, f.mrId),
                 )
-                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since)
+                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
                 loadLeaderPageSync(since, ownLike)
 
@@ -186,12 +207,17 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
+        val f = filters
         leaders = AnalyticsMetrics.doctorLeaders(
             rows = prescriptionDao.doctorLeaderRows(
                 since = since,
                 ownLike = ownLike,
                 limit = pageSize,
                 offset = leaderOffset,
+                district = f.district,
+                territory = f.territory,
+                specialty = f.specialty,
+                mrId = f.mrId,
             ),
             total = leaderTotal,
             limit = pageSize,
@@ -202,7 +228,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private fun loadLeaderPage() {
         viewModelScope.launch {
             runCatching {
-                val since = System.currentTimeMillis() - windowMillis
+                val span = filters.days?.let { it * 24L * 60 * 60 * 1000 }
+                    ?: System.currentTimeMillis()
+                val since = System.currentTimeMillis() - span
                 val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()

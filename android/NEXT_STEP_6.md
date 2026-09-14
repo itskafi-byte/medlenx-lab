@@ -822,3 +822,63 @@ territory / specialty / MR dimensions are still unapplied to every Analytics and
 Team aggregate. Threading them means adding the filter columns to roughly twenty
 queries, which is a change big enough to want its own pass rather than a tail-end
 edit.
+
+---
+
+## FilterSheet — the last gap (this commit)
+
+Threads the global filter bar through every Analytics aggregate.
+
+**`data/local/Filters.kt`** (new) holds `FilterState` (district, territory,
+specialty, mrId, days), `FilterOptions` and `RX_FILTER_SQL`. Fifteen
+`PrescriptionDao` queries gained the four dimensions plus `filterDistricts` /
+`filterTerritories` / `filterSpecialties` / `filterMrIds` for the sheet's
+dropdowns. `FilterSheet.kt` renders the export's four dropdowns, the five
+date-range chips, the live "N filters active" count and Apply/Cancel/Reset. The
+Analytics `FilterBar` badge now reports the real active count instead of the
+hardcoded `2`, and `onOpenFilters` opens the sheet instead of toasting.
+
+### A semantic bug found by executing the SQL
+
+`parity_filters.py` runs **both** filter forms against a real in-memory SQLite
+database — the shipped `(:x IS NULL OR col = :x)` idiom and the Python's
+`_filter_sql` fragment — over 291 filter combinations. The first run failed 130 of
+them, all involving the empty string:
+
+```
+(None, None, None, '', 1, kotlin=119, python=400)
+```
+
+`_filter_sql` guards each clause with a plain `if district:`, and in Python `''` is
+falsy, so a blank contributes **no clause**. `:district IS NULL` does not catch `''`,
+so a blank became a real `p.district = ''` predicate and silently matched only rows
+whose column happens to be empty. Fixed to
+`(:district IS NULL OR :district = '' OR p.district = :district)` in both the shared
+constant and its four inline copies — 16 clauses total.
+
+`days = null` is the Python's "all time"; the VM resolves the window from
+`filters.days` and widens the previous-period comparison to match.
+
+### The harness nearly lied twice
+
+1. `_filter_sql` targets `d.specialty` on the backend's `doctors` table, which
+   Android does not have. The fixture needed a real `doctors` table with
+   `doctor_specialty` mirrored onto the prescription, so the Python runs verbatim
+   and the Android denormalisation is what is actually being compared.
+2. A patch run reported `AssertionError` for the Kotlin files but the harness had
+   already been rewritten to the new form, so it printed **`failures: 0` against
+   SQL that was never written to disk**. Neither Kotlin file had changed. Caught by
+   grepping the files, then verified properly: the harness's clause string is now
+   extracted-and-compared against `RX_FILTER_SQL` parsed out of the Kotlin source
+   (`MATCH: True`), and the four inline copies are asserted identical to the
+   constant. A parity harness must be checked against the shipped code, not assumed
+   to match it.
+
+**Scope note.** The filter bar is wired to Analytics, which is where the export puts
+it. The Team/RSM aggregates keep their own fixed 30-day window — the web's RSM
+endpoints take their own territory/district/specialty parameters rather than the
+global bar's, so applying the global filter there would diverge from the backend.
+
+**Unverified as always:** no compile has run here. The 15 rewritten `@Query`
+methods, the new `RX_FILTER_SQL` concatenation inside annotations, and Room's
+handling of nullable `String?` bind parameters are all unproven until a real build.

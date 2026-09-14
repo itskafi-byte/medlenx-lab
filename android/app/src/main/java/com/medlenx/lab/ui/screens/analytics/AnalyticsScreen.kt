@@ -86,7 +86,11 @@ fun AnalyticsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroBanner()
-        FilterBar(activeCount = 2, onOpenFilters = onOpenFilters, onExport = onExport)
+        FilterBar(
+            activeCount = vm.filters.activeCount,
+            onOpenFilters = onOpenFilters,
+            onExport = onExport,
+        )
 
         SectionHeader(title = "Top Summary KPIs", icon = Icons.Filled.AutoGraph)
         // Two across, matching the export's `gridTemplateColumns:"1fr 1fr"`.
