@@ -251,6 +251,46 @@ data class DoctorTargetRow(
     val visits: Int,
 )
 
+/** Projection for [PrescriptionDao.liveScanRows] — the Live Recent Scans feed. */
+data class LiveScanFeedRow(
+    val createdAt: Long,
+    val prescriptionSource: String,
+    val doctorName: String,
+    val doctorSpecialty: String,
+    val district: String,
+    val upazila: String,
+    val brandName: String,
+    val companyName: String?,
+    val companyVerified: Boolean,
+    val confidenceScore: Double,
+)
+
+/** Projection for [PrescriptionDao.mostPrescribedRows] — widget A. */
+data class MostPrescribedRow(
+    val brandName: String,
+    val generic: String,
+    val companyName: String?,
+    val captureCount: Int,
+)
+
+/** Projection for [PrescriptionDao.companyShareRows] — widget B. */
+data class CompanyShareRow(val companyName: String, val count: Int)
+
+/** Projection for [PrescriptionDao.doctorLeaderRows] — widget C. */
+data class DoctorLeaderRow2(
+    val doctorName: String,
+    val chamber: String,
+    val specialty: String,
+    val district: String,
+    val territory: String,
+    val prescriptions: Int,
+    val totalMeds: Int,
+    val ownMeds: Int,
+)
+
+/** Projection for [PrescriptionDao.topBrandRow]. */
+data class TopBrandRow(val brandName: String, val companyName: String?, val count: Int)
+
 /** Projection for [PrescriptionDao.geoRegionRows] — `get_geo_heatmap`. */
 data class GeoRegionRow(
     val district: String,

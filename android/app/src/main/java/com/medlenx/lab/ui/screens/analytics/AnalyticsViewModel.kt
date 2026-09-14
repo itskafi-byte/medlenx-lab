@@ -1,0 +1,216 @@
+package com.medlenx.lab.ui.screens.analytics
+
+import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.LiveScanFeedRow
+import com.medlenx.lab.data.local.PrescriptionEntity
+import com.medlenx.lab.data.repo.AnalyticsMetrics
+import com.medlenx.lab.data.repo.CompanySlice
+import com.medlenx.lab.data.repo.DashboardKpis
+import com.medlenx.lab.data.repo.DoctorLeader
+import com.medlenx.lab.data.repo.MostPrescribed
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+
+/**
+ * Backs the Analytics dashboard.
+ *
+ * Until now this screen rendered the Figma export's hardcoded arrays
+ * (`AnalyticsData.kt`); it now reads the on-device aggregates ported from
+ * `get_dashboard_kpis`, `get_most_prescribed_medicines`, `get_company_share`
+ * and `get_top_doctor_prescribers`.
+ *
+ * The global filter bar's district / territory / specialty / MR dimensions are
+ * **not** applied yet — the FilterSheet that would set them is still unbuilt, so
+ * every aggregate runs unfiltered over a 30-day window.
+ */
+class AnalyticsViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val app = application as MedLenXApp
+    private val prescriptionDao = app.graph.database.prescriptionDao()
+
+    /** `days` in the Python; the filter sheet will make this selectable. */
+    private val days = 30
+    private val windowMillis = days * 24L * 60 * 60 * 1000
+
+    /** Widget C page size, matching `get_top_doctor_prescribers(limit=10)`. */
+    private val pageSize = 10
+
+    var kpis by mutableStateOf<DashboardKpis?>(null)
+        private set
+    var mostPrescribed by mutableStateOf<List<MostPrescribed>>(emptyList())
+        private set
+    var companyShare by mutableStateOf<List<CompanySlice>>(emptyList())
+        private set
+    var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
+        private set
+
+    /** Total matching doctors, so the pagination caption is real rather than "1–3 of 42". */
+    var leaderTotal by mutableIntStateOf(0)
+        private set
+    var leaderOffset by mutableIntStateOf(0)
+        private set
+
+    var liveScans by mutableStateOf<List<LiveScanFeedRow>>(emptyList())
+        private set
+
+    /** Page size for the Live Recent Scans feed — the export showed 25 per page. */
+    private val livePageSize = 25
+    var liveOffset by mutableIntStateOf(0)
+        private set
+    var liveTotal by mutableIntStateOf(0)
+        private set
+
+    val livePageLabel: String
+        get() = if (liveTotal == 0) "No medicines scanned yet"
+        else "${liveOffset + 1}–${minOf(liveOffset + livePageSize, liveTotal)} of $liveTotal medicines"
+
+    /** Chamber chip state for the live feed. */
+    var chamberFilter by mutableStateOf(ChamberFilter.ALL)
+        private set
+
+    fun setChamberFilter(filter: ChamberFilter) {
+        chamberFilter = filter
+        liveOffset = 0
+    }
+
+    /** The visible slice of the fetched rows, after the chamber filter. */
+    val livePage: List<LiveScanFeedRow>
+        get() = liveScans
+            .filter { chamberFilter.matches(it.prescriptionSource) }
+            .drop(liveOffset)
+            .take(livePageSize)
+
+    val canLivePrev: Boolean get() = liveOffset > 0
+    val canLiveNext: Boolean get() = liveOffset + livePageSize < liveTotal
+
+    fun pageLiveScans(forward: Boolean) {
+        val next = if (forward) liveOffset + livePageSize else liveOffset - livePageSize
+        if (next < 0 || next >= liveTotal) return
+        liveOffset = next
+        viewModelScope.launch {
+            runCatching { liveScans = prescriptionDao.liveScanRows(limit = next + livePageSize) }
+                .onFailure { error = it.message ?: "Could not page the live feed" }
+        }
+    }
+    var recentPrescriptions by mutableStateOf<List<PrescriptionEntity>>(emptyList())
+        private set
+
+    var loaded by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    val leaderPageLabel: String
+        get() {
+            if (leaderTotal == 0) return "No doctors yet"
+            val from = leaderOffset + 1
+            val to = minOf(leaderOffset + pageSize, leaderTotal)
+            return "$from–$to of $leaderTotal"
+        }
+
+    val canPagePrev: Boolean get() = leaderOffset > 0
+    val canPageNext: Boolean get() = leaderOffset + pageSize < leaderTotal
+
+    fun pageLeaders(forward: Boolean) {
+        val next = if (forward) leaderOffset + pageSize else leaderOffset - pageSize
+        if (next < 0 || next >= leaderTotal) return
+        leaderOffset = next
+        loadLeaderPage()
+    }
+
+    fun load() {
+        viewModelScope.launch {
+            error = null
+            runCatching {
+                val now = System.currentTimeMillis()
+                val since = now - windowMillis
+                val prevStart = now - windowMillis * 2
+                val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+                val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
+                    .split(" ").first()
+                val ownLike = "%$ownToken%"
+
+                val itemsTotal = prescriptionDao.itemCountSince(since)
+                kpis = AnalyticsMetrics.dashboardKpis(
+                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday()),
+                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000),
+                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000),
+                    totalAll = prescriptionDao.prescriptionCountAll(),
+                    scansCur = prescriptionDao.prescriptionCountSince(since),
+                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since),
+                    itemsTotal = itemsTotal,
+                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike),
+                    prevItems = prescriptionDao.itemCountBetween(prevStart, since),
+                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike),
+                    topBrand = prescriptionDao.topBrandRow(since),
+                    activeDoctors = prescriptionDao.activeDoctorCount(since),
+                    totalDoctors = prescriptionDao.allDoctorCount(),
+                    ownCompanyName = ownCompany,
+                )
+
+                mostPrescribed = AnalyticsMetrics.mostPrescribed(
+                    prescriptionDao.mostPrescribedRows(since = since, limit = 10),
+                )
+                companyShare = AnalyticsMetrics.companyShare(
+                    prescriptionDao.companyShareRows(since = since),
+                )
+                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since)
+                if (leaderOffset >= leaderTotal) leaderOffset = 0
+                loadLeaderPageSync(since, ownLike)
+
+                liveTotal = prescriptionDao.medicineCount()
+                liveScans = prescriptionDao.liveScanRows(limit = livePageSize)
+                recentPrescriptions = prescriptionDao.observeRecent(limit = 8).first()
+            }.onFailure { e ->
+                error = e.message ?: "Could not load analytics"
+            }
+            loaded = true
+        }
+    }
+
+    private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
+        leaders = AnalyticsMetrics.doctorLeaders(
+            rows = prescriptionDao.doctorLeaderRows(
+                since = since,
+                ownLike = ownLike,
+                limit = pageSize,
+                offset = leaderOffset,
+            ),
+            total = leaderTotal,
+            limit = pageSize,
+            offset = leaderOffset,
+        ).doctors
+    }
+
+    private fun loadLeaderPage() {
+        viewModelScope.launch {
+            runCatching {
+                val since = System.currentTimeMillis() - windowMillis
+                val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+                val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
+                    .split(" ").first()
+                loadLeaderPageSync(since, "%$ownToken%")
+            }.onFailure { error = it.message ?: "Could not page the leaderboard" }
+        }
+    }
+
+    private fun startOfToday(): Long =
+        java.time.LocalDate.now()
+            .atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
+}
+
+class AnalyticsViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        AnalyticsViewModel(application) as T
+}

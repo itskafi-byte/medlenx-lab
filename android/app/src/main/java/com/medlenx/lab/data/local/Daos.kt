@@ -215,6 +215,148 @@ interface PrescriptionDao {
     )
     suspend fun geoRegionRows(since: Long, ownLike: String): List<GeoRegionRow>
 
+    // ---- Analytics aggregates ------------------------------------------
+
+    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions WHERE created_at >= :since")
+    suspend fun prescriptionCountSince(since: Long): Int
+
+    @Query(
+        "SELECT COUNT(DISTINCT id) FROM prescriptions " +
+            "WHERE created_at >= :from AND created_at < :to"
+    )
+    suspend fun prescriptionCountBetween(from: Long, to: Long): Int
+
+    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions")
+    suspend fun prescriptionCountAll(): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE p.created_at >= :since"
+    )
+    suspend fun itemCountSince(since: Long): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name LIKE :ownLike AND p.created_at >= :since"
+    )
+    suspend fun ownItemCountSince(since: Long, ownLike: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name LIKE :ownLike " +
+            "AND p.created_at >= :from AND p.created_at < :to"
+    )
+    suspend fun ownItemCountBetween(from: Long, to: Long, ownLike: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE p.created_at >= :from AND p.created_at < :to"
+    )
+    suspend fun itemCountBetween(from: Long, to: Long): Int
+
+    @Query(
+        "SELECT sm.brand_name AS brandName, sm.company_name AS companyName, COUNT(*) AS count " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE IFNULL(sm.brand_name, '') != '' AND p.created_at >= :since " +
+            "GROUP BY sm.brand_name ORDER BY count DESC LIMIT 1"
+    )
+    suspend fun topBrandRow(since: Long): TopBrandRow?
+
+    @Query(
+        "SELECT COUNT(DISTINCT doctor_name) FROM prescriptions " +
+            "WHERE created_at >= :since AND IFNULL(doctor_name, '') != ''"
+    )
+    suspend fun activeDoctorCount(since: Long): Int
+
+    @Query("SELECT COUNT(DISTINCT doctor_name) FROM prescriptions WHERE IFNULL(doctor_name, '') != ''")
+    suspend fun allDoctorCount(): Int
+
+    /** Widget A: most prescribed brands. */
+    @Query(
+        """
+        SELECT sm.brand_name AS brandName, sm.generic AS generic,
+               sm.company_name AS companyName, COUNT(*) AS captureCount
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since
+        GROUP BY sm.brand_name, sm.company_name
+        ORDER BY captureCount DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun mostPrescribedRows(since: Long, limit: Int): List<MostPrescribedRow>
+
+    /** Widget B: company share of voice, before the Others bucket is formed. */
+    @Query(
+        """
+        SELECT sm.company_name AS companyName, COUNT(*) AS count
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE IFNULL(sm.company_name, '') != ''
+          AND sm.company_name NOT LIKE '%Unknown%'
+          AND sm.company_name NOT LIKE '%Live search failed%'
+          AND p.created_at >= :since
+        GROUP BY sm.company_name
+        ORDER BY count DESC
+        """
+    )
+    suspend fun companyShareRows(since: Long): List<CompanyShareRow>
+
+    /** Widget C: doctor conversion leaderboard, one page. */
+    @Query(
+        """
+        SELECT p.doctor_name AS doctorName, IFNULL(p.chamber, '') AS chamber,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(p.district, '') AS district, IFNULL(p.territory, '') AS territory,
+               COUNT(DISTINCT p.id) AS prescriptions,
+               SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) AS totalMeds,
+               IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds
+        FROM prescriptions p
+        LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.created_at >= :since
+        GROUP BY p.doctor_name
+        ORDER BY prescriptions DESC, totalMeds DESC
+        LIMIT :limit OFFSET :offset
+        """
+    )
+    suspend fun doctorLeaderRows(
+        since: Long,
+        ownLike: String,
+        limit: Int,
+        offset: Int,
+    ): List<DoctorLeaderRow2>
+
+    /** Widget C: total matching doctors, for the pagination caption. */
+    @Query(
+        "SELECT COUNT(*) FROM (SELECT doctor_name FROM prescriptions " +
+            "WHERE created_at >= :since GROUP BY doctor_name)"
+    )
+    suspend fun doctorLeaderTotal(since: Long): Int
+
+    /** The Live Recent Scans feed: newest scanned item first, with its Rx context. */
+    @Query(
+        """
+        SELECT p.created_at AS createdAt,
+               IFNULL(p.prescription_source, '') AS prescriptionSource,
+               p.doctor_name AS doctorName,
+               IFNULL(p.doctor_specialty, '') AS doctorSpecialty,
+               IFNULL(p.district, '') AS district, IFNULL(p.upazila, '') AS upazila,
+               sm.brand_name AS brandName, sm.company_name AS companyName,
+               sm.company_verified AS companyVerified,
+               sm.confidence_score AS confidenceScore
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        ORDER BY p.created_at DESC, sm.id DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun liveScanRows(limit: Int): List<LiveScanFeedRow>
+
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 

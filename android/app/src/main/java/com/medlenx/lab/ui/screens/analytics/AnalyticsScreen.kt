@@ -69,6 +69,7 @@ import com.medlenx.lab.ui.theme.MlxType
  */
 @Composable
 fun AnalyticsScreen(
+    vm: AnalyticsViewModel,
     modifier: Modifier = Modifier,
     onOpenFilters: () -> Unit = {},
     onExport: () -> Unit = {},
@@ -90,7 +91,7 @@ fun AnalyticsScreen(
         SectionHeader(title = "Top Summary KPIs", icon = Icons.Filled.AutoGraph)
         // Two across, matching the export's `gridTemplateColumns:"1fr 1fr"`.
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SummaryKpis.chunked(2).forEach { row ->
+            (vm.kpis?.toKpiData() ?: emptyList()).chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     row.forEach { kpi ->
                         KpiCard(
@@ -115,14 +116,17 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(title = "A. Most Prescribed Medicines — Bar Chart", icon = Icons.Filled.AutoGraph)
-            MostPrescribedBarChart(data = BarData, modifier = Modifier.padding(top = 12.dp))
+            MostPrescribedBarChart(
+                data = vm.mostPrescribed.toBarData(),
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
         MlxCard {
             SectionHeader(title = "B. Company Share of Voice — Donut", icon = Icons.Filled.PieChart)
             ShareOfVoiceDonut(
-                data = DonutData,
-                centreLabel = "SoV 38%",
+                data = vm.companyShare.toDonutData(),
+                centreLabel = vm.companyShare.centreSoVLabel(),
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -130,7 +134,7 @@ fun AnalyticsScreen(
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                DoctorLeaders.forEach { doctor -> DoctorLeaderRowView(doctor) }
+                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor) }
             }
             Row(
                 modifier = Modifier
@@ -139,10 +143,20 @@ fun AnalyticsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = "1–3 of 42", style = MlxType.MicroPill, color = Mlx.Text500)
+                Text(text = vm.leaderPageLabel, style = MlxType.MicroPill, color = Mlx.Text500)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MlxButton(text = "Prev", tone = ButtonTone.Outline, onClick = {})
-                    MlxButton(text = "Next", tone = ButtonTone.Outline, onClick = {})
+                    MlxButton(
+                        text = "Prev",
+                        tone = ButtonTone.Outline,
+                        enabled = vm.canPagePrev,
+                        onClick = { vm.pageLeaders(forward = false) },
+                    )
+                    MlxButton(
+                        text = "Next",
+                        tone = ButtonTone.Outline,
+                        enabled = vm.canPageNext,
+                        onClick = { vm.pageLeaders(forward = true) },
+                    )
                 }
             }
         }
@@ -152,6 +166,14 @@ fun AnalyticsScreen(
                 title = "D. Generic vs Brand Matrix — Stacked Bar by Specialty",
                 icon = Icons.Filled.AutoGraph,
             )
+            // Widget D still renders the export's sample matrix: its aggregate,
+            // get_generic_brand_matrix, is the one widget not yet ported. Saying
+            // so beats showing fabricated specialty numbers as if they were real.
+            Text(
+                text = "Sample data — the generic-vs-brand matrix is not yet computed on device.",
+                style = MlxType.Footnote,
+                color = Mlx.Warn600,
+            )
             SpecialtyStackedBarChart(
                 data = StackedData,
                 series = StackedSeries,
@@ -159,8 +181,16 @@ fun AnalyticsScreen(
             )
         }
 
-        LiveRecentScans()
-        RecentPrescriptions(onSelect = onSelectPrescription)
+        LiveRecentScans(
+            vm = vm,
+            chamberFilter = vm.chamberFilter,
+            onChamberFilter = vm::setChamberFilter,
+            onExportCsv = onExport,
+        )
+        RecentPrescriptions(
+            rows = vm.recentPrescriptions.toRecentRxRows(),
+            onSelect = onSelectPrescription,
+        )
     }
 }
 
@@ -338,7 +368,13 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow) {
  * 1.5s ease-in-out, infinite (index.css `.live-dot::after`).
  */
 @Composable
-fun LiveRecentScans(modifier: Modifier = Modifier) {
+fun LiveRecentScans(
+    vm: AnalyticsViewModel,
+    modifier: Modifier = Modifier,
+    chamberFilter: ChamberFilter = ChamberFilter.ALL,
+    onChamberFilter: (ChamberFilter) -> Unit = {},
+    onExportCsv: () -> Unit = {},
+) {
     var sort by remember { mutableStateOf("Time") }
 
     MlxCard(modifier = modifier, padding = 20.dp) {
@@ -364,7 +400,7 @@ fun LiveRecentScans(modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MlxButton(text = "CSV", tone = ButtonTone.Outline, onClick = {})
+                MlxButton(text = "CSV", tone = ButtonTone.Outline, onClick = onExportCsv)
                 Box(
                     modifier = Modifier
                         .size(28.dp)
@@ -397,8 +433,16 @@ fun LiveRecentScans(modifier: Modifier = Modifier) {
                 style = MlxType.MicroPill.copy(fontWeight = FontWeight.Bold),
                 color = Mlx.Brand400,
             )
-            MlxFilterChip(label = "Hospital", selected = true, onClick = {})
-            MlxFilterChip(label = "Private Chamber", selected = false, onClick = {})
+            MlxFilterChip(
+                label = "Hospital",
+                selected = chamberFilter == ChamberFilter.HOSPITAL,
+                onClick = { onChamberFilter(ChamberFilter.HOSPITAL) },
+            )
+            MlxFilterChip(
+                label = "Private Chamber",
+                selected = chamberFilter == ChamberFilter.PRIVATE,
+                onClick = { onChamberFilter(ChamberFilter.PRIVATE) },
+            )
         }
 
         Row(
@@ -423,7 +467,7 @@ fun LiveRecentScans(modifier: Modifier = Modifier) {
             }
         }
 
-        LiveScans.forEach { scan -> LiveScanRowView(scan) }
+        vm.livePage.toLiveScanRows().forEach { scan -> LiveScanRowView(scan) }
 
         Row(
             modifier = Modifier
@@ -433,13 +477,23 @@ fun LiveRecentScans(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "Showing 1–25 of 1,284 medicines",
+                text = "Showing ${vm.livePageLabel}",
                 style = MlxType.Meta,
                 color = Mlx.Text500,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MlxButton(text = "Prev", tone = ButtonTone.Outline, onClick = {})
-                MlxButton(text = "Next", tone = ButtonTone.Outline, onClick = {})
+                MlxButton(
+                    text = "Prev",
+                    tone = ButtonTone.Outline,
+                    enabled = vm.canLivePrev,
+                    onClick = { vm.pageLiveScans(forward = false) },
+                )
+                MlxButton(
+                    text = "Next",
+                    tone = ButtonTone.Outline,
+                    enabled = vm.canLiveNext,
+                    onClick = { vm.pageLiveScans(forward = true) },
+                )
             }
         }
     }
@@ -558,7 +612,7 @@ private fun LiveScanRowView(scan: LiveScanRow) {
 @Composable
 fun RecentPrescriptions(
     modifier: Modifier = Modifier,
-    rows: List<RecentRxRow> = RecentRx,
+    rows: List<RecentRxRow>,
     onSelect: (RecentRxRow) -> Unit = {},
 ) {
     MlxCard(modifier = modifier) {

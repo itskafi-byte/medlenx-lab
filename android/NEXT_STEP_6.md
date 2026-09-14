@@ -684,3 +684,53 @@ inert controls from Step 5: Prev/Next pagination at lines 144/145 and 441/442, a
 CSV export button at 367, and two filter chips at 400/401 — all
 `onClick = { }`. The pagination header also shows a hardcoded "1–3 of 42".
 Left alone to keep this commit scoped to Team; needs a decision.
+
+---
+
+## Analytics rewrite — the whole screen was on Figma mock data (this commit)
+
+**Correction to earlier reporting.** Steps 6-8 log entries documented mock data in
+the Hub, Rx Audit and Team screens but never flagged that `AnalyticsData.kt` held
+**nine hardcoded collections driving the entire Analytics screen** — `SummaryKpis`,
+`BarData`, `DonutData`, `DoctorLeaders`, `LiveScans`, `RecentRx`, `StackedData`,
+`StackedSeries`, `LiveScanSortColumns`. Step 5 built the layout on the export's
+sample numbers and never wired it. The seven inert `onClick = { }` controls were a
+symptom, not the problem: the pagination read "1–3 of 42" and the feed read
+"Showing 1–25 of 1,284 medicines" because there was no real count to show.
+
+**Ported** `get_dashboard_kpis` (database.py:900), `get_most_prescribed_medicines`
+(1014), `get_company_share` (1051), `get_top_doctor_prescribers` (1093) →
+`data/repo/AnalyticsMetrics.kt`, plus 14 new `PrescriptionDao` queries.
+`AnalyticsViewModel` now feeds the KPI strip, widget A, widget B and widget C;
+leaderboard and live-feed pagination are real (`leaderTotal` / `liveTotal` drive
+the captions and enable/disable Prev and Next). The chamber chips now filter the
+feed against `prescriptions.prescription_source` via `ChamberFilter.matches`,
+which required carrying that column through `LiveScanFeedRow`.
+
+**A third own-company fallback exists.** `get_dashboard_kpis` and
+`get_top_doctor_prescribers` default to `"Square Pharmaceuticals Ltd."`, while
+`get_doctor_tiers` / `get_stewardship_summary` default to
+`"Healthcare Pharmaceuticals Ltd."`. Both are reproduced as written.
+
+**Verification.** `parity_analytics.py` drives the genuine Python through an
+ordered fake cursor that **asserts a SQL marker at each call index**, so a
+reordering fails loudly instead of silently comparing the wrong rows — this
+immediately caught that `get_top_doctor_prescribers` issues its `is_own_company`
+lookup before the count query. 190 comparisons, **0 failures**; three planted
+defects (share denominator, Others threshold, zero-baseline delta) all caught.
+
+**One deliberate normalisation:** the Python passes `company_name` through
+nullable, the Kotlin model is non-null and coerces to `""`. Normalised in the
+comparison; it is a JSON representation difference, not a logic difference.
+
+**Still mock: widget D.** `get_generic_brand_matrix` is not ported, so
+`StackedData` / `StackedSeries` remain the export's sample matrix — now with an
+amber footnote on the card saying so. **The global filter dimensions
+(district / territory / specialty / MR) are not applied to any widget yet**,
+because the FilterSheet that would set them is unbuilt; every aggregate runs
+unfiltered over 30 days. `onOpenFilters` toasts rather than accepting the tap
+silently.
+
+**Unverified as always:** no compile has run. 14 new `@Query` methods, including
+`GROUP BY ... COLLATE NOCASE` and a nested `SELECT COUNT(*) FROM (...)`
+subquery, have never been validated by Room.

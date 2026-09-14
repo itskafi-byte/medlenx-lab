@@ -33,6 +33,8 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
+import com.medlenx.lab.ui.screens.analytics.AnalyticsViewModel
+import com.medlenx.lab.ui.screens.analytics.AnalyticsViewModelFactory
 import com.medlenx.lab.ui.screens.hub.HubScreen
 import com.medlenx.lab.ui.screens.hub.HubViewModel
 import com.medlenx.lab.ui.screens.hub.HubViewModelFactory
@@ -86,6 +88,11 @@ fun MedLenXShell(
     /** Same reasoning as [scanVm] and [hubVm]: the tier filter must survive navigation. */
     val teamVm: TeamViewModel = viewModel(
         factory = TeamViewModelFactory(context.applicationContext as Application),
+    )
+
+    /** Same reasoning as the others: the leaderboard page and filters must survive navigation. */
+    val analyticsVm: AnalyticsViewModel = viewModel(
+        factory = AnalyticsViewModelFactory(context.applicationContext as Application),
     )
     // The scrolling content below is the haze source; the app bar is the haze child.
     val hazeState = rememberHazeState()
@@ -165,7 +172,25 @@ fun MedLenXShell(
                                         navController.navigate(Destination.RxAudit.route)
                                     },
                                 )
-                                dest == Destination.Analytics -> AnalyticsScreen()
+                                dest == Destination.Analytics -> AnalyticsScreen(
+                                    vm = analyticsVm,
+                                    onOpenFilters = {
+                                        // The FilterSheet is Step 9; until it exists,
+                                        // say so rather than accepting the tap silently.
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Global filters are not wired up yet.",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                    },
+                                    onExport = {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "CSV export is unavailable in the offline build.",
+                                            android.widget.Toast.LENGTH_LONG,
+                                        ).show()
+                                    },
+                                )
                                 dest == Destination.Hub -> HubScreen(
                                     vm = hubVm,
                                     onOpenJob = { url -> openUrl(context, url) },
