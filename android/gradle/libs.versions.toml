@@ -3,14 +3,14 @@
 # offers upgrades, take them TOGETHER - AGP, Kotlin, KSP and Room must move as
 # one unit or codegen breaks.
 #
-# Toolchain provenance: AGP / Kotlin / KSP / Room / Compose BOM / androidx and
-# kotlinx versions are copied from Google's own android/nowinandroid sample
-# (libs.versions.toml, last updated 2026-09-02), which is built with exactly
-# this set. Gradle 9.7.1 is the newest stable tag on gradle/gradle and is the
-# version nowinandroid's wrapper pins.
+# Provenance: AGP / Kotlin / KSP / Room / Compose BOM and the androidx + kotlinx
+# versions are copied from Google's own android/nowinandroid sample
+# (gradle/libs.versions.toml, last updated 2026-09-02), which builds with exactly
+# this set. Gradle 9.7.1 is the newest stable tag on gradle/gradle and the version
+# nowinandroid's wrapper pins.
 #
 # WHY THIS SET: Gradle 9.1.0 is the first release that runs on a JVM 25 runtime
-# (gradle/gradle compatibility.adoc), so the old 8.9 pin failed before any
+# (gradle/gradle compatibility.adoc), so the previous 8.9 pin failed before any
 # Kotlin was compiled on Android Studio's bundled JDK 25.
 # ---------------------------------------------------------------------------
 [versions]
@@ -30,8 +30,54 @@ coil = "2.7.0"
 datastore = "1.2.0"
 exifinterface = "1.3.7"
 osmdroid = "6.1.20"
-haze = "1.7.3"          # newest stable in the 1.x line; 2.0 renames the whole API
+haze = "1.7.3"          # newest stable in the 1.x line; haze 2.0 renames the whole API
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
 
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
+# Backdrop blur for the app bar (CSS backdrop-filter has no Compose equivalent).
+# Group/version verified against the repo tag 1.0.2: GROUP=dev.chrisbanes.haze.
+haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
