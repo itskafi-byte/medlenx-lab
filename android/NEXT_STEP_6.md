@@ -290,3 +290,36 @@ so a sibling `rx-audit` destination would get an empty scan. Sharing the result
 means hoisting the ViewModel into `MedLenXShell` and passing it down to both
 screens - a signature change across the shell, worth doing deliberately rather than
 tacked on. Also still missing from Step 6: `DoctorPitchCard` (App.tsx:898-991).
+
+## Step 6, part 2: DoctorPitchCard + a blocker found (2026-09-14)
+
+`ui/screens/rx/DoctorPitchCard.kt` ports App.tsx:898-991: the gradient header with
+its close button, the compliance pills, the competitor-vs-own compare grid, the
+price-position note, the bioequivalence box, the pitch script, and the PDF / copy
+footer. Self-contained overlay (scrim + bottom sheet at 88% height) so any screen
+can show it from a flag.
+
+The bioequivalence paragraph is a **parameter**, not the export's hardcoded copy:
+the export asserts DGDA registration and full bioequivalence certification for
+products that may have neither, and shipping that verbatim would put an
+unverifiable clinical claim in front of a doctor.
+
+### BLOCKER: nothing constructs an EnrichedMedicine
+
+Wiring the audit route is blocked on a missing stage, not on navigation.
+
+`ScanViewModel.kt:164` does `cards = result.medicines.map { it.toCardData() }`,
+mapping the raw `VlMedicine` straight to the display card. `EnrichedMedicine` is
+**never constructed anywhere in the codebase** - the
+`EnrichedMedicine.toCardData()` overload at Verification.kt:769 has no caller,
+because no enrichment ever produces one.
+
+So the app currently skips MedEx catalogue matching entirely: no company
+verification, no NEML / DGDA / TRIPS flags, no substitution. `RxAuditScreen` is
+correctly typed against `EnrichedMedicine`, which is the right model for what it
+renders - but there is no real data to feed it yet.
+
+The missing stage is `app/medicine_matcher.py` (362 lines), still unported. Wiring
+the route before that would mean fabricating `EnrichedMedicine` instances, i.e.
+shipping mock data into a compliance screen. Recommended order: port
+`medicine_matcher.py`, populate `ScanUiState` with the enriched list, then route.
