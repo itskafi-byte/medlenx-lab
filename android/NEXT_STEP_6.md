@@ -262,3 +262,31 @@ FastAPI backend. Documented in PHash.kt.
 
 Still unported: `database.py` (2,528), `pharma_hub.py` (589), `medicine_matcher.py`
 (362), `intelligence.py` (271).
+
+## Step 6, part 1: RxAuditScreen (2026-09-14)
+
+`ui/screens/rx/RxAuditScreen.kt` ports Figma `RxAuditSummary` (App.tsx:778-897) -
+header card, the four filter pills, the clinical strip with its therapeutic-class
+bar, the duplicate-fraud notice, the item cards, and the market-share footer with
+both export buttons. Everything is derived from the real scan result via
+`data/repo/RxAudit`, not the export's mock array.
+
+Two deliberate departures from the mock, both documented in the file's KDoc:
+- The export renders "Duplicate Rx Detected" on every *competitor* row
+  (App.tsx:857), a placeholder bug unrelated to duplication. Driven by a real
+  `duplicateOfRxIds` list instead.
+- The therapeutic-class bar is computed from the medicines' own classes rather
+  than the hardcoded 33/17/17/17/16.
+
+The Figma's two confidence thresholds are both reproduced and are now named in
+`data/model/Confidence.kt`: 85 colours the badge, 80 drives the "<80%" filter, the
+#FFF7ED row wash and the "Verify against Medex" link.
+
+### NOT DONE - routing and state
+
+The screen is **not reachable yet**. `ScanScreen` builds its own `ScanViewModel`
+with `viewModel(factory = ...)`, and each NavHost entry has its own ViewModelStore,
+so a sibling `rx-audit` destination would get an empty scan. Sharing the result
+means hoisting the ViewModel into `MedLenXShell` and passing it down to both
+screens - a signature change across the shell, worth doing deliberately rather than
+tacked on. Also still missing from Step 6: `DoctorPitchCard` (App.tsx:898-991).

@@ -24,6 +24,22 @@ object ConfidenceBands {
 
     /** Below this the scan needs a human: amber, "NN% manual flag". */
     const val MANUAL_FLAG_BELOW_PERCENT = 70
+
+    /**
+     * The Rx Audit drawer uses a *second, looser* threshold, and it is not a
+     * contradiction of the badge - they answer different questions.
+     *
+     *  - 85 decides how the confidence badge is coloured ([confidenceBand]).
+     *  - 80 decides which rows the drawer treats as needing follow-up: it drives the
+     *    "<80%" filter pill, the #FFF7ED row wash, and the "Verify against Medex"
+     *    link (App.tsx:844, 866, 868).
+     *
+     * Both come from the web app, which shows a caption reading "AI Guess <80%"
+     * (templates/index.html:320) while its ConfBadge flips at 85. A row at 82% is
+     * therefore emerald-badged *and* flagged for verification, which is intentional
+     * and matches what the rep sees on the web.
+     */
+    const val AUDIT_FOLLOW_UP_BELOW_PERCENT = 80
 }
 
 /** The three confidence states the UI must keep visually distinct. */
@@ -35,3 +51,11 @@ fun confidenceBand(percent: Int): ConfidenceBand = when {
     percent < ConfidenceBands.MANUAL_FLAG_BELOW_PERCENT -> ConfidenceBand.ManualFlag
     else -> ConfidenceBand.AiGuess
 }
+
+/**
+ * Whether the audit drawer flags this row for follow-up - the "<80%" filter, the
+ * orange row wash and the "Verify against Medex" link. Deliberately *not* the same
+ * question as [confidenceBand]; see [ConfidenceBands.AUDIT_FOLLOW_UP_BELOW_PERCENT].
+ */
+fun needsAuditFollowUp(percent: Int): Boolean =
+    percent < ConfidenceBands.AUDIT_FOLLOW_UP_BELOW_PERCENT
