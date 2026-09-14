@@ -29,6 +29,15 @@ interface MedexDao {
     @Query("SELECT * FROM medex_products WHERE company = :company LIMIT :limit")
     suspend fun byCompany(company: String, limit: Int = 24): List<MedexEntity>
 
+    /**
+     * The whole catalogue, for building the in-memory matcher index.
+     *
+     * 25k rows is a few MB and is read once per process; MedicineMatcher needs every
+     * brand key to do fuzzy lookup, so there is no narrower query that serves it.
+     */
+    @Query("SELECT * FROM medex_products")
+    suspend fun all(): List<MedexEntity>
+
     @Query("SELECT DISTINCT company FROM medex_products WHERE company != '' ORDER BY company")
     suspend fun companies(): List<String>
 

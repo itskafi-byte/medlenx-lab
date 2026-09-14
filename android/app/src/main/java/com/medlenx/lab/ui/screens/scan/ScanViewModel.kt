@@ -10,9 +10,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
 import com.medlenx.lab.data.model.VlScanResult
+import com.medlenx.lab.data.repo.MedicineEnricher
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,6 +38,12 @@ data class ScanUiState(
     val error: String? = null,
     val result: VlScanResult? = null,
     val geo: GeoStripState = GeoStripState(),
+
+    /**
+     * Catalogue-resolved medicines. Populated by [MedicineEnricher] when the read
+     * completes; the raw VL result stays untouched above.
+     */
+    val enriched: List<EnrichedMedicine> = emptyList(),
 
     /** Editable copies made when the read completes; the VL result stays untouched. */
     val doctor: DoctorVerification = DoctorVerification(),
@@ -140,7 +148,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * The VL result is kept verbatim in [ScanUiState.result] for provenance; the doctor
      * and medicine copies here are the editable ones the panels bind to.
      */
-    private fun enterVerification(result: VlScanResult) {
+    private suspend fun enterVerification(result: VlScanResult) {
         val d = result.doctor
         state = state.copy(
             phase = ScanPhase.VerifyDoctor,
@@ -162,6 +170,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 territory = d.territory.ifBlank { state.geo.territory },
             ),
             cards = result.medicines.map { it.toCardData() },
+            enriched = MedicineEnricher.enrich(
+                medicines = result.medicines,
+                index = scanRepository.medexIndex(),
+            ),
         )
     }
 

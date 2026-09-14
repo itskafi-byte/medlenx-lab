@@ -10,6 +10,8 @@ import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.remote.VlOutcome
 import com.medlenx.lab.util.Bengali
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -134,4 +136,18 @@ class ScanRepository(
     fun recentPrescriptions(limit: Int = 10) = prescriptionDao.observeRecent(limit)
 
     suspend fun searchCatalogue(query: String, limit: Int = 24) = medexDao.search(query, limit)
+
+    /**
+     * The MedEx matcher index, built once and cached for the process lifetime.
+     *
+     * This is the hook the class KDoc referred to as "layered on later" - the matcher
+     * now exists, so the pass-through is replaced with a real index.
+     */
+    @Volatile
+    private var cachedIndex: MedexIndex? = null
+
+    suspend fun medexIndex(): MedexIndex =
+        cachedIndex ?: withContext(Dispatchers.IO) {
+            MedexIndex(medexDao.all().map { it.toProduct() }).also { cachedIndex = it }
+        }
 }
