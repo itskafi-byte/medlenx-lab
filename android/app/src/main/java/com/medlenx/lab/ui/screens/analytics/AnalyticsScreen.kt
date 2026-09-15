@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -181,7 +182,7 @@ fun AnalyticsScreen(
         LiveRecentScans(
             vm = vm,
             chamberFilter = vm.chamberFilter,
-            onChamberFilter = vm::setChamberFilter,
+            onChamberFilter = vm::updateChamberFilter,
             onExportCsv = onExport,
         )
         RecentPrescriptions(
@@ -192,7 +193,7 @@ fun AnalyticsScreen(
 }
 
 @Composable
-private fun Spacer1Cell() {
+private fun RowScope.Spacer1Cell() {
     Box(modifier = Modifier.weight(1f))
 }
 

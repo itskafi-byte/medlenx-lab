@@ -115,7 +115,7 @@ fun SettingsScreen(
             FieldLabel("Employee ID")
             MlxTextField(
                 value = vm.employeeId,
-                onValueChange = vm::setEmployeeId,
+                onValueChange = vm::updateEmployeeId,
                 placeholder = "MR001",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -123,7 +123,7 @@ fun SettingsScreen(
             FieldLabel("Full Name")
             MlxTextField(
                 value = vm.fullName,
-                onValueChange = vm::setFullName,
+                onValueChange = vm::updateFullName,
                 placeholder = "Your name",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -131,7 +131,7 @@ fun SettingsScreen(
             FieldLabel("Division")
             MlxTextField(
                 value = vm.division,
-                onValueChange = vm::setDivision,
+                onValueChange = vm::updateDivision,
                 placeholder = "Dhaka",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -139,7 +139,7 @@ fun SettingsScreen(
             FieldLabel("Designated Territory / Zone")
             MlxTextField(
                 value = vm.territory,
-                onValueChange = vm::setTerritory,
+                onValueChange = vm::updateTerritory,
                 placeholder = "Dhaka South, Chittagong Metro...",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -147,7 +147,7 @@ fun SettingsScreen(
             FieldLabel("Assigned Product Portfolio")
             MlxTextField(
                 value = vm.portfolio,
-                onValueChange = vm::setPortfolio,
+                onValueChange = vm::updatePortfolio,
                 placeholder = "Cardiology, Gastroenterology",
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -164,7 +164,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { vm.setRole(r) }
+                            .clickable { vm.updateRole(r) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

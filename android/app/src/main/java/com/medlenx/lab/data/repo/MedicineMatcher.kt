@@ -361,7 +361,7 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
             val kLen = key.length
             // Length sanity: 'nepa' must never match 'epa'-style stubs or very long
             // unrelated names. The ratio cannot exceed 2*min/(a+b) anyway.
-            if (kotlin.math.abs(kLen - qLen) > maxOf(3, qLen * 0.5)) continue
+            if (kotlin.math.abs(kLen - qLen) > maxOf(3.0, qLen * 0.5)) continue
             if ((2.0 * minOf(kLen, qLen)) / (kLen + qLen) < minScore) continue
             // A different first letter almost always means a different drug ('Nepa'
             // must not collapse onto the 3-letter stub 'Epa'). Only tolerated for an

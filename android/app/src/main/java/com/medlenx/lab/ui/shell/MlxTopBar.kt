@@ -56,6 +56,9 @@ private const val SEARCH_PLACEHOLDER =
 private val AppBarHaze = HazeStyle(
     backgroundColor = Color.White.copy(alpha = 0.92f),
     blurRadius = 12.dp,
+    // Names the nullable-tint overload explicitly; without it both HazeStyle
+    // constructors are applicable and resolution is ambiguous.
+    tint = null,
 )
 
 /** Live connection + sync state shown as chips in the app bar. */

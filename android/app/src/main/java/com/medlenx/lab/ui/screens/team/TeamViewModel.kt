@@ -120,7 +120,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
     var mapMode by mutableStateOf(MapMode.SOV)
         private set
 
-    fun setMapMode(mode: MapMode) {
+    fun updateMapMode(mode: MapMode) {
         mapMode = mode
     }
 
@@ -133,7 +133,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setTierFilter(tier: String) {
+    fun updateTierFilter(tier: String) {
         tierFilter = tier
     }
 
@@ -162,6 +162,8 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
 
                 val centroids = app.graph.locationRepository.geo().districts
                     .mapValues { Centroid(it.value.lat, it.value.lng) }
+                // Same `%token%` own-brand matcher the tiering query above uses.
+                val ownLike = "%$ownToken%"
                 geoRegions = TeamMetrics.geoHeatmap(
                     rows = prescriptionDao.geoRegionRows(since = since, ownLike = ownLike),
                     centroids = centroids,

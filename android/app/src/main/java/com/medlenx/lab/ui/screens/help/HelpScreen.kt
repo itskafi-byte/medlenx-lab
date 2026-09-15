@@ -71,7 +71,7 @@ class HelpViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }.onFailure {
                 error = it.message ?: "Could not queue the report"
-                return@runCatching
+                return@launch
             }
             queued = true
         }

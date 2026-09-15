@@ -64,12 +64,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     var error by mutableStateOf<String?>(null)
         private set
 
-    fun setCompany(v: String) { company = v }
-    fun setEmployeeId(v: String) { employeeId = v }
-    fun setFullName(v: String) { fullName = v }
-    fun setDivision(v: String) { division = v }
-    fun setTerritory(v: String) { territory = v }
-    fun setPortfolio(v: String) { portfolio = v }
+    fun updateEmployeeId(v: String) { employeeId = v }
+    fun updateFullName(v: String) { fullName = v }
+    fun updateDivision(v: String) { division = v }
+    fun updateTerritory(v: String) { territory = v }
+    fun updatePortfolio(v: String) { portfolio = v }
 
     fun onCompanyQuery(q: String) {
         companyQuery = q
@@ -80,7 +79,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         companyQuery = ""
     }
 
-    fun setRole(r: String) {
+    fun updateRole(r: String) {
         role = if (r in roles) r else roles.first()
     }
 
@@ -151,7 +150,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 profileDao.saveTargets(rows)
             }.onFailure {
                 error = it.message ?: "Could not save the officer card"
-                return@runCatching
+                return@launch
             }
             saved = true
             load()

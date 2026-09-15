@@ -87,7 +87,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     var chamberFilter by mutableStateOf(ChamberFilter.ALL)
         private set
 
-    fun setChamberFilter(filter: ChamberFilter) {
+    fun updateChamberFilter(filter: ChamberFilter) {
         chamberFilter = filter
         liveOffset = 0
     }
@@ -137,13 +137,20 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         loadLeaderPage()
     }
 
-    fun setFilters(next: FilterState) {
+    fun updateFilters(next: FilterState) {
         filters = next
         leaderOffset = 0
         load()
     }
 
-    fun clearFilters() = setFilters(FilterState.None)
+    fun clearFilters() = updateFilters(FilterState.None)
+
+    init {
+        // Without this the dashboard is empty until the user opens the FilterSheet
+        // and applies a filter, because `load()` is otherwise only called from
+        // `updateFilters`.
+        load()
+    }
 
     fun load() {
         viewModelScope.launch {

@@ -892,3 +892,112 @@ global bar's, so applying the global filter there would diverge from the backend
 **Unverified as always:** no compile has run here. The 15 rewritten `@Query`
 methods, the new `RX_FILTER_SQL` concatenation inside annotations, and Room's
 handling of nullable `String?` bind parameters are all unproven until a real build.
+
+---
+
+## First real compile — what the build actually found
+
+The "no compile has run here" caveat that closed every previous section is no
+longer hypothetical. The branch was downloaded and built in Android Studio
+(`:app:compileDebugKotlin`), and it failed with **~60 errors**. Static auditing
+across nine steps had not predicted a single one of them. Every finding below
+came from the compiler, not from a re-read of the source.
+
+### Redeclarations (5) — the class of error no audit was looking for
+
+Kotlin forbids two top-level declarations with the same name in one package, and
+`data/model/Catalogue.kt` had grown stale duplicates of models that later got
+their own files:
+
+| Name | Stale copy | Live copy |
+|---|---|---|
+| `TripsMolecule` | `Catalogue.kt` | `RegulatoryData.kt` |
+| `HealthDay` | `Catalogue.kt` | `HubData.kt` |
+| `PharmaJob` | `Catalogue.kt` | `HubData.kt` |
+| `NewsItem` | `Catalogue.kt` | `NewsData.kt` |
+| `MarketShare` | `RxAudit.kt` | `AnalyticsMetrics.kt` |
+
+The four `Catalogue.kt` copies were deleted (`NemlEntry`, `DgdaEntry` and
+`HealthDayFile` went with them — all three were already dead). `RxAudit.kt`'s
+`MarketShare` was renamed to **`RxMarketShare`**: it is a different shape from the
+Analytics one (per-prescription own/competitor split vs. a dashboard percentage),
+and its only caller uses field access, so the rename needed no call-site changes.
+
+These duplicates also produced *misleading* errors elsewhere — `PharmaJob.tags`,
+`.education`, `.type`, `.division`, `.postedDaysAgo` and `NewsItem.tags` all
+reported "unresolved reference" purely because the stale class was winning
+resolution. Fixing the redeclaration cleared eleven errors at once.
+
+### JVM signature clashes (16)
+
+Every ViewModel exposed a `var x by mutableStateOf(...) private set` **and** a
+`fun setX(...)`. Both compile to `setX(...)V`, so each pair was a platform
+declaration clash. All 16 were renamed `set*` → `update*` with call sites updated
+in `AnalyticsScreen`, `HubScreen`, `SettingsScreen`, `TeamScreen` and
+`MedLenXShell`. `SettingsViewModel.setCompany` was dead (`selectCompany` is the
+live path) and was deleted instead of renamed.
+
+### Everything else the build caught
+
+- `maxOf(3, qLen * 0.5)` — `Int` vs `Double`; now `maxOf(3.0, ...)`.
+- `Icons.Filled.Description` used without its import.
+- `PendingScreen`'s `when (destination)` was not exhaustive once `RxAudit` was added.
+- `Modifier.weight` used in `Spacer1Cell()` outside a `RowScope`; now an extension.
+- `return@runCatching` inside a `.onFailure { }` lambda — not a label, *and* wrong
+  in intent: returning from the `onFailure` lambda would still have fallen through
+  to `queued = true` / `saved = true`. Both became `return@launch`.
+- `SectionHeader(trailing = MlxButton(...))` — `trailing` is
+  `@Composable (() -> Unit)?`, not a call result.
+- `ScanProgress.NeedsKey` — the member is `NeedsApiKey`.
+- `MlxCard(padding = PaddingValues(12.dp))` — `padding` is a `Dp`. Three sites.
+- `(d.sov / 100f).coerceIn(0f, 1f)` — `Double / Float` stays `Double`. Five sites.
+- `HazeStyle(backgroundColor =, blurRadius =)` — ambiguous between the
+  `tints: List<HazeTint>` and `tint: HazeTint?` overloads; `tint = null` picks one.
+- `geoRegionRows(ownLike = ownLike)` referenced a variable that was never declared.
+- `RecentPrescriptions` called without its required `rows`.
+- Missing `remember` / `height` imports in `SearchOverlay.kt`.
+
+### Two runtime bugs the build surfaced indirectly
+
+1. **`AnalyticsViewModel` had no `init` block.** `load()` was only called from
+   `updateFilters`, so the Analytics tab rendered empty until the user opened the
+   FilterSheet and applied a filter. Added `init { load() }`.
+2. **The Jobs keyword search was missing.** `jobQuery` fed
+   `PharmaHub.pharmaJobs(q = ...)` but nothing could set it. `App.tsx:1465` does
+   have the box (`"Company, city, keyword..."`), so the field was added to the
+   Jobs tab — a truncation closed, not just a dead-code warning silenced.
+
+### Verification method used here (and its limits)
+
+Five checkers were written and **each was mutation-tested** — a defect was planted
+in the source and the checker had to catch it, then the source was restored:
+
+- duplicate top-level declarations → **0 real** (3 extension-receiver false positives)
+- `var`/`setX` JVM signature clashes → **0**
+- DAO calls that do not exist on the interface → **0 missing of 52 distinct calls**
+- unused imports / invalid labelled returns / brace-depth drift vs HEAD → **0**
+- named-argument mismatches and missing required args → **0**
+
+Two checker bugs were found *by the mutation tests*, not by reading: the brace
+counter mis-parsed a nested string template (`"${field.replace("\"", ...)}"`), and
+the argument checker treated `->` as a generic `>` closing bracket, plus it
+skipped fully-qualified call sites entirely. Without planting defects, all three
+would have reported a clean tree while checking nothing.
+
+**Still unverified.** No compile has run in this sandbox (no JVM is obtainable
+here). These five checkers cover redeclarations, signature clashes, DAO methods,
+imports and named arguments — they are not a type checker, and cannot see
+Composable-scope errors, Room/KSP codegen, or generic inference.
+
+### Known functional gaps (not compile errors, deliberately not silently fixed)
+
+- **`ScanRepository.saveVerified()` is never called.** It is fully implemented and
+  writes both `prescriptions` and `scanned_medicines`, but `ScanViewModel.save()`
+  only builds a local `SavedReceipt` with a generated Rx number. Nothing in the
+  app persists a prescription, so Analytics, Team/RSM, Hub TRIPS and every recent
+  list read empty tables. This is the largest gap in the build and needs a
+  decision before it is wired.
+- `JobBoard.departments` is computed by `PharmaHub` but never rendered. The Figma
+  export's "All departments" select is decorative (one option), so this is a
+  facet with no UI rather than a lost filter.
+- CSV/PDF export still toasts that it is unavailable offline.

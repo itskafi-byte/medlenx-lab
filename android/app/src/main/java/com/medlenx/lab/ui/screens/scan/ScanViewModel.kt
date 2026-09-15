@@ -154,7 +154,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     error = progress.message,
                 )
 
-                ScanProgress.NeedsKey -> state = state.copy(phase = ScanPhase.NeedsKey)
+                ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
                 else -> Unit
             }
         }

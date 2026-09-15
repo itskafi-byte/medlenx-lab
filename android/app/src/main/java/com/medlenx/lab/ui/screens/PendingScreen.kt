@@ -26,6 +26,7 @@ fun PendingScreen(destination: Destination, modifier: Modifier = Modifier) {
                 Destination.Team -> "RSM Command — Step 8 (map, tiers, leaderboard, targets, off-territory, stewardship)."
                 Destination.Settings -> "Enterprise settings & officer profile — Step 9. Help & Guide is reached from here."
                 Destination.Help -> "Interactive scan guide, error escalation, BMDC & DGDA reference — Step 9."
+                Destination.RxAudit -> "Prescription Audit Summary for the last scanned prescription."
             },
             style = MlxType.Meta,
         )

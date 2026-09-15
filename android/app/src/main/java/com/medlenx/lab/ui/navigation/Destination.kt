@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.ui.graphics.vector.ImageVector
 

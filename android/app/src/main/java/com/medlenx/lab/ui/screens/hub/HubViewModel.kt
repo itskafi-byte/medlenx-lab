@@ -122,7 +122,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     /** The rows the index tab lists: search hits when querying, else the slice. */
     fun indexRows(): List<MedexProduct> = searchResults ?: browse().results
 
-    fun setBrowseCategory(value: String) {
+    fun updateBrowseCategory(value: String) {
         browseCategory = value
         searchResults = null
     }
@@ -168,7 +168,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setTripsDays(days: Int) {
+    fun updateTripsDays(days: Int) {
         tripsDays = days
         viewModelScope.launch { loadScannedRows() }
     }
@@ -205,9 +205,9 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setJobCategory(value: String) { jobCategory = value }
-    fun setJobQuery(value: String) { jobQuery = value }
-    fun setJobLocation(value: String) { jobLocation = value }
+    fun updateJobCategory(value: String) { jobCategory = value }
+    fun updateJobQuery(value: String) { jobQuery = value }
+    fun updateJobLocation(value: String) { jobLocation = value }
 }
 
 class HubViewModelFactory(

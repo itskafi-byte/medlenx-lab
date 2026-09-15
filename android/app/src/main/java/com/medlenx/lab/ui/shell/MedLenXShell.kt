@@ -34,6 +34,7 @@ import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
 import com.medlenx.lab.ui.screens.analytics.FilterSheet
+import com.medlenx.lab.ui.screens.analytics.toRecentRxRows
 import com.medlenx.lab.ui.screens.help.HelpScreen
 import com.medlenx.lab.ui.screens.help.HelpViewModel
 import com.medlenx.lab.ui.screens.help.HelpViewModelFactory
@@ -205,6 +206,7 @@ fun MedLenXShell(
                                     onOpenAudit = {
                                         navController.navigate(Destination.RxAudit.route)
                                     },
+                                    recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(),
                                 )
                                 Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
@@ -342,7 +344,7 @@ fun MedLenXShell(
                     options = analyticsVm.filterOptions,
                     initial = analyticsVm.filters,
                     onApply = {
-                        analyticsVm.setFilters(it)
+                        analyticsVm.updateFilters(it)
                         filterOpen = false
                     },
                     onClose = { filterOpen = false },

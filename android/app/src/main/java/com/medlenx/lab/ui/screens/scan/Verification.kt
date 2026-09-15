@@ -715,6 +715,7 @@ fun ScanSavedSection(
     onScanAnother: () -> Unit,
     onOpenAudit: () -> Unit,
     modifier: Modifier = Modifier,
+    recentRows: List<com.medlenx.lab.ui.screens.analytics.RecentRxRow> = emptyList(),
     onSelectPrescription: (com.medlenx.lab.ui.screens.analytics.RecentRxRow) -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -761,7 +762,10 @@ fun ScanSavedSection(
         }
 
         // App.tsx:744 — the export renders the shared list under the success card.
-        com.medlenx.lab.ui.screens.analytics.RecentPrescriptions(onSelect = onSelectPrescription)
+        com.medlenx.lab.ui.screens.analytics.RecentPrescriptions(
+            rows = recentRows,
+            onSelect = onSelectPrescription,
+        )
     }
 }
 

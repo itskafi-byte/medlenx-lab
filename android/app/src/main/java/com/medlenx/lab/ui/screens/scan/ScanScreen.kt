@@ -68,6 +68,7 @@ fun ScanScreen(
     vm: ScanViewModel,
     onOpenAudit: () -> Unit,
     modifier: Modifier = Modifier,
+    recentRows: List<com.medlenx.lab.ui.screens.analytics.RecentRxRow> = emptyList(),
 ) {
     val context = LocalContext.current
     val state = vm.state
@@ -182,6 +183,7 @@ fun ScanScreen(
                 (state.receipt?.rxNumber.orEmpty()),
             onScanAnother = vm::scanAnother,
             onOpenAudit = onOpenAudit,
+            recentRows = recentRows,
             modifier = modifier.padding(top = topInset),
         )
 

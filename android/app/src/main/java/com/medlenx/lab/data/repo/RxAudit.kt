@@ -45,7 +45,7 @@ object RxAudit {
      * loosely; with no own company configured everything is a competitor, which is
      * what the web drawer shows before the rep picks a company.
      */
-    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): MarketShare {
+    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): RxMarketShare {
         val ownBrands = mutableListOf<String>()
         val competitorBrands = mutableListOf<String>()
         for (med in medicines) {
@@ -56,7 +56,7 @@ object RxAudit {
             }
         }
         val total = medicines.size
-        return MarketShare(
+        return RxMarketShare(
             ownCompany = ownCompany,
             totalMedicines = total,
             ownCount = ownBrands.size,
@@ -153,7 +153,7 @@ object RxAudit {
 }
 
 /** Own-vs-competitor summary for one prescription. Mirrors `build_market_share`. */
-data class MarketShare(
+data class RxMarketShare(
     val ownCompany: String,
     val totalMedicines: Int,
     val ownCount: Int,

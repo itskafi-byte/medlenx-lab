@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -292,7 +291,7 @@ fun TeamLeaderboardSection(
 
     MlxCard {
         SectionHeader(title = "Team Leaderboard", icon = Icons.Filled.EmojiEvents)
-        MlxCard(padding = PaddingValues(12.dp), borderColor = Mlx.Brand100) {
+        MlxCard(padding = 12.dp, borderColor = Mlx.Brand100) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -332,7 +331,7 @@ fun TeamLeaderboardSection(
             Spacer(Modifier.height(MlxD.Space3))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ProgressTrack(
-                    progress = (sov / 100f).coerceIn(0f, 1f),
+                    progress = (sov.toFloat() / 100f).coerceIn(0f, 1f),
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(MlxD.Space2))
@@ -417,7 +416,7 @@ fun TeamTargetsSection(
                     Spacer(Modifier.height(MlxD.Space1))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ProgressTrack(
-                            progress = (b.percent / 100f).coerceIn(0f, 1f),
+                            progress = (b.percent.toFloat() / 100f).coerceIn(0f, 1f),
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(MlxD.Space2))
@@ -478,7 +477,7 @@ fun TeamTargetsSection(
                     Spacer(Modifier.height(MlxD.Space1))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ProgressTrack(
-                            progress = (pct / 100f).coerceIn(0f, 1f),
+                            progress = (pct.toFloat() / 100f).coerceIn(0f, 1f),
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(MlxD.Space2))

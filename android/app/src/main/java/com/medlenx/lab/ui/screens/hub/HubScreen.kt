@@ -132,13 +132,15 @@ private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
             SectionHeader(
                 title = "Industry News",
                 icon = Icons.Filled.Article,
-                trailing = MlxButton(
-                    text = if (vm.newsLoading) "Refreshing…" else "Refresh",
-                    onClick = vm::refreshNews,
-                    icon = Icons.Filled.Refresh,
-                    enabled = !vm.newsLoading,
-                    textStyle = MlxType.Meta,
-                ),
+                trailing = {
+                    MlxButton(
+                        text = if (vm.newsLoading) "Refreshing…" else "Refresh",
+                        onClick = vm::refreshNews,
+                        icon = Icons.Filled.Refresh,
+                        enabled = !vm.newsLoading,
+                        textStyle = MlxType.Meta,
+                    )
+                },
             )
             Text(
                 text = if (feed == null) {
@@ -339,7 +341,7 @@ private fun TripsTab(vm: HubViewModel) {
                     MlxFilterChip(
                         label = "$d days",
                         selected = vm.tripsDays == d,
-                        onClick = { vm.setTripsDays(d) },
+                        onClick = { vm.updateTripsDays(d) },
                     )
                 }
             }
@@ -510,7 +512,7 @@ private fun DrugIndexTab(vm: HubViewModel) {
                     MlxFilterChip(
                         label = label,
                         selected = vm.browseCategory == key,
-                        onClick = { vm.setBrowseCategory(key) },
+                        onClick = { vm.updateBrowseCategory(key) },
                     )
                 }
             }
@@ -938,6 +940,17 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
 
         MlxCard {
             Text("Filter roles", style = MlxType.SectionLabel)
+            // App.tsx:1465 - the keyword box. `jobQuery` already feeds
+            // PharmaHub.pharmaJobs(q = ...); without a field to set it the ported
+            // filter existed but could never be driven from the UI.
+            MlxTextField(
+                value = vm.jobQuery,
+                onValueChange = vm::updateJobQuery,
+                placeholder = "Company, city, keyword...",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = MlxD.Space2),
+            )
             FlowRowCompat(
                 modifier = Modifier.padding(top = MlxD.Space2),
                 horizontalSpacing = MlxD.Space2,
@@ -946,13 +959,13 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                 MlxFilterChip(
                     label = "All roles",
                     selected = vm.jobCategory.isEmpty(),
-                    onClick = { vm.setJobCategory("") },
+                    onClick = { vm.updateJobCategory("") },
                 )
                 board.categories.forEach { cat ->
                     MlxFilterChip(
                         label = cat,
                         selected = vm.jobCategory == cat,
-                        onClick = { vm.setJobCategory(cat) },
+                        onClick = { vm.updateJobCategory(cat) },
                     )
                 }
             }
@@ -964,13 +977,13 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                 MlxFilterChip(
                     label = "All locations",
                     selected = vm.jobLocation.isEmpty(),
-                    onClick = { vm.setJobLocation("") },
+                    onClick = { vm.updateJobLocation("") },
                 )
                 board.locations.forEach { loc ->
                     MlxFilterChip(
                         label = loc,
                         selected = vm.jobLocation == loc,
-                        onClick = { vm.setJobLocation(loc) },
+                        onClick = { vm.updateJobLocation(loc) },
                     )
                 }
             }

@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -77,7 +76,7 @@ fun TeamScreen(
             regions = vm.geoRegions,
             points = vm.scanPoints,
             mode = vm.mapMode,
-            onModeChange = vm::setMapMode,
+            onModeChange = vm::updateMapMode,
         )
 
         Spacer(Modifier.height(MlxD.SectionGap))
@@ -87,7 +86,7 @@ fun TeamScreen(
             ownCompany = tiering.ownCompany,
             days = tiering.days,
             tierFilter = vm.tierFilter,
-            onTierFilter = vm::setTierFilter,
+            onTierFilter = vm::updateTierFilter,
         )
 
         Spacer(Modifier.height(MlxD.SectionGap))
@@ -296,7 +295,7 @@ private fun TierDoctorCard(d: DoctorTier) {
         "B" -> Mlx.BlueText
         else -> Mlx.Text600
     }
-    MlxCard(padding = PaddingValues(12.dp), borderColor = Mlx.Brand100) {
+    MlxCard(padding = 12.dp, borderColor = Mlx.Brand100) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
@@ -354,7 +353,7 @@ private fun TierDoctorCard(d: DoctorTier) {
             )
             Spacer(Modifier.width(MlxD.Space2))
             ProgressTrack(
-                progress = (d.sov / 100f).coerceIn(0f, 1f),
+                progress = (d.sov.toFloat() / 100f).coerceIn(0f, 1f),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -410,7 +409,7 @@ private fun StewardshipChamberCard(c: StewardshipDoctor) {
         c.abxSharePct >= 20 -> Mlx.Amber500
         else -> Mlx.Ok500
     }
-    MlxCard(padding = PaddingValues(12.dp), borderColor = Mlx.Brand100) {
+    MlxCard(padding = 12.dp, borderColor = Mlx.Brand100) {
         Text(text = c.doctorName, style = MlxType.CardTitle, color = Mlx.Text900)
         Text(
             text = listOf(c.specialty, c.district).filter { it.isNotBlank() }.joinToString(" · "),
@@ -441,7 +440,7 @@ private fun StewardshipChamberCard(c: StewardshipDoctor) {
         Spacer(Modifier.height(MlxD.Space3))
         Row(verticalAlignment = Alignment.CenterVertically) {
             ProgressTrack(
-                progress = (c.abxSharePct / 100f).coerceIn(0f, 1f),
+                progress = (c.abxSharePct.toFloat() / 100f).coerceIn(0f, 1f),
                 modifier = Modifier.weight(1f),
                 fillColor = barColor,
             )
