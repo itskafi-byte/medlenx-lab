@@ -6,6 +6,7 @@ import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.QueueDao
 import com.medlenx.lab.data.local.QueuedScanEntity
 import com.medlenx.lab.data.local.ScannedMedicineEntity
+import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.remote.VlOutcome
@@ -68,12 +69,20 @@ class ScanRepository(
      *
      * Re-verifying replaces the medicine rows instead of appending, matching the web
      * backend's append-only-but-replace-per-prescription behaviour.
+     *
+     * @param enriched index-aligned with [VlScanResult.medicines] - the output of
+     *   [com.medlenx.lab.data.repo.MedicineEnricher.enrich] for this read. It carries the
+     *   catalogue match and the compliance verdicts; without it every audit column would
+     *   be written as a blank/false, which silently empties the market-share widget
+     *   (`company_name != ''`) and mislabels the Live Scans feed. Empty is tolerated so
+     *   the row still lands rather than the save failing.
      */
     suspend fun saveVerified(
         prescription: PrescriptionEntity,
         result: VlScanResult,
         mrId: String,
         ownCompany: String?,
+        enriched: List<EnrichedMedicine> = emptyList(),
     ): Long {
         val id = prescriptionDao.insert(
             prescription.copy(
@@ -83,6 +92,11 @@ class ScanRepository(
             ),
         )
         val rows = result.medicines.mapIndexed { index, med ->
+            val audit = enriched.getOrNull(index)
+            // The catalogue-resolved manufacturer wins. The VL is told never to guess a
+            // company, so `med.company` is blank in almost every read, and the analytics
+            // queries all filter on a non-empty company_name.
+            val company = audit?.company?.takeIf { it.isNotBlank() } ?: med.company
             val dosage = med.dosageNormalized.ifBlank { Bengali.normalizeDosage(med.dosage) }
             ScannedMedicineEntity(
                 prescriptionId = id,
@@ -93,18 +107,18 @@ class ScanRepository(
                 dosageForm = med.type.ifBlank { med.form },
                 dosage = dosage,
                 raw = med.rawText,
-                companyName = med.company.takeIf { it.isNotBlank() },
-                companyVerified = false,
-                isOwn = ownCompany != null && med.company.equals(ownCompany, ignoreCase = true),
+                companyName = company.takeIf { it.isNotBlank() },
+                companyVerified = audit?.companyVerified ?: false,
+                isOwn = ownCompany != null && company.equals(ownCompany, ignoreCase = true),
                 confidenceScore = med.confidence,
-                imageUrl = null,
-                matchType = "pending",
-                isAntibiotic = false,
-                broadSpectrum = false,
-                therapeuticClass = null,
-                nemlListed = false,
-                dgdaFlagged = false,
-                tripsWatch = false,
+                imageUrl = audit?.imageUrl,
+                matchType = audit?.matchType?.label ?: "pending",
+                isAntibiotic = audit?.isAntibiotic ?: false,
+                broadSpectrum = audit?.broadSpectrum ?: false,
+                therapeuticClass = audit?.therapeuticClass,
+                nemlListed = audit?.neml?.listed ?: false,
+                dgdaFlagged = audit?.dgdaAlert?.flagged ?: false,
+                tripsWatch = audit?.tripsWatch?.watch ?: false,
             )
         }
         if (rows.isNotEmpty()) prescriptionDao.insertMedicines(rows)

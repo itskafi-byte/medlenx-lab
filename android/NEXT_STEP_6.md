@@ -1072,3 +1072,58 @@ argument in the new `PrescriptionEntity` call.
   first — not done here.
 - No compile has run in this sandbox (no JVM). `hashRows()` is a new `@Query`
   returning a new projection, so its KSP-generated implementation is unproven.
+
+## Audit pass - persistence correctness (uncommitted -> this commit)
+
+Three real defects in the save path, found by reading the data flow rather than by a
+checker. All three were silent: the app ran, saved a row, and showed a receipt.
+
+1. **The officer's corrections were discarded.** `onBrandChange` / `onDosageChange` write
+   to `state.cards`; `save()` passed `state.result`, the untouched VL read, to
+   `saveVerified`. Every correction made on the verification panel was thrown away at the
+   moment of saving. Fixed by `ScanViewModel.mergeEdits()`, which folds a card edit back
+   only when it differs from what `toCardData()` originally displayed - so a catalogue
+   default is never written back as if it were a correction. A dosage edit lands on
+   `dosageNormalized`, the field `ScannedMedicineEntity.dosage` actually prefers.
+
+2. **The resolved manufacturer was never persisted.** `saveVerified` wrote `med.company` -
+   the VL's guess, which the prompt explicitly forbids, so it is blank in almost every
+   read. Widget B filters `WHERE IFNULL(sm.company_name,'') != ''`, so every row saved by
+   this app would have dropped out of the market-share widget, and the Live Scans feed
+   would show no company. Now uses `EnrichedMedicine.company` (catalogue-resolved), which
+   also makes `isOwn` correct.
+
+3. **Every audit column was written as a zero.** `companyVerified`, `isAntibiotic`,
+   `broadSpectrum`, `therapeuticClass`, `nemlListed`, `dgdaFlagged`, `tripsWatch` and
+   `matchType` were hardcoded false/null/"pending" even though `MedicineEnricher` had
+   already computed all of them. `saveVerified` now takes the index-aligned `enriched`
+   list and persists the real values; `companyVerified` is read by `liveScanRows`, so that
+   one was user-visible. `save()` re-enriches the corrected read (non-fatally) so the Rx
+   Audit screen and the stored rows describe the same medicines.
+
+### Two new static checks
+
+- `room.py` - parses the 9 `@Entity` tables and their columns out of `Entities.kt`,
+  resolves the `RX_FILTER_SQL` concatenation, then validates all **60** `@Query` strings in
+  `Daos.kt` for real tables and real columns. Clean. Mutation-tested both ways (a typo'd
+  column and a typo'd table are each caught). This is the first check that reaches the KSP
+  codegen surface at all.
+- `members.py` - resolves every `vm.x` / `vm::x` in a screen against the members actually
+  declared on that ViewModel. Clean; mutation-tested.
+
+### Checker bug worth recording
+
+`named.py`'s `root` was **relative** (`app/src/main/java/com/medlenx/lab`), so running it
+from anywhere inside the source tree scanned zero files and printed a clean `total: 0`.
+Two mutation tests were mis-reported as "the checker missed both" when the checker had
+simply been invoked from the wrong directory. All checkers now pin an absolute root. A
+green result is only meaningful once the tool is known to have read the files.
+
+### Still open (needs a decision, not a patch)
+
+- **The offline queue is inert end to end.** `queueForLater` and `drainQueue` have zero
+  callers, yet `MlxTopBar` renders "N queued" from `queueDao.observeCount()`. The badge can
+  never be non-zero. Wiring only the enqueue would make it worse - a queue that grows and
+  never clears - so both halves plus an attempt cap need to land together.
+- `JobBoard.departments` is computed but not rendered.
+- CSV/PDF export toasts that it is unavailable offline.

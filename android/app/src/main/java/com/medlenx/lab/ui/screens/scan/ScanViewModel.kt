@@ -234,6 +234,31 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun backToDoctor() { state = state.copy(phase = ScanPhase.VerifyDoctor) }
     fun backToMedicines() { state = state.copy(phase = ScanPhase.VerifyMedicines) }
 
+    /**
+     * Folds the officer's card edits back into the VL read before it is persisted.
+     *
+     * A field is only overwritten when it differs from what [toCardData] originally showed,
+     * so an untouched row round-trips unchanged. `dosageNormalized` is the field that wins
+     * downstream (`ScannedMedicineEntity.dosage` prefers it), so a dosage edit has to land
+     * there rather than on the raw `dosage`.
+     */
+    private fun mergeEdits(result: VlScanResult, cards: List<MedicineCardData>): VlScanResult {
+        if (cards.isEmpty() || result.medicines.isEmpty()) return result
+        val medicines = result.medicines.mapIndexed { index, med ->
+            val card = cards.getOrNull(index) ?: return@mapIndexed med
+            val shown = med.toCardData()
+            med.copy(
+                brandName = if (card.brand != shown.brand) card.brand else med.brandName,
+                dosageNormalized = if (card.dosage != shown.dosage) {
+                    card.dosage
+                } else {
+                    med.dosageNormalized
+                },
+            )
+        }
+        return result.copy(medicines = medicines)
+    }
+
     fun onBrandChange(index: Int, brand: String) = updateCard(index) { it.copy(brand = brand) }
 
     fun onDosageChange(index: Int, dosage: String) = updateCard(index) { it.copy(dosage = dosage) }
@@ -273,9 +298,27 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val geo = state.geo
         val imageFile = state.imageFile
         val profile = officerProfile
+        val cards = state.cards
         saving = true
         viewModelScope.launch {
             runCatching {
+                // The verification panels let the officer correct a brand or a dosage, and
+                // those edits land in `cards` only - `result` keeps the raw VL read. Folding
+                // them back first means the database stores what was actually signed off.
+                val corrected = mergeEdits(result, cards)
+                // Re-enrich the corrected read so the audit columns and the Rx Audit screen
+                // describe the same medicines the officer approved.
+                // Non-fatal on purpose: enrichment already succeeded once for this read in
+                // enterVerification, so a throw here must not cost the officer the save.
+                val audit = runCatching {
+                    MedicineEnricher.enrich(
+                        medicines = corrected.medicines,
+                        index = scanRepository.medexIndex(),
+                        regulatory = app.graph.regulatoryRepository.data(),
+                        ownCompany = profile?.company.orEmpty(),
+                    )
+                }.getOrDefault(state.enriched)
+                state = state.copy(enriched = audit)
                 // Null when the image cannot be decoded. The web skips the guard for
                 // a missing hash rather than guessing, and so does this.
                 val hash = imageFile?.let { file ->
@@ -304,7 +347,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         prescriptionSource = doctor.source.label,
                         // saveVerified re-derives these two from its own arguments;
                         // passing the real values keeps the entity self-consistent.
-                        totalMedicines = result.medicines.size,
+                        totalMedicines = corrected.medicines.size,
                         mrId = repId,
                         duplicateOf = match?.id,
                         offTerritory = geo.offTerritory,
@@ -313,16 +356,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         lng = geo.lng,
                         createdAt = System.currentTimeMillis(),
                     ),
-                    result = result,
+                    result = corrected,
                     mrId = repId,
                     ownCompany = profile?.company,
+                    enriched = audit,
                 )
                 duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()
                 state = state.copy(
                     phase = ScanPhase.Saved,
                     receipt = SavedReceipt(
                         rxNumber = rxNo,
-                        medicineCount = result.medicines.size,
+                        medicineCount = corrected.medicines.size,
                         territory = doctor.territory.ifBlank { geo.territory },
                         repCode = repId,
                     ),
