@@ -1206,10 +1206,11 @@ runnable check at all. It exists now:
 
     python3 android/checks/audit.py     # exits non-zero on any finding
 
-Six checks over 77 Kotlin files: duplicate top-level declarations, JVM signature
+Five checks over 77 Kotlin files: duplicate top-level declarations, JVM signature
 clashes, named-argument mismatches, ViewModel member access from the UI, and Room
 `@Query` table/column validation across all 60 queries (the only check that reaches the
-KSP codegen surface). Paths resolve from the script's own location, so the working
+KSP codegen surface). Note what it does *not* do: it does not compile, and it does not
+resolve imports, so a missing `import` or a type error still only surfaces in Gradle. Paths resolve from the script's own location, so the working
 directory cannot silently turn it into a no-op - which is exactly how a checker here
 once reported a clean run while reading zero files.
 
