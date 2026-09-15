@@ -16,5 +16,3 @@ captures/
 *.iml
 .DS_Store
 
-# Datasets copied in from the repo's data/ directory at build time
-app/src/main/assets/data/

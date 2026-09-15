@@ -94,20 +94,21 @@ kotlin {
     }
 }
 
-/* ---------------------------------------------------------------------------
- * Bundled catalogue.
+/* ------------------------------------------------------------------------
+ * Bundled datasets.
  *
- * The standalone app ships the same datasets the FastAPI backend serves, so the
+ * The standalone app ships the same datasets the FastAPI backend served, so the
  * MedEx index / NEML / DGDA / TRIPS / geofence features work with no server.
- * They are copied from the repository's own data/ directory at build time rather
- * than duplicated into git, which keeps the Android module self-contained without
- * committing a second 16 MB copy of medex_full.json.
  *
- * Set -Pmedlenx.dataDir=/some/path to override the source location.
+ * They are COMMITTED under src/main/assets/data/, so this module builds from a
+ * bare checkout of this branch with nothing outside it. That is deliberate: the
+ * branch is meant to be downloaded and compiled on its own.
+ *
+ * `refreshMedLenXAssets` re-copies them from an external data/ directory, but
+ * only when asked for with -Pmedlenx.dataDir=/abs/path. It never runs on its
+ * own, so a build cannot clobber the committed files.
  * ------------------------------------------------------------------------- */
-val medlenxDataDir: File = (project.findProperty("medlenx.dataDir") as String?)
-    ?.let { file(it) }
-    ?: rootProject.projectDir.parentFile.resolve("data")
+val assetDataDir = layout.projectDirectory.dir("src/main/assets/data")
 
 val bundledDatasets = listOf(
     "medex_full.json",      // 16 MB - full MedEx catalogue, streamed at runtime
@@ -121,30 +122,37 @@ val bundledDatasets = listOf(
     "pharma_news.json",     // news seed
 )
 
-val copyMedLenXAssets by tasks.registering(Copy::class) {
+val refreshSource: File? = (project.findProperty("medlenx.dataDir") as String?)
+    ?.let { file(it) }
+
+val refreshMedLenXAssets by tasks.registering(Copy::class) {
     group = "medlenx"
-    description = "Copies the MedLenX datasets into the APK assets."
-    from(medlenxDataDir) {
-        include(bundledDatasets)
+    description = "Re-copies the datasets from -Pmedlenx.dataDir into the APK assets."
+    if (refreshSource != null) {
+        from(refreshSource) { include(bundledDatasets) }
     }
-    into(layout.projectDirectory.dir("src/main/assets/data"))
-    doFirst {
-        if (!medlenxDataDir.isDirectory) {
-            logger.warn(
-                "MedLenX data dir not found at {} - run from the repo checkout or pass " +
-                    "-Pmedlenx.dataDir=/abs/path. The app will start but the drug index " +
-                    "will be empty.", medlenxDataDir
-            )
+    into(assetDataDir)
+    onlyIf { refreshSource != null }
+}
+
+/**
+ * Fails the build instead of producing an APK whose drug index is silently
+ * empty - the failure mode the old copy-at-build-time arrangement degraded into.
+ */
+val checkMedLenXAssets by tasks.registering("checkMedLenXAssets") {
+    group = "medlenx"
+    description = "Verifies every bundled dataset is present in the APK assets."
+    doLast {
+        val missing = bundledDatasets.filter { !assetDataDir.file(it).asFile.isFile }
+        check(missing.isEmpty()) {
+            "Missing bundled datasets under src/main/assets/data: $missing. " +
+                "Restore them, or run ./gradlew refreshMedLenXAssets " +
+                "-Pmedlenx.dataDir=/abs/path/to/data"
         }
     }
 }
 
-tasks.named("preBuild") { dependsOn(copyMedLenXAssets) }
-
-/* Keep generated datasets and the local key out of git. */
-tasks.named("clean") {
-    doLast { delete(layout.projectDirectory.dir("src/main/assets/data")) }
-}
+tasks.named("preBuild") { dependsOn(checkMedLenXAssets) }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
