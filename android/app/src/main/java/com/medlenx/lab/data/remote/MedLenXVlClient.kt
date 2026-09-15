@@ -106,11 +106,25 @@ class MedLenXVlClient(
                 }
                 val parsed = json.decodeFromString(ChatResponse.serializer(), body)
                 parsed.error?.let { return@use VlOutcome.Failure(it.message) }
-                val text = parsed.choices.firstOrNull()?.message?.content.orEmpty()
+                val choice = parsed.choices.firstOrNull()
+                val text = choice?.message?.content.orEmpty()
                 if (text.isBlank()) {
                     VlOutcome.Failure("MedLenX VL returned an empty completion")
                 } else {
-                    parseScanJson(text)
+                    val outcome = parseScanJson(text)
+                    // A reply cut off at max_tokens can decode to a valid object that
+                    // simply ends after the doctor block - medicines silently empty.
+                    // Surface that instead of handing the officer a blank panel.
+                    if (outcome is VlOutcome.Success &&
+                        choice?.finishReason == "length" &&
+                        outcome.result.medicines.isEmpty()
+                    ) {
+                        VlOutcome.Failure(
+                            "The model reply was cut off before the medicine list. Retry."
+                        )
+                    } else {
+                        outcome
+                    }
                 }
             }
         }.getOrElse { VlOutcome.Failure(it.message ?: "MedLenX VL request failed") }
