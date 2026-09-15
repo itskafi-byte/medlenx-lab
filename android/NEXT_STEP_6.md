@@ -1246,3 +1246,39 @@ stripped in favour of a Material icon.
 `AnalyticsViewModel.clearFilters` have no callers. The first is superseded by
 `ClinicalStrip`'s own `classBreakdown`; `clearFilters` is superseded by the Reset button
 in `FilterSheet`. `NewsRepository.defaultClient()` is genuinely dead.
+
+## AGP 9 has Kotlin built in - the `kotlin.android` plugin is now fatal
+
+First line of the first real build of this branch:
+
+    An exception occurred applying plugin request
+    [id: 'org.jetbrains.kotlin.android', version: '2.3.0']
+    > The 'org.jetbrains.kotlin.android' plugin is no longer required for Kotlin
+      support since AGP 9.0.
+
+AGP 9 embeds Kotlin support, and applying the standalone Kotlin Android plugin on top of
+it is a hard error rather than a deprecation warning. Removed from all three places it
+appeared - the root `plugins` block, `app/build.gradle.kts`, and the `kotlin-android`
+entry in `gradle/libs.versions.toml` (deleted so it cannot be re-aliased by accident).
+
+What stays, verified against `android/nowinandroid` on this exact AGP 9.3.2 / Kotlin
+2.3.0 / KSP 2.3.4 combination rather than assumed:
+
+| plugin | nowinandroid applies it? | ours |
+| --- | --- | --- |
+| `com.android.application` | yes (`AndroidApplicationConventionPlugin:32`) | kept |
+| `org.jetbrains.kotlin.android` | **no - absent from their `[plugins]` entirely** | **removed** |
+| `org.jetbrains.kotlin.plugin.compose` | yes (`AndroidApplicationComposeConventionPlugin:28`) | kept |
+| `com.google.devtools.ksp` | yes (`AndroidRoomConventionPlugin:31`) | kept |
+| `org.jetbrains.kotlin.plugin.serialization` | yes | kept |
+
+The `kotlin { compilerOptions { jvmTarget = JVM_17 } }` block is untouched: their
+`configureKotlinAndroid` configures `KotlinAndroidProjectExtension` with no Kotlin plugin
+applied, so AGP registers that extension itself.
+
+**Not verified here:** that `import org.jetbrains.kotlin.gradle.dsl.JvmTarget` resolves on
+the buildscript classpath once the Kotlin plugin is gone. It should - AGP 9 brings the
+Kotlin Gradle Plugin API with it - but no JVM exists in this sandbox to prove it. If the
+build reports `unresolved reference: JvmTarget`, delete that import and the `kotlin { }`
+block; AGP aligns the Kotlin JVM target with `compileOptions.targetCompatibility`, which
+is already 17.

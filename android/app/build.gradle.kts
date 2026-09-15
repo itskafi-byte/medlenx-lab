@@ -3,7 +3,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // No `kotlin.android`: AGP 9 has Kotlin built in and rejects the plugin outright.
+    // See the note in the root build.gradle.kts.
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
