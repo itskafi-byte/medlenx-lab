@@ -138,17 +138,23 @@ cp local.properties.example local.properties
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
-If the Gradle wrapper JAR is absent, run `gradle wrapper --gradle-version 9.7.1` once, or
-let Android Studio generate it on first sync.
+The Gradle wrapper is committed (`gradlew`, `gradlew.bat`,
+`gradle/wrapper/gradle-wrapper.jar`), so no separate Gradle install is needed. On
+Linux/macOS make it executable first if the zip lost the bit: `chmod +x gradlew`.
 
 ### Bundled datasets
 
-The app is standalone, so it ships the same JSON the FastAPI backend serves. A Gradle
-task (`copyMedLenXAssets`, wired to `preBuild`) copies them from the repository's
-`data/` directory into `app/src/main/assets/data/` at build time — they are **not**
-duplicated into git.
+The app is standalone, so it ships the same JSON the web backend served. The nine
+datasets are **committed** under `app/src/main/assets/data/` — this branch is meant
+to be downloaded and built on its own, with nothing outside `android/`.
 
-Override the source location with `-Pmedlenx.dataDir=/abs/path`.
+Two Gradle tasks guard them:
+
+- `checkMedLenXAssets`, wired to `preBuild`, **fails the build** if any dataset is
+  missing rather than producing an APK with a silently empty drug index.
+- `refreshMedLenXAssets` re-copies them from an external directory, but only when
+  you ask: `./gradlew refreshMedLenXAssets -Pmedlenx.dataDir=/abs/path`. It never
+  runs on its own, so a build cannot clobber the committed files.
 
 Imported on first launch into Room: `medex_full.json` (25,105 DGDA-registered SKUs,
 a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.json`,

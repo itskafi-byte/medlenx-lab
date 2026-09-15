@@ -166,10 +166,20 @@ cd android
 ./gradlew assembleDebug
 ```
 
-`gradlew` and `gradle-wrapper.jar` are absent from the repo and cannot be generated in
-the sandbox — run `gradle wrapper` locally once, or open the project in Android Studio.
-The `copyMedLenXAssets` task pulls the nine JSON files from `../data/` into
-`assets/data/` at build time; override with `-Pmedlenx.dataDir=`.
+The Gradle wrapper is committed (`gradlew`, `gradlew.bat`,
+`gradle/wrapper/gradle-wrapper.jar` — Gradle 9.7.1), so no separate Gradle install is
+needed; `chmod +x gradlew` if the zip dropped the executable bit.
+
+The nine JSON datasets are committed under `app/src/main/assets/data/`, so the module
+builds with nothing outside `android/`. `checkMedLenXAssets` runs on `preBuild` and
+fails the build if any dataset is missing, rather than producing an APK with a
+silently empty drug index. `refreshMedLenXAssets` re-copies them from
+`-Pmedlenx.dataDir=/abs/path` on request and never runs on its own.
+
+**Earlier note, now superseded.** This log previously recorded that the wrapper was
+absent and the datasets were copied in from the repository's `data/` directory at
+build time. Both changed when the branch was made self-contained — see the commit
+that removed the web app.
 
 Without an API key the app runs in demo mode: `VlOutcome.NoKey` maps to
 `ScanPhase.NeedsKey`.

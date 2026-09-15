@@ -17,7 +17,7 @@ enum class CatalogueState { NotStarted, Importing, Ready, Missing, Failed }
  * Imports the bundled datasets into Room on first launch.
  *
  * The standalone app ships the same JSON the FastAPI backend serves, copied into
- * assets/data by the `copyMedLenXAssets` Gradle task. `medex_full.json` is a
+ * assets/data and committed with the module. `medex_full.json` is a
  * top-level array of 25,105 records (~16 MB), so it is decoded once, written to
  * Room in batches, and then released rather than held in memory.
  */

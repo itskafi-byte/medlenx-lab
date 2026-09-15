@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
- * Wire models for the three regulatory datasets bundled by `copyMedLenXAssets`.
+ * Wire models for the three regulatory datasets bundled under assets/data.
  *
  * Shapes are taken from the files themselves, not from the Python type hints:
  * neml_list.json holds 165 molecules, trips_waiver.json 26, dgda_prices.json
