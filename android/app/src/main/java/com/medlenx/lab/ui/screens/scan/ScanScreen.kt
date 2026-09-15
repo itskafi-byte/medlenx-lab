@@ -1,10 +1,13 @@
 package com.medlenx.lab.ui.screens.scan
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,6 +97,27 @@ fun ScanScreen(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(vm::onImagePicked) }
 
+    // GPS pin needs the runtime location permission; ask on demand, then pin.
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { vm.pinGps() }
+    val pinGpsWithPermission = {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            vm.pinGps()
+        } else {
+            locationLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                ),
+            )
+        }
+    }
+
     when (state.phase) {
         ScanPhase.Empty -> UploadZone(
             onChooseFile = {
@@ -133,6 +158,7 @@ fun ScanScreen(
             onClose = vm::clear,
             medicineCount = state.cards.size,
             imageUri = state.imageUri,
+            transform = transform,
             onThumbnailAction = { action ->
                 when (action) {
                     ViewerAction.ZoomIn -> transform.zoomIn()
@@ -181,7 +207,7 @@ fun ScanScreen(
                         territory = next.territory,
                     )
                 },
-                onCaptureGps = vm::pinGps,
+                onCaptureGps = { pinGpsWithPermission() },
                 onBack = vm::backToMedicines,
                 onSave = vm::save,
                 saving = vm.saving,
@@ -222,7 +248,7 @@ fun ScanScreen(
                 onUpazilaChange = { vm.onGeoChange(upazila = it) },
                 onDistrictChange = { vm.onGeoChange(district = it) },
                 onTerritoryChange = { vm.onGeoChange(territory = it) },
-                onPinGps = vm::pinGps,
+                onPinGps = { pinGpsWithPermission() },
             )
             ActionRow(state = state, onAnalyze = vm::analyze)
             VerificationArea(state = state)
@@ -354,29 +380,39 @@ private fun ViewerCard(
     onClear: () -> Unit,
 ) {
     MlxCard(padding = 0.dp) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(Modifier.weight(1f)) {
-                SectionHeader(title = "Prescription Image Viewer")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    SectionHeader(title = "Prescription Image Viewer")
+                }
+                MlxIconButton(
+                    icon = Icons.Filled.Close,
+                    contentDescription = "Clear workspace",
+                    onClick = onClear,
+                    background = Mlx.Brand100,
+                    border = Mlx.Brand100,
+                )
             }
-            MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
-            MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
-            MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
-            MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
-            MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
-            MlxIconButton(Icons.Filled.Expand, "Fit", transform::fit)
-            MlxIconButton(
-                icon = Icons.Filled.Close,
-                contentDescription = "Clear workspace",
-                onClick = onClear,
-                background = Mlx.Brand100,
-                border = Mlx.Brand100,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
+                MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
+                MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
+                MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
+                MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
+                MlxIconButton(Icons.Filled.Expand, "Fit", transform::fit)
+            }
         }
 
         ViewerHintStrip(zoomPercent = transform.zoomPercent)

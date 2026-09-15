@@ -50,6 +50,7 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.medlenx.lab.ui.components.MlxEmptyState
@@ -264,6 +265,7 @@ private fun VerifyThumbnail(
     onFit: () -> Unit,
     zoomLabel: String,
     imageUri: String? = null,
+    transform: ViewerTransform? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -279,7 +281,21 @@ private fun VerifyThumbnail(
                 model = imageUri,
                 contentDescription = "Prescription scan",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (transform != null) {
+                            Modifier.graphicsLayer {
+                                scaleX = transform.scale
+                                scaleY = transform.scale
+                                translationX = transform.offsetX
+                                translationY = transform.offsetY
+                                rotationZ = transform.rotation
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         } else {
             Icon(
@@ -365,6 +381,7 @@ fun VerifyDoctorSection(
     onThumbnailAction: (ViewerAction) -> Unit,
     medicineCount: Int,
     imageUri: String? = null,
+    transform: ViewerTransform? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -381,6 +398,7 @@ fun VerifyDoctorSection(
             onFit = { onThumbnailAction(ViewerAction.Fit) },
             zoomLabel = zoomLabel,
             imageUri = imageUri,
+            transform = transform,
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
@@ -409,6 +427,26 @@ fun VerifyDoctorSection(
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = "Close", tint = Mlx.Text600, modifier = Modifier.size(14.dp))
                 }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .background(Mlx.Brand50, MlxShape.Small)
+                    .padding(12.dp),
+            ) {
+                Text(
+                    text = if (medicineCount > 0) {
+                        "$medicineCount medicine" +
+                            (if (medicineCount == 1) "" else "s") +
+                            " detected — tap Next to review them"
+                    } else {
+                        "No medicines detected — retry the scan or add manually"
+                    },
+                    style = MlxType.BodySmall,
+                    color = if (medicineCount > 0) Mlx.Ok500 else Mlx.Text600,
+                )
             }
 
             SectionHeader(title = "Doctor Information — BMDC Verification")
