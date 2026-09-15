@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -130,7 +131,7 @@ fun MedLenXShell(
         modifier = modifier.fillMaxSize(),
         containerColor = Mlx.Screen,
         topBar = {
-            Column {
+            Column(Modifier.statusBarsPadding()) {
                 MlxTopBar(
                     query = query,
                     onQueryChange = {
@@ -169,7 +170,10 @@ fun MedLenXShell(
                 // *behind* the app bar, or the backdrop blur has nothing to sample.
                 // Only the bottom-bar inset is applied, so nothing hides under the nav.
                 .hazeSource(state = hazeState)
-                .padding(bottom = inner.calculateBottomPadding()),
+                .padding(
+                    top = inner.calculateTopPadding(),
+                    bottom = inner.calculateBottomPadding(),
+                ),
         ) {
             // NOTE: no verticalScroll() here. Wrapping the NavHost in a scrollable
             // gives children unbounded height, which crashes any LazyColumn added in

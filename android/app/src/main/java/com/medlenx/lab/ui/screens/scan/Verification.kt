@@ -49,6 +49,8 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.SectionHeader
@@ -260,6 +262,7 @@ private fun VerifyThumbnail(
     onContrast: () -> Unit,
     onFit: () -> Unit,
     zoomLabel: String,
+    imageUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -268,14 +271,25 @@ private fun VerifyThumbnail(
             .height(180.dp)
             .background(Mlx.Brand100),
     ) {
-        Icon(
-            Icons.Filled.CropFree,
-            contentDescription = null,
-            tint = Mlx.Brand400.copy(alpha = 0.4f),
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(48.dp),
-        )
+        // The officer must be able to see the prescription they are verifying; the
+        // earlier placeholder-only box made the photo "vanish" on the review panel.
+        if (imageUri != null) {
+            AsyncImage(
+                model = imageUri,
+                contentDescription = "Prescription scan",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                Icons.Filled.CropFree,
+                contentDescription = null,
+                tint = Mlx.Brand400.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(48.dp),
+            )
+        }
         // The amber region-of-interest box.
         Box(
             modifier = Modifier
@@ -349,6 +363,7 @@ fun VerifyDoctorSection(
     onClose: () -> Unit,
     onThumbnailAction: (ViewerAction) -> Unit,
     medicineCount: Int,
+    imageUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -364,6 +379,7 @@ fun VerifyDoctorSection(
             onContrast = { onThumbnailAction(ViewerAction.Contrast) },
             onFit = { onThumbnailAction(ViewerAction.Fit) },
             zoomLabel = zoomLabel,
+            imageUri = imageUri,
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
