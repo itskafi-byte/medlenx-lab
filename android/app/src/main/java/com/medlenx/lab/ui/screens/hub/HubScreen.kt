@@ -969,6 +969,27 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                     )
                 }
             }
+            // App.tsx:1462 - the web's second select is "All departments". The ported
+            // filter (PharmaHub.pharmaJobs(department = ...)) and JobBoard.departments
+            // both already existed; nothing drove them.
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalSpacing = MlxD.Space2,
+                verticalSpacing = MlxD.Space2,
+            ) {
+                MlxFilterChip(
+                    label = "All departments",
+                    selected = vm.jobDepartment.isEmpty(),
+                    onClick = { vm.updateJobDepartment("") },
+                )
+                board.departments.forEach { dept ->
+                    MlxFilterChip(
+                        label = dept,
+                        selected = vm.jobDepartment == dept,
+                        onClick = { vm.updateJobDepartment(dept) },
+                    )
+                }
+            }
             FlowRowCompat(
                 modifier = Modifier.padding(top = MlxD.Space2),
                 horizontalSpacing = MlxD.Space2,

@@ -22,5 +22,10 @@ class MedLenXApp : Application() {
         // else triggers it, and the matcher, the enrichment step and the Hub's
         // drug index all read the resulting Room rows.
         graph.importCatalogue()
+        // Registers the connectivity callback and starts the queue-depth / profile
+        // collectors. Without it `online` never leaves its initial `true`, the header's
+        // "N queued" chip never appears, and a capture parked in a dead zone is never
+        // noticed coming back online.
+        graph.deviceState.start(graph.scope)
     }
 }

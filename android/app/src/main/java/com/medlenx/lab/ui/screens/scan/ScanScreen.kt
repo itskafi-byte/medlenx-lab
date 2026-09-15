@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.FileUpload
@@ -204,6 +205,11 @@ fun ScanScreen(
                 .padding(top = topInset),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            OfflineQueueBanner(
+                queued = vm.queuedScans,
+                online = vm.online,
+                parked = state.parked,
+            )
             ViewerCard(
                 state = state,
                 transform = transform,
@@ -294,6 +300,47 @@ fun UploadZone(
             color = Mlx.Text400,
             modifier = Modifier.padding(top = 20.dp),
         )
+    }
+}
+
+/**
+ * The web app's offline banner (App.tsx:2147) - "Offline - 3 scans queued. They will sync
+ * when you reconnect."
+ *
+ * Rendered only when something is genuinely parked, so the promise is never shown without a
+ * queue behind it. Colours are the web banner's own: #FFFBEB / #FDE68A / #B45309.
+ */
+@Composable
+private fun OfflineQueueBanner(queued: Int, online: Boolean, parked: Boolean) {
+    if (queued <= 0 && !parked) return
+    val plural = if (queued == 1) "" else "s"
+    MlxCard(
+        padding = 12.dp,
+        background = Mlx.Warn50,
+        borderColor = Mlx.Warn200,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudUpload,
+                contentDescription = null,
+                tint = Mlx.Warn600,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = when {
+                    !online && queued > 0 ->
+                        "Offline - $queued scan$plural queued. " +
+                            "They will sync when you reconnect."
+                    queued > 0 -> "$queued scan$plural queued for replay."
+                    else -> "Scan cached on-device. It will sync when you reconnect."
+                },
+                style = MlxType.Meta,
+                color = Mlx.Warn600,
+            )
+        }
     }
 }
 

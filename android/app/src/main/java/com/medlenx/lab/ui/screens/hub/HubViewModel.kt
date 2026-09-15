@@ -95,6 +95,8 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var jobLocation by mutableStateOf("")
         private set
+    var jobDepartment by mutableStateOf("")
+        private set
 
     init {
         viewModelScope.launch {
@@ -203,6 +205,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         category = jobCategory,
         q = jobQuery,
         location = jobLocation,
+        department = jobDepartment,
     )
 
     /** Wraps within the calendar year rather than reaching into the next one. */
@@ -218,6 +221,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     fun updateJobCategory(value: String) { jobCategory = value }
     fun updateJobQuery(value: String) { jobQuery = value }
     fun updateJobLocation(value: String) { jobLocation = value }
+    fun updateJobDepartment(value: String) { jobDepartment = value }
 }
 
 class HubViewModelFactory(

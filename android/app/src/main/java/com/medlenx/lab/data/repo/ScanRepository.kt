@@ -125,17 +125,32 @@ class ScanRepository(
         return id
     }
 
-    /** Replays queued captures. Returns how many were drained. */
+    /**
+     * Replays parked captures, oldest first, and stops at the first one that reads.
+     *
+     * A resumed read still has to pass through the officer's verification panels before it
+     * can be saved, so only one can be handed back at a time - the rest stay parked and the
+     * header badge keeps counting them. A row that fails stays queued with `attempts`
+     * incremented; past [MAX_QUEUE_ATTEMPTS] it is dropped, so one corrupt capture cannot
+     * pin the badge open forever.
+     *
+     * @return how many rows were drained - 0 or 1.
+     */
     suspend fun drainQueue(handler: suspend (QueuedScanEntity) -> Boolean): Int {
         var drained = 0
         // Snapshot the queue once, then process: observeAll() is a Flow and must not
         // be collected while entries are being removed from it.
         val pending = queueDao.observeAll().first()
-        pending.forEach { row ->
+        for (row in pending) {
+            if (row.attempts >= MAX_QUEUE_ATTEMPTS) {
+                queueDao.remove(row)
+                continue
+            }
             queueDao.markAttempt(row.id)
             if (handler(row)) {
                 queueDao.remove(row)
                 drained++
+                break
             }
         }
         return drained
@@ -164,4 +179,9 @@ class ScanRepository(
         cachedIndex ?: withContext(Dispatchers.IO) {
             MedexIndex(medexDao.all().map { it.toProduct() }).also { cachedIndex = it }
         }
+
+    private companion object {
+        /** Retries before a parked capture is abandoned. */
+        const val MAX_QUEUE_ATTEMPTS = 3
+    }
 }

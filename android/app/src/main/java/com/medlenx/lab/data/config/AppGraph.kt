@@ -71,7 +71,11 @@ class AppGraph private constructor(
                 database = db,
                 catalogue = catalogue,
                 vlClient = vlClient,
-                deviceState = DeviceStateRepository(appContext, db.queueDao()),
+                deviceState = DeviceStateRepository(
+                    context = appContext,
+                    queueDao = db.queueDao(),
+                    profileDao = db.profileDao(),
+                ),
                 locationRepository = LocationRepository(
                     context = appContext,
                     assets = AssetCatalogue(appContext, json, db.medexDao()),

@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.medlenx.lab.data.local.ProfileDao
 import com.medlenx.lab.data.local.QueueDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 class DeviceStateRepository(
     context: Context,
     private val queueDao: QueueDao,
+    private val profileDao: ProfileDao,
 ) {
     var online by mutableStateOf(true)
         private set
@@ -34,7 +36,13 @@ class DeviceStateRepository(
     private val connectivity =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
-    /** Starts listening for connectivity changes and queue depth. Call once. */
+    /**
+     * Starts listening for connectivity changes, queue depth and the officer profile.
+     *
+     * Call once, from an application-lifetime scope. Until this runs, [online] stays at
+     * its initial `true` and [queuedScans] stays 0 - the header chips would be decorative
+     * and nothing would ever notice the network coming back.
+     */
     fun start(scope: CoroutineScope) {
         refreshOnline()
         val request = NetworkRequest.Builder()
@@ -51,6 +59,12 @@ class DeviceStateRepository(
         })
         scope.launch {
             queueDao.observeCount().collect { queuedScans = it }
+        }
+        scope.launch {
+            // The header chip names the signed-in officer's company. Nothing else pushes
+            // it, so without this the bar keeps reading "Set company in Settings" after
+            // the officer has set one.
+            profileDao.observe().collect { setCompany(it?.company) }
         }
     }
 

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -13,6 +14,7 @@ import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.PrescriptionHashRow
+import com.medlenx.lab.data.local.QueuedScanEntity
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
@@ -23,6 +25,7 @@ import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -55,6 +58,9 @@ data class ScanUiState(
     val doctor: DoctorVerification = DoctorVerification(),
     val cards: List<MedicineCardData> = emptyList(),
     val receipt: SavedReceipt? = null,
+
+    /** True when the current capture is parked in the offline queue awaiting a replay. */
+    val parked: Boolean = false,
 )
 
 /**
@@ -70,6 +76,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val scanRepository = app.graph.scanRepository
     private val locationRepository = app.graph.locationRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
+    private val deviceState = app.graph.deviceState
+
+    /** Parked captures are replayed from disk, so the mime travels with the row. */
+    private val mimeType = "image/jpeg"
+
+    /** Header-chip state, surfaced so the scan tab can render the offline queue banner. */
+    val online: Boolean get() = deviceState.online
+    val queuedScans: Int get() = deviceState.queuedScans
 
     var state by mutableStateOf(ScanUiState())
         private set
@@ -108,6 +122,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             // Separate launch: `observe()` never completes, so collecting it in the
             // same coroutine would stop the location cascade from ever being reached.
             app.graph.profileDao.observe().collect { officerProfile = it }
+        }
+        viewModelScope.launch {
+            // Also separate, and also never completes. This is what makes the header's
+            // "N queued ... they will sync when you reconnect" an actual promise rather
+            // than a label: every time connectivity comes back, replay a parked capture.
+            snapshotFlow { deviceState.online }
+                .distinctUntilChanged()
+                .collect { isOnline -> if (isOnline) syncQueuedScans() }
         }
     }
 
@@ -151,30 +173,119 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (state.phase == ScanPhase.Scanning) return
 
         viewModelScope.launch {
-            state = state.copy(
-                phase = ScanPhase.Scanning,
-                progress = 0.15f,
-                progressText = "Extracting with MedLenX VL...",
-                error = null,
-            )
-            val bytes = withContext(Dispatchers.IO) { runCatching { file.readBytes() }.getOrNull() }
-            if (bytes == null) {
-                state = state.copy(phase = ScanPhase.Failed, error = "Image bytes unavailable")
-                return@launch
-            }
-
-            state = state.copy(progress = 0.45f)
-            when (val progress = scanRepository.scan(bytes)) {
-                is ScanProgress.Done -> enterVerification(progress.result)
-
-                is ScanProgress.Failed -> state = state.copy(
-                    phase = ScanPhase.Failed,
-                    error = progress.message,
+            // No route to the API, so do not burn the capture. The web contract is
+            // explicit - "scans cache on-device when the rural network drops, then sync
+            // on reconnect" - and ScanProgress.QueuedOffline is the variant that carries
+            // that outcome.
+            val outcome: ScanProgress = if (!deviceState.online) {
+                ScanProgress.QueuedOffline
+            } else {
+                state = state.copy(
+                    phase = ScanPhase.Scanning,
+                    progress = 0.15f,
+                    progressText = "Extracting with MedLenX VL...",
+                    error = null,
+                    parked = false,
                 )
+                val bytes = withContext(Dispatchers.IO) {
+                    runCatching { file.readBytes() }.getOrNull()
+                }
+                if (bytes == null) {
+                    // Not a connectivity problem - parking would just retry a file that
+                    // cannot be read until the attempt cap drops it.
+                    state = state.copy(phase = ScanPhase.Failed, error = "Image bytes unavailable")
+                    return@launch
+                }
+                state = state.copy(progress = 0.45f)
+                scanRepository.scan(bytes)
+            }
+            when (outcome) {
+                is ScanProgress.Done -> enterVerification(outcome.result)
+
+                is ScanProgress.Failed ->
+                    // The network can drop after the request has gone out. Park rather
+                    // than strand the officer on a panel with no way back.
+                    if (!deviceState.online) {
+                        parkForReplay(file)
+                    } else {
+                        state = state.copy(
+                            phase = ScanPhase.Failed,
+                            error = outcome.message,
+                        )
+                    }
+
+                ScanProgress.QueuedOffline -> parkForReplay(file)
 
                 ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
                 else -> Unit
             }
+        }
+    }
+
+    /**
+     * Parks the current capture for replay instead of losing it.
+     *
+     * Deliberately not [ScanPhase.Failed]: that panel has no way back, and the capture is
+     * still perfectly good - only the network is missing. Staying on [ScanPhase.Ready]
+     * keeps the viewer, the GPS strip and the Analyze button, so the officer can simply
+     * retry by hand. [syncQueuedScans] retries automatically.
+     */
+    private suspend fun parkForReplay(file: File) {
+        val parked = runCatching {
+            scanRepository.queueForLater(file.absolutePath, mimeType)
+        }.isSuccess
+        state = state.copy(
+            phase = ScanPhase.Ready,
+            parked = parked,
+            progress = 0f,
+            progressText = "",
+            error = if (parked) null else "Offline, and the capture could not be queued",
+        )
+    }
+
+    /**
+     * Replays the oldest parked capture, honouring the header's "they will sync when you
+     * reconnect".
+     *
+     * Only ever runs while the scan flow is idle: a verification the officer is working
+     * through is never replaced underneath them. Rows that cannot be read stay queued and
+     * are retried on the next connectivity change, up to the repository's attempt cap.
+     */
+    fun syncQueuedScans() {
+        if (!deviceState.online) return
+        if (state.phase != ScanPhase.Empty && state.phase != ScanPhase.Ready) return
+        if (state.phase == ScanPhase.Ready && state.parked) {
+            // The officer is looking at the parked capture; let them retry it themselves
+            // rather than yanking the viewer into a different image.
+            return
+        }
+        viewModelScope.launch {
+            scanRepository.drainQueue { row -> replayQueued(row) }
+        }
+    }
+
+    /** Re-runs MedLenX VL over a parked capture. True once the row can be dropped. */
+    private suspend fun replayQueued(row: QueuedScanEntity): Boolean {
+        val file = File(row.imagePath)
+        val bytes = withContext(Dispatchers.IO) {
+            runCatching { file.takeIf { it.exists() }?.readBytes() }.getOrNull()
+        } ?: return false
+        return when (val progress = scanRepository.scan(bytes)) {
+            is ScanProgress.Done -> {
+                state = state.copy(
+                    phase = ScanPhase.Ready,
+                    imageUri = Uri.fromFile(file).toString(),
+                    imageFile = file,
+                    parked = false,
+                    error = null,
+                    result = null,
+                    progress = 0f,
+                    progressText = "",
+                )
+                enterVerification(progress.result)
+                true
+            }
+            else -> false
         }
     }
 

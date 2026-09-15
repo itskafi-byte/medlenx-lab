@@ -1127,3 +1127,71 @@ green result is only meaningful once the tool is known to have read the files.
   never clears - so both halves plus an attempt cap need to land together.
 - `JobBoard.departments` is computed but not rendered.
 - CSV/PDF export toasts that it is unavailable offline.
+
+## Offline queue wired end to end
+
+The queue was inert: `queueForLater` and `drainQueue` had zero callers, and the header's
+"N queued" chip could never be non-zero. The web contract (App.tsx:402, :2147) is explicit
+- "scans cache on-device when the rural network drops, then sync on reconnect" - so both
+halves plus an attempt cap landed together.
+
+- **`MedLenXApp.onCreate` now calls `graph.deviceState.start(graph.scope)`.** This was the
+  root cause behind more than the queue: `DeviceStateRepository.start()` had zero callers,
+  so the `ConnectivityManager` callback was never registered, `online` never left its
+  initial `true`, and `queueDao.observeCount()` was never collected. The Online/Offline
+  chip was decorative and nothing could ever notice the network returning.
+- **`DeviceStateRepository.setCompany` also had zero callers**, so the header read "Set
+  company in Settings" forever. `start()` now observes `profileDao.observe()` and pushes
+  the signed-in officer's company.
+- **`ScanProgress.QueuedOffline` was declared and never produced or consumed.** `analyze()`
+  now yields it when there is no route to the API, and the `when` handles it by parking.
+  A mid-request network drop parks too. A file that cannot be read still fails immediately
+  - parking it would only burn attempts until the cap dropped it.
+- **`parkForReplay` keeps `ScanPhase.Ready`**, not `Failed`. The Failed panel has no back
+  button, so parking there would have stranded the officer and discarded a good capture.
+- **`drainQueue` now stops after the first success** and drops rows past
+  `MAX_QUEUE_ATTEMPTS = 3`. A resumed read still has to pass the verification panels, so
+  only one can be handed back at a time; the rest stay parked and keep counting.
+- **Auto-sync**: `ScanViewModel.init` watches `snapshotFlow { deviceState.online }` and
+  replays on every transition to online. It never runs while a verification is in flight,
+  and never yanks the viewer away from the capture the officer is currently looking at.
+- **New `OfflineQueueBanner`** on the scan viewer, in the web banner's own colours
+  (#FFFBEB / #FDE68A / #B45309 = `Warn50` / `Warn200` / `Warn600`), shown only when
+  something is genuinely parked.
+
+## Jobs department filter (truncation fixed)
+
+The web Jobs board (App.tsx:1459-1465) has three filters: roles, **departments**, keyword.
+Android had only roles, locations and keyword. `PharmaHub.pharmaJobs(department = ...)` and
+`JobBoard.departments` were already fully implemented - nothing drove them. Added
+`jobDepartment` state, passed it through `board()`, and rendered the chip row. This closes
+the `JobBoard.departments` gap recorded earlier.
+
+## Checker rewritten and hardened
+
+`/tmp` is wiped between turns, so the checkers are gone again. They now live outside the
+repo at `checks/audit.py` (four checks: duplicate declarations, JVM signature clashes,
+named arguments, undeclared ViewModel members) with an absolute root.
+
+Three real checker bugs were found by mutation testing, not by reading:
+1. `strip()` **deleted** string literals, collapsing argument lists - `parseRssItems(xml,
+   "WHO", "public-health", limit = 5)` counted 1 positional instead of 3. Literals are now
+   replaced with a placeholder. This would also have hidden genuine missing-arg bugs.
+2. The clash check required `by mutableStateOf` with no package prefix.
+3. Both the clash and member checks scanned from a class's `{` to **end of file**, so every
+   earlier class claimed every later class's members - one planted clash reported 7, and
+   bodyless declarations (`data class Done(...) : ScanProgress()`) adopted the *next*
+   class's body. Bodies are now brace-matched and cut off at the next column-0 declaration.
+
+All four checks were then verified by planting one defect each: 4 planted, 4 caught, each
+attributed to the right class. Clean tree reports 0.
+
+## Noted, not changed
+
+- `TeamSections.kt:92-93` uses `r.lat!!` / `r.lng!!`. Safe - guarded by a `.filter` on the
+  same expression - but smart-cast does not survive `filter`, so it is fragile rather than
+  wrong.
+- `MostPrescribed.manufacturer` / `.marketSharePercent` are computed and unread. Not a
+  truncation: the web's Chart A (App.tsx:1114-1124) plots only name and value.
+- No compile has run here (no JVM obtainable), so all of the above is static checks plus
+  reading the data flow.
