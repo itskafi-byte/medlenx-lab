@@ -126,7 +126,7 @@ val bundledDatasets = listOf(
 val refreshSource: File? = (project.findProperty("medlenx.dataDir") as String?)
     ?.let { file(it) }
 
-val refreshMedLenXAssets by tasks.registering(Copy::class) {
+val refreshMedLenXAssets = tasks.register<Copy>("refreshMedLenXAssets") {
     group = "medlenx"
     description = "Re-copies the datasets from -Pmedlenx.dataDir into the APK assets."
     if (refreshSource != null) {
@@ -140,7 +140,7 @@ val refreshMedLenXAssets by tasks.registering(Copy::class) {
  * Fails the build instead of producing an APK whose drug index is silently
  * empty - the failure mode the old copy-at-build-time arrangement degraded into.
  */
-val checkMedLenXAssets by tasks.registering("checkMedLenXAssets") {
+val checkMedLenXAssets = tasks.register("checkMedLenXAssets") {
     group = "medlenx"
     description = "Verifies every bundled dataset is present in the APK assets."
     doLast {

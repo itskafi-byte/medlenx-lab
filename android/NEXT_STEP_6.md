@@ -1206,10 +1206,10 @@ runnable check at all. It exists now:
 
     python3 android/checks/audit.py     # exits non-zero on any finding
 
-Five checks over 77 Kotlin files: duplicate top-level declarations, JVM signature
-clashes, named-argument mismatches, ViewModel member access from the UI, and Room
-`@Query` table/column validation across all 60 queries (the only check that reaches the
-KSP codegen surface). Note what it does *not* do: it does not compile, and it does not
+Six checks over 77 Kotlin files: duplicate top-level declarations, JVM signature
+clashes, named-argument mismatches, ViewModel member access from the UI, Room `@Query`
+table/column validation across all 60 queries (the only check that reaches the KSP
+codegen surface), and version-catalogue references in the `*.gradle.kts` scripts. Note what it does *not* do: it does not compile, and it does not
 resolve imports, so a missing `import` or a type error still only surfaces in Gradle. Paths resolve from the script's own location, so the working
 directory cannot silently turn it into a no-op - which is exactly how a checker here
 once reported a clean run while reading zero files.
@@ -1282,3 +1282,31 @@ Kotlin Gradle Plugin API with it - but no JVM exists in this sandbox to prove it
 build reports `unresolved reference: JvmTarget`, delete that import and the `kotlin { }`
 block; AGP aligns the Kotlin JVM target with `compileOptions.targetCompatibility`, which
 is already 17.
+
+## Gradle 9.6 removed the `by tasks.registering(...)` delegate
+
+Second build attempt got past plugin application and failed compiling the build script
+itself:
+
+    Line 129: val refreshMedLenXAssets by tasks.registering(Copy::class) { ... }
+    Line 143: val checkMedLenXAssets by tasks.registering("checkMedLenXAssets") { ... }
+              ^ Argument type mismatch: actual type is 'String', but 'KClass<Task>'
+                was expected.
+
+Two separate problems on two lines:
+
+- Both used the property-delegate form, deprecated and now rejected - Gradle wants
+  `val t = tasks.register<Type>(name) { }`.
+- Line 143 was simply wrong regardless of version: `registering` takes a `KClass`, never
+  a task name. It could not have compiled on any Gradle.
+
+Both now use `tasks.register`. The returned types are unchanged (`TaskProvider<Copy>` and
+`TaskProvider<Task>`), so `tasks.named("preBuild") { dependsOn(checkMedLenXAssets) }`
+still works as written.
+
+### New check: version-catalogue references
+
+Added `check_version_catalogue()` to `checks/audit.py`, because a `libs.` accessor with no
+matching alias is also a build-script compile error that stops Gradle before it reads any
+source. All 29 library aliases, 4 plugin aliases and 20 versions currently resolve.
+Mutation-tested with a deliberately bogus alias.

@@ -511,6 +511,53 @@ def check_room_queries():
 
 
 # --------------------------------------------------------------------------
+# 6. Version-catalogue references in the build scripts
+# --------------------------------------------------------------------------
+
+def check_version_catalogue():
+    """A `libs.` accessor with no matching catalogue alias is a build-script
+    compilation error, and it stops Gradle before it reads a single source file."""
+    toml = os.path.join(ROOT, 'gradle', 'libs.versions.toml')
+    if not os.path.exists(toml):
+        return
+    text = read(toml)
+
+    def section(name):
+        m = re.search(r'^\[' + name + r'\](.*?)(?=^\[|\Z)', text, re.S | re.M)
+        return m.group(1) if m else ''
+
+    def accessors(body):
+        # Gradle turns '-', '_' and '.' in an alias into nested accessors.
+        return {a.replace('-', '.').replace('_', '.').lower()
+                for a in re.findall(r'^([\w.\-]+)\s*=', body, re.M)}
+
+    libraries = accessors(section('libraries'))
+    plugins = accessors(section('plugins'))
+    versions = accessors(section('versions'))
+
+    for dirpath, _dirs, names in os.walk(ROOT):
+        if '.git' in dirpath:
+            continue
+        for name in names:
+            if not name.endswith('.gradle.kts'):
+                continue
+            path = os.path.join(dirpath, name)
+            body = strip_comments(read(path))
+            for m in re.finditer(r'\blibs\.plugins\.([\w.]+)', body):
+                if m.group(1).lower() not in plugins:
+                    report('version-catalogue', path, line_of(body, m.start()),
+                           "no [plugins] entry for 'libs.plugins.%s'" % m.group(1))
+            for m in re.finditer(r'\blibs\.versions\.([\w.]+)', body):
+                if m.group(1).lower() not in versions:
+                    report('version-catalogue', path, line_of(body, m.start()),
+                           "no [versions] entry for 'libs.versions.%s'" % m.group(1))
+            for m in re.finditer(r'\blibs\.(?!plugins\b|versions\b)([\w.]+)', body):
+                if m.group(1).lower() not in libraries:
+                    report('version-catalogue', path, line_of(body, m.start()),
+                           "no [libraries] entry for 'libs.%s'" % m.group(1))
+
+
+# --------------------------------------------------------------------------
 
 def main():
     decls = collect_declarations()
@@ -518,6 +565,7 @@ def main():
     check_jvm_clashes()
     check_named_arguments(decls)
     check_viewmodel_members()
+    check_version_catalogue()
     queries = check_room_queries()
 
     print('MedLenX Lab static audit')
