@@ -49,6 +49,7 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
+import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.StatusPill
@@ -347,6 +348,7 @@ fun VerifyDoctorSection(
     onNext: () -> Unit,
     onClose: () -> Unit,
     onThumbnailAction: (ViewerAction) -> Unit,
+    medicineCount: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -492,6 +494,19 @@ fun VerifyDoctorSection(
                 modifier = Modifier.padding(bottom = 16.dp),
             )
 
+            // The medicines live on the next panel; naming the detected count here means
+            // a successful read never looks like "nothing was scanned".
+            Text(
+                text = if (medicineCount == 1) {
+                    "1 medicine detected - tap Next to review it"
+                } else {
+                    "$medicineCount medicines detected - tap Next to review them"
+                },
+                style = MlxType.BodySmall,
+                color = Mlx.Text600,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MlxButton(
                     text = "Back",
@@ -540,15 +555,24 @@ fun VerifyMedicinesSection(
                 color = Mlx.Text600,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            cards.forEachIndexed { index, card ->
-                MedicineCard(
-                    data = card,
-                    onBrandChange = { onBrandChange(index, it) },
-                    onDosageChange = { onDosageChange(index, it) },
-                    onVerifyAgainstMedex = { onVerifyAgainstMedex(index) },
-                    onReportMisId = { onReportMisId(index) },
-                    modifier = Modifier.padding(bottom = 12.dp),
+            if (cards.isEmpty()) {
+                MlxEmptyState(
+                    message = "No medicines were detected on this scan. Rescan with better " +
+                        "lighting, or go back and check the image.",
+                    ctaLabel = "Back to doctor",
+                    onCta = onBack,
                 )
+            } else {
+                cards.forEachIndexed { index, card ->
+                    MedicineCard(
+                        data = card,
+                        onBrandChange = { onBrandChange(index, it) },
+                        onDosageChange = { onDosageChange(index, it) },
+                        onVerifyAgainstMedex = { onVerifyAgainstMedex(index) },
+                        onReportMisId = { onReportMisId(index) },
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
             }
         }
 

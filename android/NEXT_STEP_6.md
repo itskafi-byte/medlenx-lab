@@ -1332,3 +1332,23 @@ Deprecations, all fixed using the replacement the compiler named:
 - `fallbackToDestructiveMigration()` -> `fallbackToDestructiveMigration(dropAllTables =
   true)`. The no-arg overload dropped every table, so `true` preserves the behaviour
   rather than changing it.
+
+## Screenshots: the scan produced a doctor but no medicine rows
+
+Device screenshots (2026-09-15) show the verification doctor panel populated while the
+medicine review panel is blank, and every downstream screen (Analytics, Team, Hub) shows
+zeros because nothing was persisted from the scan.
+
+Root cause in the UI layer: `VerifyMedicinesSection` rendered `cards.forEachIndexed {…}`
+with no empty state, so a read that returned zero medicines showed a silent blank panel;
+and `VerifyDoctorSection` gave no indication that the medicines live on the next step, so
+a successful read could look like "nothing was scanned".
+
+Fixes:
+- `VerifyDoctorSection` now takes `medicineCount` and renders "N medicines detected - tap
+  Next to review them" directly above the Next button, so a read is never ambiguous.
+- `VerifyMedicinesSection` now shows `MlxEmptyState` ("No medicines were detected…") with a
+  "Back to doctor" action instead of a blank card.
+
+Caveat: the model itself returning an empty `medicines` array for a given photo is outside
+the app's control; these changes make that state visible and recoverable instead of silent.

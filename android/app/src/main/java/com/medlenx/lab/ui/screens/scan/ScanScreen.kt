@@ -131,6 +131,7 @@ fun ScanScreen(
             onBack = vm::clear,
             onNext = vm::gotoMedicines,
             onClose = vm::clear,
+            medicineCount = state.cards.size,
             onThumbnailAction = { action ->
                 when (action) {
                     ViewerAction.ZoomIn -> transform.zoomIn()
