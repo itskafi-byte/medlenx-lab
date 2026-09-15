@@ -268,6 +268,18 @@ data class LiveScanFeedRow(
 /** Projection for [PrescriptionDao.genericMatrixRows] — widget D. */
 data class GenericMatrixRow(val specialty: String, val generic: String, val count: Int)
 
+/**
+ * Projection for [PrescriptionDao.hashRows] — the perceptual-hash duplicate scan.
+ *
+ * Mirrors the row shape `find_duplicate_prescription` selects: it only needs the
+ * id to link `duplicate_of`, the Rx number for the fraud note, and the hash.
+ */
+data class PrescriptionHashRow(
+    val id: Long,
+    val rxNo: String,
+    val imageHash: String?,
+)
+
 /** Projection for [PrescriptionDao.mostPrescribedRows] — widget A. */
 data class MostPrescribedRow(
     val brandName: String,

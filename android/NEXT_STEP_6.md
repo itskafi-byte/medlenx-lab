@@ -1001,3 +1001,74 @@ Composable-scope errors, Room/KSP codegen, or generic inference.
   export's "All departments" select is decorative (one option), so this is a
   facet with no UI rather than a lost filter.
 - CSV/PDF export still toasts that it is unavailable offline.
+
+---
+
+## Persistence wired: `saveVerified()` is finally called
+
+The largest gap from the previous section is closed. Before this, nothing in the
+app wrote a prescription: `ScanRepository.saveVerified()` was fully implemented
+but unreachable, so every Room-backed screen read empty tables forever.
+
+### `ScanViewModel.save()` — port of `save_prescription`
+
+1. **Perceptual-hash duplicate guard.** The captured image is hashed with
+   `PHash.compute` and compared against every stored hash, keeping the *closest*
+   match within `RxAudit.DUPLICATE_THRESHOLD` (8 bits), earliest row winning a tie.
+   This is `find_duplicate_prescription` verbatim, including its behaviour on a
+   missing hash: skip the guard rather than guess. Needs a new
+   `PrescriptionDao.hashRows()` + `PrescriptionHashRow` projection mirroring the
+   backend's `WHERE image_phash IS NOT NULL AND image_phash != '' ORDER BY id ASC`.
+2. **Insert.** `saveVerified()` writes the header row and its itemised medicines.
+   `duplicate_of` carries the matched row's id, so the audit drawer's fraud note
+   (`duplicateOfRxIds`) fires only on a genuine re-scan instead of the hardcoded
+   `emptyList()` it had before.
+3. **Identity.** `mrId`/`repCode` come from `officerProfile.employeeId`, falling
+   back to `DEFAULT_MR_ID = "MR001"` — the web's own default. Previously the
+   receipt was hardcoded `"MR001"` and `"A-${100 + size}"`.
+
+**Rx numbering.** The web app has no `rx_no` column at all; the Figma export
+hardcodes "A-128". The number is now `RX-<count+1>`, computed before the insert.
+Prescriptions are never deleted in this app (the only `@Delete` in the DAOs is for
+`QueuedScanEntity`), so the row count is a safe monotonic sequence and there is no
+read-modify-write round trip to backfill it.
+
+### Failure handling — a trap this change would otherwise have created
+
+A failed insert used to set `phase = ScanPhase.Failed`. That screen has no way
+back, and the officer's entire verified prescription would have been stranded
+there. A save failure now keeps the phase on `VerifyGps` and renders an
+`MlxErrorLine` above the panel, so it is retryable. A `saving` flag guards against
+double-inserts and drives the button's disabled/"Saving…" state.
+
+### Stale aggregates after a scan
+
+The ViewModels are hoisted and live across tabs, so a prescription saved on Scan
+never reached Analytics/Team/Hub until an app restart. The shell now re-pulls on
+tab entry via `LaunchedEffect(dest)`: `analyticsVm.load()`, `teamVm.load()`, and a
+new `HubViewModel.reload()` (which only re-reads the scan-derived TRIPS volumes —
+the bundled datasets cannot change at runtime).
+
+### Checker gap found and closed while verifying this
+
+The named-argument checker only collected `fun` declarations, so **data-class
+constructor calls were unchecked** — including the new 19-field
+`PrescriptionEntity(...)`. Extended to class constructors; it then reported 6 hits.
+All 6 were checker bugs, not code bugs, from two causes:
+
+- `strip()` deleted `/* ... */` comments without preserving newlines, so reported
+  line numbers did not match the file.
+- `split_top()` counted `<`/`>` as nesting brackets. An earlier fix had only
+  neutralised `->`, so a comparison like `all.count { it.abxItems > 0 }` still
+  decremented the depth and split arguments at the wrong level.
+
+Both fixed; the checker is now 0 on the tree and catches a deliberately misspelled
+argument in the new `PrescriptionEntity` call.
+
+### Still open
+
+- `JobBoard.departments` is computed by `PharmaHub` but has no UI. Adding a filter
+  would mean changing ported logic, which needs a parity run against the Python
+  first — not done here.
+- No compile has run in this sandbox (no JVM). `hashRows()` is a new `@Query`
+  returning a new projection, so its KSP-generated implementation is unproven.

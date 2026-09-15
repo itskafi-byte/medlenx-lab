@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -185,6 +186,18 @@ fun MedLenXShell(
                         // blurred bar). Every other screen is simply offset below it
                         // until Steps 5-9 give them real scrolling content.
                         val scrollsUnderBar = dest == Destination.Scan || dest == Destination.Analytics
+                        // Re-pull aggregates on entry. The ViewModels are hoisted and
+                        // live across tabs, so a prescription saved on the Scan tab
+                        // would otherwise not reach Analytics/Team/Hub until the app
+                        // restarted.
+                        LaunchedEffect(dest) {
+                            when (dest) {
+                                Destination.Analytics -> analyticsVm.load()
+                                Destination.Team -> teamVm.load()
+                                Destination.Hub -> hubVm.reload()
+                                else -> Unit
+                            }
+                        }
                         Column(
                             Modifier.padding(
                                 PaddingValues(
@@ -276,7 +289,7 @@ fun MedLenXShell(
                         medicines = s.enriched,
                         ownCompany = profile?.company.orEmpty(),
                         offTerritory = s.geo.offTerritory,
-                        duplicateOfRxIds = emptyList(),
+                        duplicateOfRxIds = scanVm.duplicateOfRxIds,
                         onBack = { navController.popBackStack() },
                         onPitchCard = { med ->
                             val sub = med.substitution

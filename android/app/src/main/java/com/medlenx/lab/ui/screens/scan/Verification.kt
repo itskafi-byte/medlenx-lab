@@ -606,6 +606,8 @@ fun VerifyGpsSection(
     onBack: () -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
+    /** True while the save round-trip is in flight, so the button cannot double-fire. */
+    saving: Boolean = false,
 ) {
     MlxCard(modifier = modifier.fillMaxWidth()) {
         SectionHeader(title = "GPS & Territory")
@@ -663,10 +665,11 @@ fun VerifyGpsSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MlxButton(text = "Back", tone = ButtonTone.Outline, onClick = onBack, icon = Icons.Filled.ArrowBack)
             MlxButton(
-                text = "Verify & Save to DB",
+                text = if (saving) "Saving…" else "Verify & Save to DB",
                 tone = ButtonTone.Success,
                 onClick = onSave,
                 icon = Icons.Filled.Check,
+                enabled = !saving,
                 modifier = Modifier.weight(1f),
             )
         }

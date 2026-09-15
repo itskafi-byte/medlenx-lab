@@ -45,6 +45,7 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxEmptyState
+import com.medlenx.lab.ui.components.MlxErrorLine
 import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.ProgressTrack
@@ -153,29 +154,37 @@ fun ScanScreen(
             modifier = modifier.padding(top = topInset),
         )
 
-        ScanPhase.VerifyGps -> VerifyGpsSection(
-            gps = GpsVerification(
-                upazila = state.geo.upazila,
-                district = state.geo.district,
-                territory = state.geo.territory,
-                hasFix = state.geo.lat != null,
-                latitude = state.geo.lat,
-                longitude = state.geo.lng,
-                offTerritory = state.geo.offTerritory,
-                reason = state.geo.verdictReason,
-            ),
-            onChange = { next ->
-                vm.onGeoChange(
-                    upazila = next.upazila,
-                    district = next.district,
-                    territory = next.territory,
-                )
-            },
-            onCaptureGps = vm::pinGps,
-            onBack = vm::backToMedicines,
-            onSave = vm::save,
-            modifier = modifier.padding(top = topInset),
-        )
+        ScanPhase.VerifyGps -> Column {
+            // Surfaces a failed save in place, so the officer can retry instead of
+            // losing the verified prescription.
+            state.error?.let {
+                MlxErrorLine(it, Modifier.padding(bottom = MlxD.Space3))
+            }
+            VerifyGpsSection(
+                gps = GpsVerification(
+                    upazila = state.geo.upazila,
+                    district = state.geo.district,
+                    territory = state.geo.territory,
+                    hasFix = state.geo.lat != null,
+                    latitude = state.geo.lat,
+                    longitude = state.geo.lng,
+                    offTerritory = state.geo.offTerritory,
+                    reason = state.geo.verdictReason,
+                ),
+                onChange = { next ->
+                    vm.onGeoChange(
+                        upazila = next.upazila,
+                        district = next.district,
+                        territory = next.territory,
+                    )
+                },
+                onCaptureGps = vm::pinGps,
+                onBack = vm::backToMedicines,
+                onSave = vm::save,
+                saving = vm.saving,
+                modifier = modifier.padding(top = topInset),
+            )
+        }
 
         ScanPhase.Saved -> ScanSavedSection(
             receipt = state.receipt ?: SavedReceipt("", 0, "", ""),

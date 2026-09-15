@@ -536,6 +536,20 @@ interface PrescriptionDao {
 
     @Query("SELECT COUNT(*) FROM prescriptions")
     suspend fun prescriptionCount(): Int
+
+    /**
+     * Every stored perceptual hash, oldest first — the duplicate scan's input.
+     *
+     * Matches `find_duplicate_prescription`'s own predicate and ordering:
+     * `WHERE image_phash IS NOT NULL AND image_phash != '' ORDER BY id ASC`.
+     * The ordering matters because a tie on Hamming distance keeps the earliest
+     * row, which is what the backend's `dist < best_dist` strict comparison does.
+     */
+    @Query(
+        "SELECT id, rx_no AS rxNo, image_hash AS imageHash FROM prescriptions " +
+            "WHERE image_hash IS NOT NULL AND image_hash != '' ORDER BY id ASC",
+    )
+    suspend fun hashRows(): List<PrescriptionHashRow>
 }
 
 @Dao

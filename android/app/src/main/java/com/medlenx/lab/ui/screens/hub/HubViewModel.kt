@@ -168,6 +168,16 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Re-reads the scan-derived TRIPS volumes.
+     *
+     * The other datasets are bundled and cannot change, so a tab re-entry only needs
+     * to refresh the part that depends on what the officer has scanned since.
+     */
+    fun reload() {
+        viewModelScope.launch { loadScannedRows() }
+    }
+
     fun updateTripsDays(days: Int) {
         tripsDays = days
         viewModelScope.launch { loadScannedRows() }

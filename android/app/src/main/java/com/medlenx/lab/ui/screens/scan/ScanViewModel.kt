@@ -11,11 +11,15 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.OfficerProfileEntity
+import com.medlenx.lab.data.local.PrescriptionEntity
+import com.medlenx.lab.data.local.PrescriptionHashRow
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
+import com.medlenx.lab.data.repo.PHash
+import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -65,6 +69,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MedLenXApp
     private val scanRepository = app.graph.scanRepository
     private val locationRepository = app.graph.locationRepository
+    private val prescriptionDao = app.graph.database.prescriptionDao()
 
     var state by mutableStateOf(ScanUiState())
         private set
@@ -78,6 +83,19 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * and stays null until then.
      */
     var officerProfile by mutableStateOf<OfficerProfileEntity?>(null)
+        private set
+
+    /** True while a save round-trip is in flight, so a second tap cannot double-insert. */
+    var saving by mutableStateOf(false)
+        private set
+
+    /**
+     * Rx numbers this scan duplicates, for the audit drawer's fraud note.
+     *
+     * Empty for a first-time capture. Populated from the perceptual-hash guard, so
+     * the note only appears when the same physical Rx really has been scanned before.
+     */
+    var duplicateOfRxIds by mutableStateOf<List<String>>(emptyList())
         private set
 
     init {
@@ -226,22 +244,117 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Writes the scan and shows the receipt.
+     * Persists the verified prescription, then shows the receipt.
      *
-     * The Rx number is generated locally; the Room-backed store and the audit trail
-     * land with Step 6, so this is the single place that will need to change.
+     * Port of the backend's `save_prescription`. Two things happen in order:
+     *
+     *  1. The captured image is perceptually hashed and compared against every
+     *     stored hash, so re-uploading the same physical Rx is recorded as a
+     *     duplicate rather than counted twice as target credit
+     *     (`find_duplicate_prescription`).
+     *  2. The header row and its itemised medicines are written by
+     *     [com.medlenx.lab.data.repo.ScanRepository.saveVerified].
+     *
+     * The Rx number comes from the inserted primary key. The Figma export hardcodes
+     * "A-128"; the web app has no Rx-number column at all, so any stable identifier
+     * is a divergence - a real one beats a fake constant that repeats on every scan.
      */
     fun save() {
-        val number = "A-${100 + (state.result?.medicines?.size ?: 0)}"
-        state = state.copy(
-            phase = ScanPhase.Saved,
-            receipt = SavedReceipt(
-                rxNumber = number,
-                medicineCount = state.cards.size,
-                territory = state.doctor.territory.ifBlank { state.geo.territory },
-                repCode = "MR001",
-            ),
-        )
+        val result = state.result
+        if (result == null) {
+            state = state.copy(error = "Nothing to save - the read did not complete")
+            return
+        }
+        if (saving) return
+        state = state.copy(error = null)
+        // Captured up front: the coroutine below must not read mutable Compose state
+        // after `state` has been reassigned.
+        val doctor = state.doctor
+        val geo = state.geo
+        val imageFile = state.imageFile
+        val profile = officerProfile
+        saving = true
+        viewModelScope.launch {
+            runCatching {
+                // Null when the image cannot be decoded. The web skips the guard for
+                // a missing hash rather than guessing, and so does this.
+                val hash = imageFile?.let { file ->
+                    withContext(Dispatchers.IO) { PHash.compute(file) }
+                        .takeIf { it.isNotBlank() }
+                }
+                val match = hash?.let { findDuplicate(it) }
+                val repId = profile?.employeeId?.takeIf { it.isNotBlank() } ?: DEFAULT_MR_ID
+                // Prescriptions are never deleted in this app, so the row count is a
+                // safe monotonic sequence and the number can be known before insert -
+                // no read-modify-write round trip to fill it in afterwards.
+                val rxNo = "RX-${prescriptionDao.prescriptionCount() + 1}"
+
+                scanRepository.saveVerified(
+                    prescription = PrescriptionEntity(
+                        rxNo = rxNo,
+                        imagePath = imageFile?.absolutePath.orEmpty(),
+                        imageHash = hash,
+                        doctorName = doctor.name,
+                        doctorBmdcNo = doctor.bmdcNo,
+                        doctorSpecialty = doctor.specialty,
+                        chamber = doctor.hospitalChamber,
+                        district = doctor.district.ifBlank { geo.district },
+                        upazila = doctor.upazila.ifBlank { geo.upazila },
+                        territory = doctor.territory.ifBlank { geo.territory },
+                        prescriptionSource = doctor.source.label,
+                        // saveVerified re-derives these two from its own arguments;
+                        // passing the real values keeps the entity self-consistent.
+                        totalMedicines = result.medicines.size,
+                        mrId = repId,
+                        duplicateOf = match?.id,
+                        offTerritory = geo.offTerritory,
+                        territoryNote = geo.verdictReason.takeIf { it.isNotBlank() },
+                        lat = geo.lat,
+                        lng = geo.lng,
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                    result = result,
+                    mrId = repId,
+                    ownCompany = profile?.company,
+                )
+                duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()
+                state = state.copy(
+                    phase = ScanPhase.Saved,
+                    receipt = SavedReceipt(
+                        rxNumber = rxNo,
+                        medicineCount = result.medicines.size,
+                        territory = doctor.territory.ifBlank { geo.territory },
+                        repCode = repId,
+                    ),
+                )
+            }.onFailure { e ->
+                // Deliberately NOT ScanPhase.Failed. That screen has no way back, and
+                // the officer's whole verified prescription is still on this panel -
+                // a failed insert should be retryable, not a dead end that discards it.
+                state = state.copy(
+                    error = e.message ?: "Could not save the prescription",
+                )
+            }
+            saving = false
+        }
+    }
+
+    /**
+     * Port of `find_duplicate_prescription`: the *closest* stored hash within
+     * [RxAudit.DUPLICATE_THRESHOLD] bits, earliest row winning a tie.
+     */
+    private suspend fun findDuplicate(hash: String): PrescriptionHashRow? {
+        var best: PrescriptionHashRow? = null
+        var bestDistance = Int.MAX_VALUE
+        for (row in prescriptionDao.hashRows()) {
+            val other = row.imageHash ?: continue
+            val distance = PHash.hammingDistance(hash, other) ?: continue
+            if (distance <= RxAudit.DUPLICATE_THRESHOLD && distance < bestDistance) {
+                best = row
+                bestDistance = distance
+            }
+        }
+        return best
     }
 
     /** Resets to the empty state so the rep can capture the next prescription. */
@@ -327,9 +440,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clear() {
         state = ScanUiState()
+        duplicateOfRxIds = emptyList()
     }
 
 }
+
+/** `save_prescription`'s own default when no officer profile has been saved. */
+private const val DEFAULT_MR_ID = "MR001"
 
 /**
  * Supplies the Application to [ScanViewModel]. Manual rather than Hilt for the same
