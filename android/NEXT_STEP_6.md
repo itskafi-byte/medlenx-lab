@@ -1195,3 +1195,53 @@ attributed to the right class. Clean tree reports 0.
   truncation: the web's Chart A (App.tsx:1114-1124) plots only name and value.
 - No compile has run here (no JVM obtainable), so all of the above is static checks plus
   reading the data flow.
+
+## Static audit committed, queue guard tightened, polypharmacy badge fixed
+
+### `checks/audit.py` - the project's own check
+
+`5090274`'s message claimed "Checkers moved to checks/audit.py with an absolute root",
+but no such file was ever committed and `/tmp` had been wiped, so the project had no
+runnable check at all. It exists now:
+
+    python3 android/checks/audit.py     # exits non-zero on any finding
+
+Six checks over 77 Kotlin files: duplicate top-level declarations, JVM signature
+clashes, named-argument mismatches, ViewModel member access from the UI, and Room
+`@Query` table/column validation across all 60 queries (the only check that reaches the
+KSP codegen surface). Paths resolve from the script's own location, so the working
+directory cannot silently turn it into a no-op - which is exactly how a checker here
+once reported a clean run while reading zero files.
+
+**Every check was mutation-tested**: a defect was planted and the check confirmed to
+report it. Three bugs in the checker itself were found that way - a `rstrip()` that made
+a `private`-modifier test unmatchable, `:from` bind parameters being read as the SQL
+`FROM` keyword (reporting a table named `and`), and quoted SQL literals such as
+`'live'` being treated as column references.
+
+### Queue auto-replay could replace a picked image
+
+`syncQueuedScans()` allowed `ScanPhase.Ready`, which is the state the officer is in
+after picking an image and before pressing Analyse. A connectivity blip at that moment
+replayed a parked capture over the top, swapping the viewer to a different prescription.
+`ScanPhase.Empty` is never assigned except by `clear()`, so the guard now admits only
+`Empty`, and `clear()` calls `syncQueuedScans()` - otherwise nothing re-emits on
+`snapshotFlow { online }` and the second parked capture would wait for a network change
+that may never come.
+
+### Polypharmacy badge never escalated
+
+`ClinicalStrip` rendered `"$total Meds Prescribed"` in slate at every size. The web
+bands it - amber from 5 medicines, red from 8, with a warning icon - because it is a
+clinical safety signal rather than a count. `Compliance.polypharmacyIndex` was already
+ported for exactly this and had no callers; it now drives the tone and icon. Verified
+against `app/compliance.py`: identical thresholds (8/5), labels and levels, and the web
+passes `len(items)`, which is `medicines.size` here. The emoji in the ported label is
+stripped in favour of a Material icon.
+
+### Known-unused, deliberately left
+
+`Compliance.therapyBreakdown`, `tripsExpiry`, `substitutionEvidenceNotes` and
+`AnalyticsViewModel.clearFilters` have no callers. The first is superseded by
+`ClinicalStrip`'s own `classBreakdown`; `clearFilters` is superseded by the Reset button
+in `FilterSheet`. `NewsRepository.defaultClient()` is genuinely dead.

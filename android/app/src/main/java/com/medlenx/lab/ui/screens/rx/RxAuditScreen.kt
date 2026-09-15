@@ -59,6 +59,7 @@ import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxFilterChip
 import com.medlenx.lab.ui.components.MlxIconButton
+import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.StatusPill
@@ -298,7 +299,21 @@ private fun ClinicalStrip(
                     icon = Icons.Filled.LocationOn,
                 )
             }
-            StatusPill(text = "$total Meds Prescribed", tone = PillTone.Slate)
+            // The web escalates this one badge by level - amber from 5 medicines, red
+            // from 8, with a warning icon - because it is a clinical safety signal, not a
+            // count. Rendering the neutral slate label at every size hid that, so the
+            // ported `polypharmacy_index` picks the tone. Its label carries the emoji the
+            // web inlines; this app uses Material icons instead, so the glyph is stripped.
+            val poly = Compliance.polypharmacyIndex(total)
+            StatusPill(
+                text = poly.label.replace("\u26A0\uFE0F", "").replace("\u26A0", "").trim(),
+                tone = when (poly.level) {
+                    "high" -> PillTone.Red
+                    "moderate" -> PillTone.Amber
+                    else -> PillTone.Slate
+                },
+                icon = if (poly.level == "normal") null else Icons.Filled.Warning,
+            )
         }
 
         Text(

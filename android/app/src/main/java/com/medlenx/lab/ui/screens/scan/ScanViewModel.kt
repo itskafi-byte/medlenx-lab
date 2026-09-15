@@ -247,18 +247,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * Replays the oldest parked capture, honouring the header's "they will sync when you
      * reconnect".
      *
-     * Only ever runs while the scan flow is idle: a verification the officer is working
-     * through is never replaced underneath them. Rows that cannot be read stay queued and
-     * are retried on the next connectivity change, up to the repository's attempt cap.
+     * Only ever runs from [ScanPhase.Empty] - genuinely idle, with no capture in hand.
+     * `Ready` is deliberately excluded even when nothing is parked: at that point the
+     * officer has picked an image and is about to analyse it, and a connectivity blip
+     * must not swap the viewer to a different prescription underneath them. Rows that
+     * cannot be read stay queued and are retried on the next connectivity change, up to
+     * the repository's attempt cap.
      */
     fun syncQueuedScans() {
         if (!deviceState.online) return
-        if (state.phase != ScanPhase.Empty && state.phase != ScanPhase.Ready) return
-        if (state.phase == ScanPhase.Ready && state.parked) {
-            // The officer is looking at the parked capture; let them retry it themselves
-            // rather than yanking the viewer into a different image.
-            return
-        }
+        if (state.phase != ScanPhase.Empty) return
         viewModelScope.launch {
             scanRepository.drainQueue { row -> replayQueued(row) }
         }
@@ -596,6 +594,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun clear() {
         state = ScanUiState()
         duplicateOfRxIds = emptyList()
+        // Nothing re-emits on `snapshotFlow { online }` unless the network actually
+        // changes, so finishing a scan is the other moment to offer up the next
+        // parked capture. One at a time: it still has to pass verification.
+        syncQueuedScans()
     }
 
 }
