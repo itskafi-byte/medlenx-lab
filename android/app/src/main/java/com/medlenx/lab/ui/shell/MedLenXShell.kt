@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -142,12 +142,12 @@ fun MedLenXShell(
                     state = topBarState,
                     hazeState = hazeState,
                 )
-                Divider(color = Mlx.Brand200, thickness = 1.dp)
+                HorizontalDivider(color = Mlx.Brand200, thickness = 1.dp)
             }
         },
         bottomBar = {
             Column {
-                Divider(color = Mlx.Brand200, thickness = 1.dp)
+                HorizontalDivider(color = Mlx.Brand200, thickness = 1.dp)
                 MlxBottomNav(
                     selected = selected,
                     onSelect = { dest ->

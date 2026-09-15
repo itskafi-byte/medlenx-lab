@@ -1310,3 +1310,25 @@ Added `check_version_catalogue()` to `checks/audit.py`, because a `libs.` access
 matching alias is also a build-script compile error that stops Gradle before it reads any
 source. All 29 library aliases, 4 plugin aliases and 20 versions currently resolve.
 Mutation-tested with a deliberately bogus alias.
+
+## compileSdk 36 -> 37, and the deprecations the first real compile reported
+
+`:app:compileDebugKotlin` **succeeded** - 77 files, warnings only, no errors. The build
+failed on `:app:checkDebugAarMetadata`: eleven dependencies declare `minCompileSdk 37`.
+`dev.chrisbanes.haze:haze-android:1.7.3` is the root of it and pulls Compose 1.12.0 in
+with it, which is why the Compose artifacts are listed too.
+
+`compileSdk` is now 37. `targetSdk` stays at 36 on purpose: compileSdk only decides which
+APIs are visible at compile time, whereas targetSdk opts into new runtime behaviour this
+app has never been exercised against. AGP's own note makes the same distinction.
+
+Deprecations, all fixed using the replacement the compiler named:
+
+- 15 icon references across 6 files -> `Icons.AutoMirrored.Filled.*` (ArrowBack, Article,
+  Assignment, HelpOutline, OpenInNew, RotateLeft, RotateRight), imports moved to
+  `androidx.compose.material.icons.automirrored.filled`. The warning count in the build
+  log and the number of call sites migrated are both 15.
+- `Divider` -> `HorizontalDivider` (MedLenXShell, 2 call sites).
+- `fallbackToDestructiveMigration()` -> `fallbackToDestructiveMigration(dropAllTables =
+  true)`. The no-arg overload dropped every table, so `true` preserves the behaviour
+  rather than changing it.

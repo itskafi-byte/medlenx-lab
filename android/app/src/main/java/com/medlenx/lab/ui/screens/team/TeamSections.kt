@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Flag
@@ -600,7 +600,7 @@ fun TeamOffTerritorySection(flags: List<OffTerritoryRow>) {
                         contentAlignment = Alignment.Center,
                     ) {
                         androidx.compose.material3.Icon(
-                            imageVector = Icons.Filled.Assignment,
+                            imageVector = Icons.AutoMirrored.Filled.Assignment,
                             contentDescription = null,
                             tint = Mlx.Danger,
                             modifier = Modifier.size(MlxD.IconSmall),

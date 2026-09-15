@@ -15,15 +15,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -292,8 +292,8 @@ private fun VerifyThumbnail(
             val tools = listOf(
                 Icons.Filled.ZoomIn to onZoomIn,
                 Icons.Filled.ZoomOut to onZoomOut,
-                Icons.Filled.RotateLeft to onRotateLeft,
-                Icons.Filled.RotateRight to onRotateRight,
+                Icons.AutoMirrored.Filled.RotateLeft to onRotateLeft,
+                Icons.AutoMirrored.Filled.RotateRight to onRotateRight,
                 Icons.Filled.Contrast to onContrast,
                 Icons.Filled.CropFree to onFit,
             )
@@ -497,7 +497,7 @@ fun VerifyDoctorSection(
                     text = "Back",
                     tone = ButtonTone.Outline,
                     onClick = onBack,
-                    icon = Icons.Filled.ArrowBack,
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                 )
                 MlxButton(
                     text = "Next: Medicines",
@@ -577,7 +577,7 @@ fun VerifyMedicinesSection(
                 text = "Back",
                 tone = ButtonTone.Outline,
                 onClick = onBack,
-                icon = Icons.Filled.ArrowBack,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
             )
             MlxButton(
                 text = "Verify & Save to DB",
@@ -663,7 +663,7 @@ fun VerifyGpsSection(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MlxButton(text = "Back", tone = ButtonTone.Outline, onClick = onBack, icon = Icons.Filled.ArrowBack)
+            MlxButton(text = "Back", tone = ButtonTone.Outline, onClick = onBack, icon = Icons.AutoMirrored.Filled.ArrowBack)
             MlxButton(
                 text = if (saving) "Saving…" else "Verify & Save to DB",
                 tone = ButtonTone.Success,

@@ -39,7 +39,7 @@ abstract class MedLenXDatabase : RoomDatabase() {
             )
                 // Destructive migration is acceptable while the schema is still settling
                 // in Step 2; replace with real migrations before the first public release.
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 .also { instance = it }
         }

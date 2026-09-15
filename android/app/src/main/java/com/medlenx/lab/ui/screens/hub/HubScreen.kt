@@ -20,9 +20,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Paid
-import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
@@ -131,7 +131,7 @@ private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
         MlxCard {
             SectionHeader(
                 title = "Industry News",
-                icon = Icons.Filled.Article,
+                icon = Icons.AutoMirrored.Filled.Article,
                 trailing = {
                     MlxButton(
                         text = if (vm.newsLoading) "Refreshing…" else "Refresh",
@@ -163,7 +163,7 @@ private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
             MlxEmptyState(
                 message = "No headlines available. The bundled feed could not be read " +
                     "and no live items came through.",
-                icon = Icons.Filled.Article,
+                icon = Icons.AutoMirrored.Filled.Article,
             )
         } else {
             items.forEachIndexed { index, item ->
@@ -214,7 +214,7 @@ private fun FeaturedNewsCard(item: NewsItem, onOpenUrl: (String) -> Unit) {
                 MlxButton(
                     text = "Read",
                     onClick = { onOpenUrl(item.url) },
-                    icon = Icons.Filled.OpenInNew,
+                    icon = Icons.AutoMirrored.Filled.OpenInNew,
                     textStyle = MlxType.Meta,
                 )
             }
@@ -278,7 +278,7 @@ private fun NewsRow(item: NewsItem, onOpenUrl: (String) -> Unit) {
             MlxButton(
                 text = "Open",
                 onClick = { onOpenUrl(item.url) },
-                icon = Icons.Filled.OpenInNew,
+                icon = Icons.AutoMirrored.Filled.OpenInNew,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = MlxD.Space3),
@@ -1088,7 +1088,7 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                     MlxButton(
                         text = "Apply now",
                         onClick = { onOpenJob(enriched.applyUrl) },
-                        icon = Icons.Filled.OpenInNew,
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = MlxD.Space3),

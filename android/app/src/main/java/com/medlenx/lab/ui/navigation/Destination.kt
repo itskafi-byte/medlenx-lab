@@ -2,7 +2,7 @@ package com.medlenx.lab.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoGraph
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.AccountTree
@@ -27,7 +27,7 @@ sealed class Destination(val route: String, val label: String, val icon: ImageVe
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 
     /** Not on the bottom bar; opened from Settings (web sidebar item #6). */
-    data object Help : Destination("help", "Help & Guide", Icons.Filled.HelpOutline)
+    data object Help : Destination("help", "Help & Guide", Icons.AutoMirrored.Filled.HelpOutline)
 
     /**
      * Not on the bottom bar. Opened from the scan workspace over a completed read -

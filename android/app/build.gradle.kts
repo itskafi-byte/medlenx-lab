@@ -29,7 +29,12 @@ val openRouterKey: String = secret("OPENROUTER_API_KEY")
 
 android {
     namespace = "com.medlenx.lab"
-    compileSdk = 36
+    // 37, not 36: haze-android 1.7.3 and the Compose 1.12.0 artifacts it pulls in both
+    // declare minCompileSdk 37, and :app:checkDebugAarMetadata fails the build otherwise.
+    // Deliberately NOT raising targetSdk alongside it - compileSdk only decides which
+    // APIs are visible at compile time, while targetSdk opts into new runtime behaviour,
+    // which this app has not been tested against.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.medlenx.lab"

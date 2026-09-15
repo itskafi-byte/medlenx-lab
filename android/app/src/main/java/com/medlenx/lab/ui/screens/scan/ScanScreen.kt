@@ -24,8 +24,8 @@ import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MedicalInformation
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -364,8 +364,8 @@ private fun ViewerCard(
             }
             MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
             MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
-            MlxIconButton(Icons.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
-            MlxIconButton(Icons.Filled.RotateRight, "Rotate right", transform::rotateRight)
+            MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
+            MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
             MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
             MlxIconButton(Icons.Filled.Expand, "Fit", transform::fit)
             MlxIconButton(

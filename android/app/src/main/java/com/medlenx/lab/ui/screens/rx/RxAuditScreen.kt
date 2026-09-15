@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Biotech
@@ -220,7 +220,7 @@ private fun AuditHeader(
     MlxCard {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
             MlxIconButton(
-                icon = Icons.Filled.ArrowBack,
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back to verification",
                 onClick = onBack,
             )
