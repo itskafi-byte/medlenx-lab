@@ -392,9 +392,28 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val q = brand.trim()
             val matches = if (q.length >= 2) {
-                scanRepository.medexIndex().all
-                    .filter { it.brandName.contains(q, ignoreCase = true) }
-                    .take(4)
+                // runCatching, not a bare call: this coroutine has no parent to report
+                // to, so an exception here would kill it silently and the officer would
+                // see a brand field that simply never suggests anything, with no error
+                // anywhere. A failed lookup degrades to "no suggestions", not to a
+                // dead collector.
+                runCatching {
+                    scanRepository.medexIndex().all
+                        .asSequence()
+                        .filter { it.brandName.contains(q, ignoreCase = true) }
+                        // Rank, don't just take the first four. The catalogue is in
+                        // insertion order, so an unranked take(4) surfaces whatever
+                        // happens to sit earliest in the file — for a common prefix
+                        // that is a short generic token, not the brand being typed.
+                        // Prefix matches first, then the tightest name wins.
+                        .sortedWith(
+                            compareBy<MedexProduct> {
+                                if (it.brandName.startsWith(q, ignoreCase = true)) 0 else 1
+                            }.thenBy { it.brandName.length },
+                        )
+                        .take(4)
+                        .toList()
+                }.getOrDefault(emptyList())
             } else {
                 emptyList()
             }

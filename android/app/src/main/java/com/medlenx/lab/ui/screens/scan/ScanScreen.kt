@@ -268,6 +268,7 @@ fun ScanScreen(
                 state = state,
                 transform = transform,
                 onClear = vm::clear,
+                roi = roi,
             )
             GeoStrip(
                 state = state.geo,
@@ -404,6 +405,7 @@ private fun ViewerCard(
     state: ScanUiState,
     transform: ViewerTransform,
     onClear: () -> Unit,
+    roi: List<Float>? = null,
 ) {
     MlxCard(padding = 0.dp) {
         Column(
@@ -450,7 +452,11 @@ private fun ViewerCard(
                 .background(Mlx.Brand100),
         ) {
             state.imageUri?.let { uri ->
-                PrescriptionImageViewer(imageUri = uri, transform = transform)
+                // The single live region box. MedicineBoundingBox used to be drawn
+                // here as well, with `lineIndex = 0` hard-coded — a second orange box
+                // pinned to the first line that never moved no matter which medicine
+                // was selected. Everything now goes through [roi].
+                PrescriptionImageViewer(imageUri = uri, transform = transform, roi = roi)
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
@@ -459,12 +465,6 @@ private fun ViewerCard(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(12.dp),
-                    )
-                }
-                if (state.phase == ScanPhase.Done && state.result != null) {
-                    MedicineBoundingBox(
-                        lineIndex = 0,
-                        totalLines = state.result.medicines.size,
                     )
                 }
             }

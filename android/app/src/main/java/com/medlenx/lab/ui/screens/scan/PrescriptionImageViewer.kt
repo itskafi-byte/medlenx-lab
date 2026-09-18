@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -223,43 +222,7 @@ fun ViewerHintStrip(zoomPercent: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * Bounding-box highlight for the medicine line the officer is inspecting.
- *
- * The VL model returns line-based detections without pixel coordinates, so — exactly
- * as on the web — the line index is mapped onto a vertical band of the scan. Drawn in
- * the draw scope rather than laid out, so it tracks the canvas size with no extra
- * measurement pass.
+ * Kept for reference: the region box is now drawn from the live [roi] inside
+ * [PrescriptionImageViewer] so that there is exactly one orange box on screen and it
+ * tracks the medicine being edited.
  */
-@Composable
-fun MedicineBoundingBox(
-    lineIndex: Int,
-    totalLines: Int,
-    modifier: Modifier = Modifier,
-) {
-    if (totalLines <= 0) return
-    val index = lineIndex.coerceIn(0, totalLines - 1)
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .drawWithContent {
-                drawContent()
-                val bandHeight = size.height / totalLines
-                val top = index * bandHeight
-                drawRect(
-                    color = BboxFill,
-                    topLeft = Offset(0f, top),
-                    size = Size(size.width, bandHeight),
-                )
-                drawRect(
-                    color = BboxStroke,
-                    topLeft = Offset(0f, top),
-                    size = Size(size.width, bandHeight),
-                    style = Stroke(width = 2.dp.toPx()),
-                )
-            },
-    )
-}
-
-/** Bounding box — Figma `.bbox`: `#FB923C` stroke, same hue at 20% fill. */
-private val BboxFill = Mlx.GuessLight.copy(alpha = 0.2f)
-private val BboxStroke = Mlx.GuessLight
