@@ -1067,6 +1067,9 @@ fun com.medlenx.lab.data.model.EnrichedMedicine.toCardData(): MedicineCardData {
         rawText = rawText,
         matchType = matchType.label,
         lineRef = "#L$lineNumber",
+        // The enricher already resolved the MedEx pack photo; without this line it
+        // was dropped at the card boundary and never reached the UI.
+        packImage = imageUrl,
     )
 }
 

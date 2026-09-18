@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -63,6 +65,8 @@ data class MedicineCardData(
     val matchType: String? = null,
     val lineRef: String? = null,
     val bbox: List<Float> = emptyList(),
+    /** MedEx pack photo URL resolved for this SKU, when the catalogue matched it. */
+    val packImage: String? = null,
 )
 
 /** The three card variants Figma derives from the confidence band. */
@@ -107,7 +111,11 @@ fun MedicineCard(
             .padding(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PackImage(company = data.company, modifier = Modifier.size(64.dp))
+            PackImage(
+                company = data.company,
+                packImage = data.packImage,
+                modifier = Modifier.size(64.dp),
+            )
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -158,13 +166,26 @@ fun MedicineCard(
                                         .size(44.dp)
                                         .background(Mlx.Brand50, MlxShape.Small),
                                 )
-                                Text(
-                                    text = p.brandName,
-                                    style = MlxType.BodySmall,
-                                    color = Mlx.Text900,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(text = p.generic.ifBlank { p.ingredient }, style = MlxType.MicroPill, color = Mlx.Text600)
+                                // Stacked single lines, not side by side. Unwighted,
+                                // the generic name claimed its full intrinsic width
+                                // and squeezed the brand into a column one word tall.
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = p.brandName,
+                                        style = MlxType.BodySmall,
+                                        color = Mlx.Text900,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = p.generic.ifBlank { p.ingredient }
+                                            .ifBlank { p.strength.ifBlank { p.form } },
+                                        style = MlxType.MicroPill,
+                                        color = Mlx.Text600,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                     }
@@ -287,7 +308,11 @@ fun MedicineCard(
  * a 20dp circular badge hanging 6dp off the bottom-right corner.
  */
 @Composable
-private fun PackImage(company: String, modifier: Modifier = Modifier) {
+private fun PackImage(
+    company: String,
+    packImage: String? = null,
+    modifier: Modifier = Modifier,
+) {
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -304,12 +329,26 @@ private fun PackImage(company: String, modifier: Modifier = Modifier) {
             )
             // Online live fetch of the manufacturer logo; when offline or the company
             // is unidentified the icon above remains as the offline fallback.
-            if (company.isNotBlank()) {
+            // Prefer the MedEx pack photo resolved for this exact SKU. The Clearbit
+            // logo is only a manufacturer fallback and needs a company name, which an
+            // AI-detected line often does not carry -- that is why a detected medicine
+            // could sit here with no image at all.
+            val photo = packImage?.takeIf { it.isNotBlank() }
+                ?: company.takeIf { it.isNotBlank() }?.let { name ->
+                    "https://logo.clearbit.com/" +
+                        name.trim().lowercase().replace(Regex("[^a-z0-9]"), "") + ".com"
+                }
+            if (photo != null) {
                 AsyncImage(
-                    model = "https://logo.clearbit.com/" +
-                        company.trim().lowercase().replace(Regex("[^a-z0-9]"), "") + ".com",
-                    contentDescription = "Company logo",
-                    modifier = Modifier.size(40.dp),
+                    model = photo,
+                    contentDescription = if (packImage.isNullOrBlank()) {
+                        "Company logo"
+                    } else {
+                        "Pack image"
+                    },
+                    // Fills the 64dp tile: the photo is the point of the tile, not a
+                    // 40dp badge floating inside it.
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

@@ -27,6 +27,7 @@ import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -374,50 +375,85 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun onBrandChange(index: Int, brand: String) {
         updateCard(index) { it.copy(brand = brand) }
         state = state.copy(selectedMedicine = index)
-        refreshSuggestions(brand)
+        refreshSuggestions(index, brand)
     }
 
     fun selectMedicine(index: Int) {
+        suggestionJob?.cancel()
         state = state.copy(selectedMedicine = index, brandSuggestions = emptyList())
     }
 
+    /**
+     * Applies a chosen catalogue product to the card.
+     *
+     * It fills every field the catalogue knows, not just the brand: choosing a
+     * suggestion used to change nothing visible, because the tile the officer is
+     * looking at is the pack photo, and the photo was not part of the update.
+     */
     fun pickSuggestion(index: Int, product: MedexProduct) {
         updateCard(index) {
-            it.copy(brand = product.brandName, ingredient = product.generic.ifBlank { product.ingredient }, company = product.company)
+            it.copy(
+                brand = product.brandName,
+                ingredient = product.generic.ifBlank { product.ingredient },
+                company = product.company,
+                strength = product.strength.ifBlank { it.strength },
+                type = product.form.ifBlank { product.type }.ifBlank { it.type },
+                packImage = product.packImage?.takeIf { url -> url.isNotBlank() }
+                    ?: product.imageUrl,
+            )
         }
+        suggestionJob?.cancel()
         state = state.copy(brandSuggestions = emptyList())
     }
 
-    private fun refreshSuggestions(brand: String) {
-        viewModelScope.launch {
-            val q = brand.trim()
-            val matches = if (q.length >= 2) {
-                // runCatching, not a bare call: this coroutine has no parent to report
-                // to, so an exception here would kill it silently and the officer would
-                // see a brand field that simply never suggests anything, with no error
-                // anywhere. A failed lookup degrades to "no suggestions", not to a
-                // dead collector.
-                runCatching {
-                    scanRepository.medexIndex().all
-                        .asSequence()
-                        .filter { it.brandName.contains(q, ignoreCase = true) }
-                        // Rank, don't just take the first four. The catalogue is in
-                        // insertion order, so an unranked take(4) surfaces whatever
-                        // happens to sit earliest in the file — for a common prefix
-                        // that is a short generic token, not the brand being typed.
-                        // Prefix matches first, then the tightest name wins.
-                        .sortedWith(
-                            compareBy<MedexProduct> {
-                                if (it.brandName.startsWith(q, ignoreCase = true)) 0 else 1
-                            }.thenBy { it.brandName.length },
-                        )
-                        .take(4)
-                        .toList()
-                }.getOrDefault(emptyList())
-            } else {
-                emptyList()
+    /**
+     * Guards against overlapping lookups.
+     *
+     * Every keystroke used to launch its own unguarded coroutine. The first lookup
+     * blocks on the catalogue import, so later keystrokes finished first and were then
+     * overwritten by stale earlier results -- suggestions that appeared and vanished
+     * depending on typing speed. One job at a time, and a result is only published if
+     * it still matches what is in the field.
+     */
+    private var suggestionJob: Job? = null
+
+    private fun refreshSuggestions(index: Int, brand: String) {
+        suggestionJob?.cancel()
+        val q = brand.trim()
+        if (q.length < 2) {
+            state = state.copy(brandSuggestions = emptyList())
+            return
+        }
+        suggestionJob = viewModelScope.launch {
+            // runCatching, not a bare call: this coroutine has no parent to report
+            // to, so an exception here would kill it silently and the officer would
+            // see a brand field that simply never suggests anything, with no error
+            // anywhere. A failed lookup degrades to "no suggestions", not to a
+            // dead collector.
+            val matches = runCatching {
+                scanRepository.medexIndex().all
+                    .asSequence()
+                    .filter { it.brandName.contains(q, ignoreCase = true) }
+                    // Rank, don't just take the first four. The catalogue is in
+                    // insertion order, so an unranked take(4) surfaces whatever
+                    // happens to sit earliest in the file — for a common prefix
+                    // that is a short generic token, not the brand being typed.
+                    // Prefix matches first, then the tightest name wins.
+                    .sortedWith(
+                        compareBy<MedexProduct> {
+                            if (it.brandName.startsWith(q, ignoreCase = true)) 0 else 1
+                        }.thenBy { it.brandName.length },
+                    )
+                    .take(4)
+                    .toList()
+            }.getOrDefault(emptyList())
+
+            // Drop stale results: if the officer has typed since this lookup began,
+            // a newer one is already in flight and this list is out of date.
+            if (!isActive) return@launch
+            if (state.cards.getOrNull(index)?.brand?.trim() == q) {
+                state = state.copy(brandSuggestions = matches)
             }
-            state = state.copy(brandSuggestions = matches)
         }
     }
 
