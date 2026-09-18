@@ -116,6 +116,52 @@ fun ScanScreen(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(vm::onImagePicked) }
 
+    /**
+     * Guarded camera launch.
+     *
+     * Everything that can throw here used to throw straight into composition:
+     * `FileProvider.getUriForFile` raises IllegalArgumentException when no configured
+     * root matches the file, which took the whole screen down on tapping Open Camera
+     * rather than reporting anything. A failure now surfaces as a message and the
+     * officer stays on the scan screen.
+     */
+    val launchCamera = {
+        runCatching {
+            val dir = File(context.cacheDir, "rx").apply { mkdirs() }
+            val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+            pendingCameraUri = uri
+            cameraLauncher.launch(uri)
+        }.onFailure { e ->
+            android.widget.Toast.makeText(
+                context,
+                "Camera unavailable: ${e.message ?: "unknown error"}",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    // Delegating the shot to the system camera app normally needs no CAMERA grant, but
+    // several OEM camera apps refuse the capture unless the caller holds it, and it is
+    // declared in the manifest already. Asking is cheap; being refused mid-flow is not.
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            launchCamera()
+        } else {
+            android.widget.Toast.makeText(
+                context,
+                "Camera permission is needed to capture a prescription.",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
     // GPS pin needs the runtime location permission; ask on demand, then pin.
     val locationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -150,15 +196,15 @@ fun ScanScreen(
                 )
             },
             onOpenCamera = {
-                val dir = File(context.cacheDir, "rx").apply { mkdirs() }
-                val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
-                val uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file,
-                )
-                pendingCameraUri = uri
-                cameraLauncher.launch(uri)
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA,
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    launchCamera()
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
             },
             modifier = modifier.padding(top = topInset),
         )
