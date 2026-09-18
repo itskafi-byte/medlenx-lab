@@ -41,8 +41,12 @@ fun MedicineThumb(
     imageUrl: String? = null,
     size: Dp = 40.dp,
 ) {
-    val store = remember {
-        (LocalContext.current.applicationContext as MedLenXApp).graph.medicineImages
+    // LocalContext.current is itself a @Composable call, so it has to be read in the
+    // composable body. Reading it inside the remember {} lambda is illegal: that
+    // lambda is a plain calculation, not a composable context.
+    val context = LocalContext.current
+    val store = remember(context) {
+        (context.applicationContext as MedLenXApp).graph.medicineImages
     }
 
     var resolved by remember(name, imageUrl) {
