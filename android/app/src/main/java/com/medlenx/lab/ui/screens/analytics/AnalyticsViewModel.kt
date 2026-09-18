@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.ScannedMedicineEntity
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.local.LiveScanFeedRow
@@ -112,6 +113,32 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     var recentPrescriptions by mutableStateOf<List<PrescriptionEntity>>(emptyList())
+
+    /**
+     * Item breakdown for a tapped Recent Prescriptions row, or null when closed.
+     *
+     * The web build renders the row with a "tap for item breakdown" caption but never
+     * passes its own `onSelect` prop, so the tap is inert there. Here it loads the
+     * real `scanned_medicines` rows for that prescription.
+     */
+    var breakdown by mutableStateOf<List<ScannedMedicineEntity>?>(null)
+        private set
+
+    /** Doctor name for the row whose breakdown is open, so the sheet can title itself. */
+    var breakdownDoctor by mutableStateOf("")
+        private set
+
+    fun showBreakdown(row: RecentRxRow) {
+        breakdownDoctor = row.doctor
+        viewModelScope.launch {
+            breakdown = runCatching { prescriptionDao.medicinesFor(row.id) }
+                .getOrDefault(emptyList())
+        }
+    }
+
+    fun dismissBreakdown() {
+        breakdown = null
+    }
         private set
 
     var loaded by mutableStateOf(false)

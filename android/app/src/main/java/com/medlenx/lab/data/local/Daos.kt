@@ -47,6 +47,17 @@ interface MedexDao {
 
 @Dao
 interface PrescriptionDao {
+
+    /**
+     * The itemised medicines of one prescription, in the order they were read.
+     *
+     * Powers the "tap for item breakdown" affordance on Recent Prescriptions.
+     */
+    @Query(
+        "SELECT * FROM scanned_medicines WHERE prescription_id = :prescriptionId " +
+            "ORDER BY line_number",
+    )
+    suspend fun medicinesFor(prescriptionId: Long): List<ScannedMedicineEntity>
     @Insert
     suspend fun insert(p: PrescriptionEntity): Long
 

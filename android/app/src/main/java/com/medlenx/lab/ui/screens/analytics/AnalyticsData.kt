@@ -41,6 +41,8 @@ data class LiveScanRow(
 )
 
 data class RecentRxRow(
+    /** Row id in `prescriptions`; used to load the item breakdown on tap. */
+    val id: Long = 0,
     val doctor: String,
     val bmdc: String,
     val meds: Int,

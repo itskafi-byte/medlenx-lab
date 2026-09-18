@@ -224,6 +224,7 @@ fun MedLenXShell(
                                         navController.navigate(Destination.RxAudit.route)
                                     },
                                     recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(),
+                                    onSelectPrescription = analyticsVm::showBreakdown,
                                 )
                                 Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
@@ -376,6 +377,17 @@ fun MedLenXShell(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+
+        // "Tap for item breakdown" on a Recent Prescriptions row. Rendered here rather
+        // than inside the Scan screen because the prescription data belongs to the
+        // analytics store, which outlives the tab the row was tapped on.
+        analyticsVm.breakdown?.let { items ->
+            com.medlenx.lab.ui.screens.analytics.RxBreakdownSheet(
+                doctor = analyticsVm.breakdownDoctor,
+                items = items,
+                onDismiss = analyticsVm::dismissBreakdown,
+            )
+        }
         }
     }
 }

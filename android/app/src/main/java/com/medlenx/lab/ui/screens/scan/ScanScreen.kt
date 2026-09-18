@@ -75,6 +75,7 @@ fun ScanScreen(
     onOpenAudit: () -> Unit,
     modifier: Modifier = Modifier,
     recentRows: List<com.medlenx.lab.ui.screens.analytics.RecentRxRow> = emptyList(),
+    onSelectPrescription: (com.medlenx.lab.ui.screens.analytics.RecentRxRow) -> Unit = {},
 ) {
     val context = LocalContext.current
     val state = vm.state
@@ -248,6 +249,9 @@ fun ScanScreen(
             onScanAnother = vm::scanAnother,
             onOpenAudit = onOpenAudit,
             recentRows = recentRows,
+            // Without this the row tap was a no-op: ScanSavedSection already forwards
+            // onSelect, but nothing supplied it.
+            onSelectPrescription = onSelectPrescription,
             modifier = modifier.padding(top = topInset),
         )
 

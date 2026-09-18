@@ -118,6 +118,7 @@ private val rxStamp: DateTimeFormatter =
 
 fun List<PrescriptionEntity>.toRecentRxRows(): List<RecentRxRow> = map { p ->
     RecentRxRow(
+        id = p.id,
         doctor = p.doctorName.ifBlank { "Unknown doctor" },
         bmdc = p.doctorBmdcNo.ifBlank { "—" },
         meds = p.totalMedicines,
