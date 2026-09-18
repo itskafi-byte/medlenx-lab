@@ -13,6 +13,7 @@ import com.medlenx.lab.data.repo.DeviceStateRepository
 import com.medlenx.lab.data.repo.LocationRepository
 import com.medlenx.lab.data.repo.NewsRepository
 import com.medlenx.lab.data.repo.RegulatoryRepository
+import com.medlenx.lab.data.repo.MedicineImageStore
 import com.medlenx.lab.data.repo.ScanRepository
 import kotlinx.serialization.json.Json
 
@@ -32,6 +33,7 @@ class AppGraph private constructor(
     val deviceState: DeviceStateRepository,
     val locationRepository: LocationRepository,
     val scanRepository: ScanRepository,
+    val medicineImages: MedicineImageStore,
     val profileDao: ProfileDao,
     val regulatoryRepository: RegulatoryRepository,
     val newsRepository: NewsRepository,
@@ -89,6 +91,11 @@ class AppGraph private constructor(
                     queueDao = db.queueDao(),
                     medexDao = db.medexDao(),
                     catalogue = catalogue,
+                ),
+                medicineImages = MedicineImageStore(
+                    catalogue = catalogue,
+                    medexDao = db.medexDao(),
+                    httpClient = MedLenXVlClient.defaultHttpClient(),
                 ),
                 profileDao = db.profileDao(),
                 regulatoryRepository = RegulatoryRepository(catalogue),

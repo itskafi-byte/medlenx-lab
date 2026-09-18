@@ -44,6 +44,7 @@ import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.NewsItem
 import com.medlenx.lab.data.repo.TripsMoleculeVolume
+import com.medlenx.lab.ui.components.MedicineThumb
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxButton
@@ -620,19 +621,13 @@ private fun TopCompaniesHero(vm: HubViewModel) {
 private fun ProductRow(product: MedexProduct) {
     MlxCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .height(64.dp)
-                    .aspectRatio(1f)
-                    .background(Mlx.Screen, MlxShape.Medium),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LocalPharmacy,
-                    contentDescription = null,
-                    tint = Mlx.Brand400,
-                )
-            }
+            // The catalogue row already carries its pack photo, so pass it through
+            // and let the name-based resolver cover anything that does not.
+            MedicineThumb(
+                name = product.brandName,
+                imageUrl = product.packImage ?: product.imageUrl,
+                size = 64.dp,
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
