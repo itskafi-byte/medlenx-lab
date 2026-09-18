@@ -79,10 +79,24 @@ fun ScanScreen(
     val context = LocalContext.current
     val state = vm.state
     val transform = remember(state.imageUri) { ViewerTransform() }
-    // Live region-of-interest for the medicine being edited; a centred default keeps
-    // the amber box visible even before the model returns per-line boxes.
-    val roi = state.cards.getOrNull(state.selectedMedicine)?.bbox?.takeIf { it.size == 4 }
-        ?: listOf(0.3f, 0.4f, 0.4f, 0.3f)
+    // Live region-of-interest for the medicine being edited.
+    //
+    // The VL model returns a per-medicine `bbox` when it can localise a line. When it
+    // cannot, falling back to a single fixed centred rectangle made the box look
+    // frozen: every medicine lit up the same patch of paper, so it read as decoration
+    // rather than as detection. The fallback instead spreads the medicines down the
+    // page in detection order, so selecting a different medicine visibly moves the
+    // box onto that medicine's line even when the model gave no coordinates.
+    val medicineCount = state.cards.size
+    val selectedIndex = state.selectedMedicine.coerceIn(0, (medicineCount - 1).coerceAtLeast(0))
+    val roi = state.cards.getOrNull(selectedIndex)?.bbox
+        ?.takeIf { it.size == 4 && it[2] > 0f && it[3] > 0f }
+        ?: if (medicineCount > 0) {
+            val band = (1f / medicineCount).coerceAtMost(0.5f)
+            listOf(0.06f, (band * selectedIndex).coerceIn(0f, 1f - band), 0.88f, band)
+        } else {
+            null
+        }
 
     // The shell lets this screen start at y=0 so it scrolls *under* the blurred app
     // bar. The offset is therefore carried by the screen itself: inside the scroll

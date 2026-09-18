@@ -145,11 +145,18 @@ fun MedicineCard(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 AsyncImage(
-                                    model = p.packImage ?: p.imageUrl
+                                    model = p.packImage?.takeIf { it.isNotBlank() }
+                                        ?: p.imageUrl?.takeIf { it.isNotBlank() }
                                         ?: ("https://logo.clearbit.com/" +
                                             p.company.trim().lowercase().replace(Regex("[^a-z0-9]"), "") + ".com"),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
+                                    contentDescription = "Pack image for ${p.brandName}",
+                                    // Every catalogue row ships a MedEx pack photo
+                                    // (medex.com.bd/storage/images/packaging/...). At
+                                    // 20dp it was too small to read as a pack at all,
+                                    // which looked exactly like "no image is shown".
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(Mlx.Brand50, MlxShape.Small),
                                 )
                                 Text(
                                     text = p.brandName,

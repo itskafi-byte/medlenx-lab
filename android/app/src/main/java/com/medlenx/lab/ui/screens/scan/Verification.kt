@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
@@ -47,6 +48,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.model.ConfidenceBand
 import com.medlenx.lab.data.model.confidenceBand
 import com.medlenx.lab.ui.components.ButtonTone
@@ -274,6 +277,7 @@ private fun VerifyThumbnail(
     onRotateRight: () -> Unit,
     onContrast: () -> Unit,
     onFit: () -> Unit,
+    onFullscreen: () -> Unit,
     zoomLabel: String,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
@@ -284,6 +288,9 @@ private fun VerifyThumbnail(
         modifier = modifier
             .fillMaxWidth()
             .height(180.dp)
+            // Clipped to the card's top corners: a zoomed scan magnifies inside the
+            // thumbnail instead of spilling over the doctor form underneath it.
+            .clip(MlxShape.Sheet)
             .background(Mlx.Brand100)
             .pointerInput(transform) {
                 if (transform != null) {
@@ -300,10 +307,12 @@ private fun VerifyThumbnail(
         // The officer must be able to see the prescription they are verifying; the
         // earlier placeholder-only box made the photo "vanish" on the review panel.
         if (imageUri != null) {
-            AsyncImage(
-                model = imageUri,
-                contentDescription = "Prescription scan",
-                contentScale = ContentScale.Fit,
+            // Read in composition: draw scopes do not observe snapshot state, so a
+            // late-arriving aspect would otherwise never repaint the region box.
+            val aspect = transform?.imageAspect ?: 0f
+            // Image and region box share ONE transformed layer, so the box is pinned
+            // to the medicine line instead of drifting away from it under zoom/pan.
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
@@ -318,28 +327,31 @@ private fun VerifyThumbnail(
                         } else {
                             Modifier
                         },
-                    ),
-            )
-            if (roi != null && roi.size == 4 && transform != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = transform.scale
-                            scaleY = transform.scale
-                            translationX = transform.offsetX
-                            translationY = transform.offsetY
-                            rotationZ = transform.rotation
-                        }
-                        .drawWithContent {
-                            drawContent()
+                    )
+                    .drawWithContent {
+                        drawContent()
+                        if (roi != null && roi.size == 4) {
+                            val (topLeft, boxSize) = roiRect(size.width, size.height, aspect, roi)
                             drawRect(
                                 color = Mlx.GuessLight,
-                                topLeft = Offset(roi[0] * size.width, roi[1] * size.height),
-                                size = Size(roi[2] * size.width, roi[3] * size.height),
+                                topLeft = topLeft,
+                                size = boxSize,
                                 style = Stroke(width = 3f),
                             )
-                        },
+                        }
+                    },
+            ) {
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = "Prescription scan",
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { state ->
+                        val intrinsic = state.painter.intrinsicSize
+                        if (transform != null && intrinsic.height > 0f && intrinsic.width > 0f) {
+                            transform.imageAspect = intrinsic.width / intrinsic.height
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         } else {
@@ -352,14 +364,10 @@ private fun VerifyThumbnail(
                     .size(48.dp),
             )
         }
-        // The amber region-of-interest box.
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(0.4f)
-                .height(54.dp)
-                .border(2.dp, Mlx.GuessLight, MlxShape.ExtraSmall),
-        )
+        // Deliberately no hard-coded amber box here. The web draw (App.tsx:572) is a
+        // static decorative rectangle that never moves; porting it verbatim put a
+        // second, frozen orange box on screen next to the real per-medicine region
+        // box. The single live [roi] box below the image is the real one.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -373,6 +381,7 @@ private fun VerifyThumbnail(
                 Icons.AutoMirrored.Filled.RotateRight to onRotateRight,
                 Icons.Filled.Contrast to onContrast,
                 Icons.Filled.CropFree to onFit,
+                Icons.Filled.Fullscreen to onFullscreen,
             )
             tools.forEach { (icon, action) ->
                 Box(
@@ -430,12 +439,21 @@ fun VerifyDoctorSection(
     roi: List<Float>? = null,
     modifier: Modifier = Modifier,
 ) {
+    var fullscreen by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .background(Mlx.Surface, MlxShape.Large),
     ) {
+        if (fullscreen && imageUri != null && transform != null) {
+            FullscreenPrescriptionViewer(
+                imageUri = imageUri,
+                transform = transform,
+                roi = roi,
+                onDismiss = { fullscreen = false },
+            )
+        }
         VerifyThumbnail(
             onZoomIn = { onThumbnailAction(ViewerAction.ZoomIn) },
             onZoomOut = { onThumbnailAction(ViewerAction.ZoomOut) },
@@ -443,6 +461,7 @@ fun VerifyDoctorSection(
             onRotateRight = { onThumbnailAction(ViewerAction.RotateRight) },
             onContrast = { onThumbnailAction(ViewerAction.Contrast) },
             onFit = { onThumbnailAction(ViewerAction.Fit) },
+            onFullscreen = { fullscreen = true },
             zoomLabel = zoomLabel,
             imageUri = imageUri,
             transform = transform,
@@ -633,6 +652,68 @@ fun VerifyDoctorSection(
 enum class ViewerAction { ZoomIn, ZoomOut, RotateLeft, RotateRight, Contrast, Fit }
 
 /**
+ * Full-screen review surface for a prescription.
+ *
+ * The inline viewers are clipped to their panels so a zoomed scan cannot paint over
+ * the form and the medicine cards around them. This is the escape hatch that gives
+ * the zoom the whole display. It reuses the caller's [ViewerTransform], so the
+ * officer's zoom, pan and rotation survive expanding *and* collapsing — and the
+ * orange region box comes along, because the box is drawn from the same transform.
+ */
+@Composable
+private fun FullscreenPrescriptionViewer(
+    imageUri: String,
+    transform: ViewerTransform,
+    roi: List<Float>?,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            PrescriptionImageViewer(
+                imageUri = imageUri,
+                transform = transform,
+                roi = roi,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
+                MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
+                MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
+                MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
+                MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
+                MlxIconButton(Icons.Filled.CropFree, "Fit", transform::fit)
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .size(36.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), MlxShape.Chip)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Exit fullscreen",
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+/**
  * Medicine review — Figma `VerifyMedicines` (App.tsx:654-678).
  *
  * The legend text is reproduced verbatim from the export, including its "<80%", even
@@ -657,11 +738,20 @@ fun VerifyMedicinesSection(
     onPickSuggestion: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
+    var fullscreen by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
     ) {
+        if (fullscreen && imageUri != null) {
+            FullscreenPrescriptionViewer(
+                imageUri = imageUri,
+                transform = transform ?: remember { ViewerTransform() },
+                roi = roi,
+                onDismiss = { fullscreen = false },
+            )
+        }
         // Full-featured review of the prescription while editing, with the live
         // per-medicine orange region box.
         imageUri?.let { uri ->
@@ -688,6 +778,7 @@ fun VerifyMedicinesSection(
                     MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", t::rotateRight)
                     MlxIconButton(Icons.Filled.Contrast, "Contrast", t::cycleContrast)
                     MlxIconButton(Icons.Filled.Expand, "Fit", t::fit)
+                    MlxIconButton(Icons.Filled.Fullscreen, "Fullscreen", { fullscreen = true })
                 }
             }
         }

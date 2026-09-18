@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.medlenx.lab.ui.theme.Mlx
+import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 
 /** Viewer transform state, hoisted so the control bar and the canvas stay in sync. */
@@ -38,6 +39,17 @@ class ViewerTransform {
 
     /** 1.0 = untouched; the web contrast toggle steps through these. */
     var contrast by mutableFloatStateOf(1.0f)
+
+    /**
+     * Intrinsic width/height of the decoded scan. `0` until Coil reports it.
+     *
+     * The canvas is `fillMaxSize` while the image itself is letterboxed inside it by
+     * `ContentScale.Fit`, so a region box expressed as a fraction of the *canvas*
+     * lands in the wrong place — off the paper and onto the empty matting beside it.
+     * The aspect is what lets [roiRect] convert a fraction into the image's real
+     * drawn rectangle.
+     */
+    var imageAspect by mutableFloatStateOf(0f)
 
     val zoomPercent: Int get() = (scale * 100).toInt()
 
@@ -97,11 +109,18 @@ fun PrescriptionImageViewer(
     roi: List<Float>? = null,
     overlay: @Composable () -> Unit = {},
 ) {
+    // Read in composition, not inside the draw lambda: draw scopes do not observe
+    // snapshot state, so a late-arriving aspect would otherwise never repaint the box.
+    val aspect = transform.imageAspect
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            // No clip(): a zoomed scan is allowed to overflow the frame so the
-            // officer can magnify a line and read it against the surrounding panel.
+            // Clipped to its own frame. A zoomed scan magnifies *inside* the review
+            // box instead of painting over the doctor form and the medicine cards
+            // around it; the fullscreen control is what gives the zoom the whole
+            // display when the officer wants it bigger than the panel.
+            .clip(MlxShape.Medium)
             .background(Mlx.Brand100)
             .pointerInput(imageUri) {
                 detectTransformGestures { _, pan, zoom, rotationDelta ->
@@ -114,11 +133,9 @@ fun PrescriptionImageViewer(
             },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = imageUri,
-            contentDescription = "Prescription scan",
-            contentScale = ContentScale.Fit,
-            colorFilter = if (transform.contrast > 1.01f) contrastFilter(transform.contrast) else null,
+        // Image and region box share ONE transformed layer, so the orange box is
+        // pinned to the exact line through zoom / pan / rotate rather than drifting.
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -127,34 +144,65 @@ fun PrescriptionImageViewer(
                     translationX = transform.offsetX
                     translationY = transform.offsetY
                     rotationZ = transform.rotation
-                },
-        )
-        // Per-medicine region-of-interest. It shares the image's transform so the
-        // orange box tracks the exact line through zoom / pan / rotate.
-        if (roi != null && roi.size == 4) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = transform.scale
-                        scaleY = transform.scale
-                        translationX = transform.offsetX
-                        translationY = transform.offsetY
-                        rotationZ = transform.rotation
-                    }
-                    .drawWithContent {
-                        drawContent()
+                }
+                .drawWithContent {
+                    drawContent()
+                    if (roi != null && roi.size == 4) {
+                        val (topLeft, boxSize) = roiRect(size.width, size.height, aspect, roi)
                         drawRect(
                             color = Mlx.GuessLight,
-                            topLeft = Offset(roi[0] * size.width, roi[1] * size.height),
-                            size = Size(roi[2] * size.width, roi[3] * size.height),
+                            topLeft = topLeft,
+                            size = boxSize,
                             style = Stroke(width = 3f),
                         )
-                    },
+                    }
+                },
+        ) {
+            AsyncImage(
+                model = imageUri,
+                contentDescription = "Prescription scan",
+                contentScale = ContentScale.Fit,
+                colorFilter = if (transform.contrast > 1.01f) contrastFilter(transform.contrast) else null,
+                onSuccess = { state ->
+                    val intrinsic = state.painter.intrinsicSize
+                    if (intrinsic.height > 0f && intrinsic.width > 0f) {
+                        transform.imageAspect = intrinsic.width / intrinsic.height
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
             )
         }
         overlay()
     }
+}
+
+/**
+ * Converts a normalised `[x, y, w, h]` region into pixels *of the image itself*.
+ *
+ * [boxWidth]/[boxHeight] are the canvas size, but the scan is letterboxed inside it
+ * by `ContentScale.Fit`, so the fractions must be applied to the drawn image rect —
+ * otherwise every box is offset by the matting and sits beside the medicine.
+ */
+internal fun roiRect(
+    boxWidth: Float,
+    boxHeight: Float,
+    imageAspect: Float,
+    roi: List<Float>,
+): Pair<Offset, Size> {
+    val (drawW, drawH) = if (imageAspect > 0f && imageAspect.isFinite()) {
+        val canvasAspect = if (boxHeight > 0f) boxWidth / boxHeight else 1f
+        if (imageAspect > canvasAspect) {
+            boxWidth to boxWidth / imageAspect
+        } else {
+            boxHeight * imageAspect to boxHeight
+        }
+    } else {
+        boxWidth to boxHeight
+    }
+    val left = (boxWidth - drawW) / 2f
+    val top = (boxHeight - drawH) / 2f
+    return Offset(left + roi[0] * drawW, top + roi[1] * drawH) to
+        Size(roi[2] * drawW, roi[3] * drawH)
 }
 
 /** Zoom / gesture hint strip — the web's "Scroll to zoom · Drag to pan · 100%". */

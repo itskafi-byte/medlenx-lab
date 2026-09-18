@@ -5,6 +5,8 @@ import com.medlenx.lab.data.model.MedexProduct
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
@@ -33,35 +35,69 @@ class AssetCatalogue(
     private val _recordCount = MutableStateFlow(0)
     val recordCount: StateFlow<Int> = _recordCount
 
-    /** Idempotent: a no-op once the catalogue is present. */
+    /**
+     * Serialises the import.
+     *
+     * The import decodes ~16 MB of JSON into 25k Room rows and takes seconds, far
+     * longer than it takes the officer to scan a prescription and start typing a
+     * brand. Without the mutex, every concurrent caller would read a row count of 0
+     * — because the first import had not committed yet — and each would re-import the
+     * whole catalogue on top of the others.
+     */
+    private val importMutex = Mutex()
+
+    /**
+     * Idempotent, and safe to call from anywhere about to read the catalogue.
+     *
+     * Readers must *await* this rather than race it. The import is kicked off on the
+     * graph's IO scope at process start, so a caller that reads Room without waiting
+     * sees an empty table and silently resolves no brands, no companies and no pack
+     * images.
+     */
     suspend fun ensureImported(force: Boolean = false) {
         if (!force && _state.value == CatalogueState.Ready) return
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val existing = medexDao.count()
-                if (existing > 0 && !force) {
-                    _recordCount.value = existing
+        importMutex.withLock {
+            // Re-checked under the lock: a caller that queued behind the import is now
+            // looking at a finished catalogue.
+            if (!force && _state.value == CatalogueState.Ready) return
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val existing = medexDao.count()
+                    if (existing > 0 && !force) {
+                        _recordCount.value = existing
+                        _state.value = CatalogueState.Ready
+                        return@runCatching
+                    }
+
+                    _state.value = CatalogueState.Importing
+                    val products = readProducts()
+                    if (products.isEmpty()) {
+                        _state.value = CatalogueState.Missing
+                        return@runCatching
+                    }
+
+                    // Batched insert keeps the transaction log and peak memory bounded.
+                    products.chunked(2_000).forEach { chunk ->
+                        medexDao.insertAll(chunk.map { it.toEntity() })
+                    }
+                    _recordCount.value = medexDao.count()
                     _state.value = CatalogueState.Ready
-                    return@runCatching
+                }.onFailure {
+                    _state.value = CatalogueState.Failed
                 }
-
-                _state.value = CatalogueState.Importing
-                val products = readProducts()
-                if (products.isEmpty()) {
-                    _state.value = CatalogueState.Missing
-                    return@runCatching
-                }
-
-                // Batched insert keeps the transaction log and peak memory bounded.
-                products.chunked(2_000).forEach { chunk ->
-                    medexDao.insertAll(chunk.map { it.toEntity() })
-                }
-                _recordCount.value = medexDao.count()
-                _state.value = CatalogueState.Ready
-            }.onFailure {
-                _state.value = CatalogueState.Failed
             }
         }
+    }
+
+    /**
+     * Reads the bundled catalogue straight from assets, bypassing Room.
+     *
+     * Used when `medex_products` is still empty after an import attempt: a failed or
+     * partial import must not cost the officer their brand suggestions and pack image,
+     * because the JSON is on the device either way.
+     */
+    suspend fun readMedexAsset(): List<MedexProduct> = withContext(Dispatchers.IO) {
+        readProducts()
     }
 
     /** Reads assets/data/medex_full.json, which is a top-level JSON array. */

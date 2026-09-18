@@ -1,5 +1,6 @@
 package com.medlenx.lab.data.repo
 
+import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.MedexDao
 import com.medlenx.lab.data.local.PrescriptionDao
 import com.medlenx.lab.data.local.PrescriptionEntity
@@ -41,6 +42,7 @@ class ScanRepository(
     private val prescriptionDao: PrescriptionDao,
     private val queueDao: QueueDao,
     private val medexDao: MedexDao,
+    private val catalogue: AssetCatalogue,
 ) {
 
     val queued: Flow<List<QueuedScanEntity>> get() = queueDao.observeAll()
@@ -175,10 +177,31 @@ class ScanRepository(
     @Volatile
     private var cachedIndex: MedexIndex? = null
 
-    suspend fun medexIndex(): MedexIndex =
-        cachedIndex ?: withContext(Dispatchers.IO) {
-            MedexIndex(medexDao.all().map { it.toProduct() }).also { cachedIndex = it }
-        }
+    /**
+     * The in-memory brand index, guaranteed to reflect the imported catalogue.
+     *
+     * Two rules matter. It awaits [AssetCatalogue.ensureImported], because the import
+     * runs on the graph's IO scope at process start and takes seconds — a caller that
+     * reads Room without waiting sees an empty table. And it refuses to cache an empty
+     * index, because a cached empty index is indistinguishable from a genuinely empty
+     * catalogue for the rest of the process, which is what made brand suggestions and
+     * pack images silently never appear.
+     */
+    suspend fun medexIndex(): MedexIndex {
+        cachedIndex?.let { return it }
+        catalogue.ensureImported()
+        return withContext(Dispatchers.IO) {
+            val rows = medexDao.all()
+            val products = if (rows.isNotEmpty()) {
+                rows.map { it.toProduct() }
+            } else {
+                // Room is empty even after the import attempt: fall back to the
+                // bundled JSON so suggestions and pack images still resolve offline.
+                catalogue.readMedexAsset()
+            }
+            MedexIndex(products)
+        }.also { if (it.all.isNotEmpty()) cachedIndex = it }
+    }
 
     private companion object {
         /** Retries before a parked capture is abandoned. */

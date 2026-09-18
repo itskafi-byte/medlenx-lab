@@ -78,13 +78,17 @@ class AppGraph private constructor(
                 ),
                 locationRepository = LocationRepository(
                     context = appContext,
-                    assets = AssetCatalogue(appContext, json, db.medexDao()),
+                    // The shared instance, not a spare one: each AssetCatalogue
+                    // tracks its own import state, so a second instance would start a
+                    // concurrent 25k-row import of the same file.
+                    assets = catalogue,
                 ),
                 scanRepository = ScanRepository(
                     vlClient = vlClient,
                     prescriptionDao = db.prescriptionDao(),
                     queueDao = db.queueDao(),
                     medexDao = db.medexDao(),
+                    catalogue = catalogue,
                 ),
                 profileDao = db.profileDao(),
                 regulatoryRepository = RegulatoryRepository(catalogue),
