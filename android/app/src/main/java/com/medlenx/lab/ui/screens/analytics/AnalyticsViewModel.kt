@@ -113,6 +113,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     var recentPrescriptions by mutableStateOf<List<PrescriptionEntity>>(emptyList())
+        private set
 
     /**
      * Item breakdown for a tapped Recent Prescriptions row, or null when closed.
@@ -139,7 +140,6 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissBreakdown() {
         breakdown = null
     }
-        private set
 
     var loaded by mutableStateOf(false)
         private set
