@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.scan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -100,7 +101,7 @@ fun MedicineCard(
             .padding(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PackImage(modifier = Modifier.size(64.dp))
+            PackImage(company = data.company, modifier = Modifier.size(64.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -237,7 +238,7 @@ fun MedicineCard(
  * a 20dp circular badge hanging 6dp off the bottom-right corner.
  */
 @Composable
-private fun PackImage(modifier: Modifier = Modifier) {
+private fun PackImage(company: String, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -252,6 +253,16 @@ private fun PackImage(modifier: Modifier = Modifier) {
                 tint = Mlx.Brand400,
                 modifier = Modifier.size(28.dp),
             )
+            // Online live fetch of the manufacturer logo; when offline or the company
+            // is unidentified the icon above remains as the offline fallback.
+            if (company.isNotBlank()) {
+                AsyncImage(
+                    model = "https://logo.clearbit.com/" +
+                        company.trim().lowercase().replace(Regex("[^a-z0-9]"), "") + ".com",
+                    contentDescription = "Company logo",
+                    modifier = Modifier.size(40.dp),
+                )
+            }
         }
         Box(
             modifier = Modifier

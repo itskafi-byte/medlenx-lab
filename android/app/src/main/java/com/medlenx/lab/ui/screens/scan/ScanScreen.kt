@@ -180,6 +180,7 @@ fun ScanScreen(
             onReportMisId = { /* escalation queue - Step 9 */ },
             onBack = vm::backToDoctor,
             onSave = vm::gotoGps,
+            imageUri = state.imageUri,
             modifier = modifier.padding(top = topInset),
         )
 

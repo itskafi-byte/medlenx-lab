@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -280,7 +282,7 @@ private fun VerifyThumbnail(
             AsyncImage(
                 model = imageUri,
                 contentDescription = "Prescription scan",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
@@ -387,6 +389,7 @@ fun VerifyDoctorSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .background(Mlx.Surface, MlxShape.Large),
     ) {
         VerifyThumbnail(
@@ -434,13 +437,14 @@ fun VerifyDoctorSection(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
                     .background(Mlx.Brand50, MlxShape.Small)
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .clickable(onClick = onNext),
             ) {
                 Text(
                     text = if (medicineCount > 0) {
                         "$medicineCount medicine" +
                             (if (medicineCount == 1) "" else "s") +
-                            " detected — tap Next to review them"
+                            " detected — tap here to review them"
                     } else {
                         "No medicines detected — retry the scan or add manually"
                     },
@@ -599,9 +603,32 @@ fun VerifyMedicinesSection(
     onReportMisId: (Int) -> Unit,
     onBack: () -> Unit,
     onSave: () -> Unit,
+    imageUri: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // The prescription under review, so the officer can see the scan while editing.
+        imageUri?.let { uri ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(bottom = 12.dp)
+                    .background(Mlx.Brand100, MlxShape.Medium),
+            ) {
+                AsyncImage(
+                    model = uri,
+                    contentDescription = "Prescription scan",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
         MlxCard(modifier = Modifier.padding(bottom = 12.dp)) {
             SectionHeader(title = "Medicines Order & Confidence Review")
             Text(
