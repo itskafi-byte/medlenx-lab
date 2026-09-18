@@ -96,6 +96,12 @@ data class EnrichedMedicine(
     val imageUrl: String? = null,
     val alternatives: List<MedexProduct> = emptyList(),
 
+    /**
+     * Normalised [x, y, w, h] region from the vision read, carried through enrichment
+     * so the verification cards can still drive the per-medicine highlight box.
+     */
+    val bbox: List<Float> = emptyList(),
+
     // ---- compliance ------------------------------------------------------
     val neml: NemlStatus? = null,
     val dgdaAlert: DgdaAlert? = null,

@@ -127,6 +127,7 @@ object MedicineEnricher {
             // Every variant of the matched brand, so the rep can pick a different
             // strength or company by hand when the automatic choice is wrong.
             alternatives = variants.filter { it !== pick },
+            bbox = m.bbox,
 
             neml = neml,
             dgdaAlert = Compliance.priceCeilingAlert(dgdaStatus, detectedMrp = pick?.mrp),

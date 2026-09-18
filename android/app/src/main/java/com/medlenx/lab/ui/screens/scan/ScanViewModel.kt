@@ -300,6 +300,24 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun enterVerification(result: VlScanResult) {
         val d = result.doctor
+        // Enrich first, then build the cards from the enriched list.
+        //
+        // The cards used to be built from `result.medicines` -- the raw vision read --
+        // while the catalogue-resolved output went only to `enriched`, which feeds the
+        // Rx Audit. So the panel the officer actually edits never saw the catalogue:
+        // company stayed whatever the model guessed (usually blank) and there was no
+        // pack photo, because only the enriched record carries one. That is why a
+        // detected medicine showed a name with no image, and why the image appeared
+        // only after picking a suggestion by hand.
+        val enrichedMedicines = MedicineEnricher.enrich(
+            medicines = result.medicines,
+            index = scanRepository.medexIndex(),
+            regulatory = app.graph.regulatoryRepository.data(),
+            // Own-company basis for the substitution engine. Blank when no
+            // officer profile is saved, which makes genericSubstitution
+            // return null rather than guessing a manufacturer.
+            ownCompany = officerProfile?.company.orEmpty(),
+        )
         state = state.copy(
             phase = ScanPhase.VerifyDoctor,
             progress = 1f,
@@ -319,16 +337,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 upazila = d.upazila.ifBlank { state.geo.upazila },
                 territory = d.territory.ifBlank { state.geo.territory },
             ),
-            cards = result.medicines.map { it.toCardData() },
-            enriched = MedicineEnricher.enrich(
-                medicines = result.medicines,
-                index = scanRepository.medexIndex(),
-                regulatory = app.graph.regulatoryRepository.data(),
-                // Own-company basis for the substitution engine. Blank when no
-                // officer profile is saved, which makes genericSubstitution
-                // return null rather than guessing a manufacturer.
-                ownCompany = officerProfile?.company.orEmpty(),
-            ),
+            cards = enrichedMedicines.map { it.toCardData() },
+            enriched = enrichedMedicines,
         )
     }
 

@@ -54,9 +54,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val companyMatches: List<String>
         get() {
             val q = companyQuery.trim()
-            val pool = allCompanies.ifEmpty { emptyList() }
-            return if (q.isEmpty()) pool.take(8)
-            else pool.filter { it.contains(q, ignoreCase = true) }.take(8)
+            // An empty query must mean no dropdown. Returning the first handful of
+            // companies (`pool.take(8)`) kept the suggestion list permanently open
+            // under the field, listing eight unrelated names before any typing.
+            if (q.isEmpty()) return emptyList()
+            return allCompanies.filter { it.contains(q, ignoreCase = true) }.take(8)
         }
 
     var saved by mutableStateOf(false)
