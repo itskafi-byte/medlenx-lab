@@ -52,6 +52,8 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
@@ -274,7 +276,18 @@ private fun VerifyThumbnail(
         modifier = modifier
             .fillMaxWidth()
             .height(180.dp)
-            .background(Mlx.Brand100),
+            .background(Mlx.Brand100)
+            .pointerInput(transform) {
+                if (transform != null) {
+                    detectTransformGestures { _, pan, zoom, rotationDelta ->
+                        transform.scale = (transform.scale * zoom)
+                            .coerceIn(ViewerTransform.MIN_SCALE, ViewerTransform.MAX_SCALE)
+                        transform.offsetX += pan.x
+                        transform.offsetY += pan.y
+                        transform.rotation += rotationDelta
+                    }
+                }
+            },
     ) {
         // The officer must be able to see the prescription they are verifying; the
         // earlier placeholder-only box made the photo "vanish" on the review panel.
