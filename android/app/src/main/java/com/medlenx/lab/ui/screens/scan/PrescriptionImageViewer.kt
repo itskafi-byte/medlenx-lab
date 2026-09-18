@@ -60,7 +60,7 @@ class ViewerTransform {
 
     companion object {
         const val MIN_SCALE = 0.5f
-        const val MAX_SCALE = 5f
+        const val MAX_SCALE = 10f
     }
 }
 
@@ -94,12 +94,14 @@ fun PrescriptionImageViewer(
     imageUri: String,
     transform: ViewerTransform,
     modifier: Modifier = Modifier,
+    roi: List<Float>? = null,
     overlay: @Composable () -> Unit = {},
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(8.dp))
+            // No clip(): a zoomed scan is allowed to overflow the frame so the
+            // officer can magnify a line and read it against the surrounding panel.
             .background(Mlx.Brand100)
             .pointerInput(imageUri) {
                 detectTransformGestures { _, pan, zoom, rotationDelta ->
@@ -127,6 +129,30 @@ fun PrescriptionImageViewer(
                     rotationZ = transform.rotation
                 },
         )
+        // Per-medicine region-of-interest. It shares the image's transform so the
+        // orange box tracks the exact line through zoom / pan / rotate.
+        if (roi != null && roi.size == 4) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = transform.scale
+                        scaleY = transform.scale
+                        translationX = transform.offsetX
+                        translationY = transform.offsetY
+                        rotationZ = transform.rotation
+                    }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            color = Mlx.GuessLight,
+                            topLeft = Offset(roi[0] * size.width, roi[1] * size.height),
+                            size = Size(roi[2] * size.width, roi[3] * size.height),
+                            style = Stroke(width = 3f),
+                        )
+                    },
+            )
+        }
         overlay()
     }
 }

@@ -79,6 +79,10 @@ fun ScanScreen(
     val context = LocalContext.current
     val state = vm.state
     val transform = remember(state.imageUri) { ViewerTransform() }
+    // Live region-of-interest for the medicine being edited; a centred default keeps
+    // the amber box visible even before the model returns per-line boxes.
+    val roi = state.cards.getOrNull(state.selectedMedicine)?.bbox?.takeIf { it.size == 4 }
+        ?: listOf(0.3f, 0.4f, 0.4f, 0.3f)
 
     // The shell lets this screen start at y=0 so it scrolls *under* the blurred app
     // bar. The offset is therefore carried by the screen itself: inside the scroll
@@ -159,6 +163,7 @@ fun ScanScreen(
             medicineCount = state.cards.size,
             imageUri = state.imageUri,
             transform = transform,
+            roi = roi,
             onThumbnailAction = { action ->
                 when (action) {
                     ViewerAction.ZoomIn -> transform.zoomIn()
@@ -181,6 +186,12 @@ fun ScanScreen(
             onBack = vm::backToDoctor,
             onSave = vm::gotoGps,
             imageUri = state.imageUri,
+            transform = transform,
+            roi = roi,
+            selectedMedicine = state.selectedMedicine,
+            onSelectMedicine = vm::selectMedicine,
+            suggestions = state.brandSuggestions,
+            onPickSuggestion = vm::pickSuggestion,
             modifier = modifier.padding(top = topInset),
         )
 

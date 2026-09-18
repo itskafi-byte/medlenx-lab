@@ -54,6 +54,12 @@ import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.medlenx.lab.ui.components.MlxIconButton
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
@@ -270,6 +276,7 @@ private fun VerifyThumbnail(
     zoomLabel: String,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
+    roi: List<Float>? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -312,6 +319,28 @@ private fun VerifyThumbnail(
                         },
                     ),
             )
+            if (roi != null && roi.size == 4 && transform != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = transform.scale
+                            scaleY = transform.scale
+                            translationX = transform.offsetX
+                            translationY = transform.offsetY
+                            rotationZ = transform.rotation
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                color = Mlx.GuessLight,
+                                topLeft = Offset(roi[0] * size.width, roi[1] * size.height),
+                                size = Size(roi[2] * size.width, roi[3] * size.height),
+                                style = Stroke(width = 3f),
+                            )
+                        },
+                )
+            }
         } else {
             Icon(
                 Icons.Filled.CropFree,
@@ -397,6 +426,7 @@ fun VerifyDoctorSection(
     medicineCount: Int,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
+    roi: List<Float>? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -415,6 +445,7 @@ fun VerifyDoctorSection(
             zoomLabel = zoomLabel,
             imageUri = imageUri,
             transform = transform,
+            roi = roi,
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
@@ -617,6 +648,12 @@ fun VerifyMedicinesSection(
     onBack: () -> Unit,
     onSave: () -> Unit,
     imageUri: String? = null,
+    transform: ViewerTransform? = null,
+    roi: List<Float>? = null,
+    selectedMedicine: Int = 0,
+    onSelectMedicine: (Int) -> Unit = {},
+    suggestions: List<com.medlenx.lab.data.model.MedexProduct> = emptyList(),
+    onPickSuggestion: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -624,21 +661,33 @@ fun VerifyMedicinesSection(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
     ) {
-        // The prescription under review, so the officer can see the scan while editing.
+        // Full-featured review of the prescription while editing, with the live
+        // per-medicine orange region box.
         imageUri?.let { uri ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .padding(bottom = 12.dp)
-                    .background(Mlx.Brand100, MlxShape.Medium),
-            ) {
-                AsyncImage(
-                    model = uri,
-                    contentDescription = "Prescription scan",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            val t = transform ?: remember { ViewerTransform() }
+            Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .background(Mlx.Brand100, MlxShape.Medium),
+                ) {
+                    PrescriptionImageViewer(imageUri = uri, transform = t, roi = roi)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", t::zoomIn)
+                    MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", t::zoomOut)
+                    MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", t::rotateLeft)
+                    MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", t::rotateRight)
+                    MlxIconButton(Icons.Filled.Contrast, "Contrast", t::cycleContrast)
+                    MlxIconButton(Icons.Filled.Expand, "Fit", t::fit)
+                }
             }
         }
 
@@ -665,6 +714,9 @@ fun VerifyMedicinesSection(
                         onDosageChange = { onDosageChange(index, it) },
                         onVerifyAgainstMedex = { onVerifyAgainstMedex(index) },
                         onReportMisId = { onReportMisId(index) },
+                        onSelected = { onSelectMedicine(index) },
+                        suggestions = if (index == selectedMedicine) suggestions else emptyList(),
+                        onPickSuggestion = { onPickSuggestion(index, it) },
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
@@ -954,5 +1006,6 @@ fun com.medlenx.lab.data.model.VlMedicine.toCardData(): MedicineCardData {
         rawText = rawText,
         matchType = if (company.isBlank()) "No catalogue match" else "MedEx exact match",
         lineRef = null,
+        bbox = bbox,
     )
 }

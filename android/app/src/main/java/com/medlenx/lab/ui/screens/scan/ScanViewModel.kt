@@ -18,6 +18,7 @@ import com.medlenx.lab.data.local.QueuedScanEntity
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
+import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
 import com.medlenx.lab.data.repo.PHash
@@ -57,6 +58,8 @@ data class ScanUiState(
     /** Editable copies made when the read completes; the VL result stays untouched. */
     val doctor: DoctorVerification = DoctorVerification(),
     val cards: List<MedicineCardData> = emptyList(),
+    val selectedMedicine: Int = 0,
+    val brandSuggestions: List<MedexProduct> = emptyList(),
     val receipt: SavedReceipt? = null,
 
     /** True when the current capture is parked in the offline queue awaiting a replay. */
@@ -368,7 +371,36 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         return result.copy(medicines = medicines)
     }
 
-    fun onBrandChange(index: Int, brand: String) = updateCard(index) { it.copy(brand = brand) }
+    fun onBrandChange(index: Int, brand: String) {
+        updateCard(index) { it.copy(brand = brand) }
+        state = state.copy(selectedMedicine = index)
+        refreshSuggestions(brand)
+    }
+
+    fun selectMedicine(index: Int) {
+        state = state.copy(selectedMedicine = index, brandSuggestions = emptyList())
+    }
+
+    fun pickSuggestion(index: Int, product: MedexProduct) {
+        updateCard(index) {
+            it.copy(brand = product.brandName, ingredient = product.generic.ifBlank { product.ingredient }, company = product.company)
+        }
+        state = state.copy(brandSuggestions = emptyList())
+    }
+
+    private fun refreshSuggestions(brand: String) {
+        viewModelScope.launch {
+            val q = brand.trim()
+            val matches = if (q.length >= 2) {
+                scanRepository.medexIndex().all
+                    .filter { it.brandName.contains(q, ignoreCase = true) }
+                    .take(4)
+            } else {
+                emptyList()
+            }
+            state = state.copy(brandSuggestions = matches)
+        }
+    }
 
     fun onDosageChange(index: Int, dosage: String) = updateCard(index) { it.copy(dosage = dosage) }
 

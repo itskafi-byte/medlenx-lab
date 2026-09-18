@@ -187,6 +187,8 @@ Extract per new design spec:
      the brand name - the server resolves the manufacturer from the official
      MedEx catalogue. If it is not written on the paper, return "" (empty string).
    - confidence: 0-1
+   - bbox: normalised [x, y, w, h] (each 0..1) bounding box of this medicine's
+     handwritten line on the image, so the app can highlight it while editing
 
 3. Patient PII: DO NOT extract patient name, age, phone - mask per BMDC compliance, note "masked"
 

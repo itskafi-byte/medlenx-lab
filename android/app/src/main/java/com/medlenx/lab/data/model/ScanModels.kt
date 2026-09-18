@@ -49,6 +49,8 @@ data class VlMedicine(
      */
     val company: String = "",
     val confidence: Double = 0.0,
+    /** Normalised [x, y, w, h] (0..1) box of this medicine's line on the image. */
+    val bbox: List<Float> = emptyList(),
 )
 
 @Serializable

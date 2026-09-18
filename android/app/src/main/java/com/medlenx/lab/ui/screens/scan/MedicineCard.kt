@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.scan
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.medlenx.lab.data.model.MedexProduct
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,7 @@ data class MedicineCardData(
     val rawText: String? = null,
     val matchType: String? = null,
     val lineRef: String? = null,
+    val bbox: List<Float> = emptyList(),
 )
 
 /** The three card variants Figma derives from the confidence band. */
@@ -89,6 +91,9 @@ fun MedicineCard(
     onDosageChange: (String) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
     onReportMisId: () -> Unit,
+    onSelected: () -> Unit = {},
+    suggestions: List<MedexProduct> = emptyList(),
+    onPickSuggestion: (MedexProduct) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val skin = skinFor(data.confidencePct)
@@ -96,6 +101,7 @@ fun MedicineCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .clickable(onClick = onSelected)
             .background(skin.bg, MlxShape.Medium)
             .border(1.dp, skin.border, MlxShape.Medium)
             .padding(12.dp),
@@ -119,6 +125,42 @@ fun MedicineCard(
                         ),
                     )
                     ConfidenceBadge(percent = data.confidencePct)
+                }
+
+                if (suggestions.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .background(Mlx.Surface, MlxShape.Small)
+                            .border(1.dp, Mlx.Brand200, MlxShape.Small),
+                    ) {
+                        suggestions.forEach { p ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPickSuggestion(p) }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                AsyncImage(
+                                    model = p.packImage ?: p.imageUrl
+                                        ?: ("https://logo.clearbit.com/" +
+                                            p.company.trim().lowercase().replace(Regex("[^a-z0-9]"), "") + ".com"),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Text(
+                                    text = p.brandName,
+                                    style = MlxType.BodySmall,
+                                    color = Mlx.Text900,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(text = p.generic.ifBlank { p.ingredient }, style = MlxType.MicroPill, color = Mlx.Text600)
+                            }
+                        }
+                    }
                 }
 
                 // 2x2 fact tiles. Two weighted Rows rather than an experimental grid.
