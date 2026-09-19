@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.PrescriptionHashRow
@@ -18,11 +19,13 @@ import com.medlenx.lab.data.local.QueuedScanEntity
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.GpsFix
 import com.medlenx.lab.data.model.GpsSource
+import com.medlenx.lab.data.model.MatchType
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
 import com.medlenx.lab.data.repo.PHash
 import com.medlenx.lab.data.repo.RxAudit
+import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
@@ -415,6 +418,127 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
         suggestionJob?.cancel()
         state = state.copy(brandSuggestions = emptyList())
+    }
+
+    /**
+     * Re-runs the MedEx lookup for one card and applies whatever the catalogue says.
+     *
+     * A card's company comes from the catalogue resolution done at read time, but the
+     * officer retypes the brand afterwards and a retyped brand was never re-resolved.
+     * Correct "Napa" into "Napa Extra" and the manufacturer stayed whatever the first
+     * pass had decided, because nothing looked at the field again. This makes the
+     * re-check explicit instead of something that happens exactly once, at scan time.
+     */
+    fun verifyAgainstMedex(index: Int) {
+        val card = state.cards.getOrNull(index) ?: return
+        val brand = card.brand.trim()
+        if (brand.isBlank()) {
+            showToast("Enter a brand name before checking MedEx.")
+            return
+        }
+        viewModelScope.launch {
+            val catalogue = runCatching { scanRepository.medexIndex() }.getOrNull()
+            if (catalogue == null) {
+                showToast("Catalogue is still loading - try again in a moment.")
+                return@launch
+            }
+            val outcome = runCatching {
+                val m = catalogue.match(brand, card.strength, card.type)
+                m to catalogue.pickVariant(m.variants, card.strength, card.type)
+            }.getOrNull()
+            // Bound to locals rather than relying on a smart cast that has to hold
+            // across the lambda below: a lookup that throws and one that finds
+            // nothing are the same thing to the officer, so they report the same way.
+            val match = outcome?.first
+            val pick = outcome?.second
+            if (match == null || pick == null) {
+                showToast("No MedEx match for \"$brand\".")
+                return@launch
+            }
+            updateCard(index) {
+                it.copy(
+                    brand = pick.brandName,
+                    ingredient = pick.generic.ifBlank { pick.ingredient }.ifBlank { it.ingredient },
+                    company = pick.company,
+                    strength = pick.strength.ifBlank { it.strength },
+                    type = pick.form.ifBlank { pick.type }.ifBlank { it.type },
+                    packImage = pick.packImage?.takeIf { url -> url.isNotBlank() }
+                        ?: pick.imageUrl,
+                    companyVerification = if (pick.company.isBlank()) {
+                        CompanyVerification.None
+                    } else {
+                        CompanyVerification.Verified
+                    },
+                    matchType = if (match.exact) {
+                        MatchType.Exact.label
+                    } else {
+                        MatchType.Fuzzy.label
+                    },
+                    // Only worth a note when the catalogue resolved the typed brand to
+                    // a different product; otherwise it is noise on every card.
+                    catalogueNote = if (!pick.brandName.equals(brand, ignoreCase = true)) {
+                        "Re-checked against MedEx - \"$brand\" resolved to ${pick.brandName}."
+                    } else {
+                        null
+                    },
+                )
+            }
+            showToast(
+                if (pick.company.isBlank()) "Matched ${pick.brandName}."
+                else "Matched ${pick.brandName} - ${pick.company}.",
+            )
+        }
+    }
+
+    /**
+     * Queues a misread for the retraining set.
+     *
+     * `detectedBrand` is what the model originally read and `correction` is what sits
+     * in the brand field now, so the row records the difference rather than just
+     * registering a complaint. It is still worth capturing when the officer has
+     * changed nothing: a confidently wrong read is precisely what the pipeline needs
+     * to see, and "the model was sure and still wrong" is unrecoverable from a row
+     * that only stores the correction.
+     *
+     * The cropped image slice that `main.py` stores alongside it is not captured yet —
+     * see agent/findings/2026-09-19-full-scan.md.
+     */
+    fun reportMisId(index: Int) {
+        val card = state.cards.getOrNull(index) ?: return
+        val asRead = state.result?.medicines
+            ?.getOrNull(index)?.brandName
+            ?.trim()
+            .orEmpty()
+        viewModelScope.launch {
+            val row = ErrorReportEntity(
+                detectedBrand = asRead.ifBlank { card.brand.trim() },
+                correction = card.brand.trim(),
+                notes = buildList {
+                    card.lineRef?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    add("confidence ${card.confidencePct}%")
+                    card.company.takeIf { it.isNotBlank() }?.let { add(it) }
+                }.joinToString(" - "),
+                raw = card.rawText.orEmpty(),
+                createdAt = System.currentTimeMillis(),
+            )
+            val queued = runCatching { app.graph.database.rsmDao().reportError(row) }.isSuccess
+            showToast(
+                if (queued) "Queued for training."
+                else "Could not queue the report - try again.",
+            )
+        }
+    }
+
+    /**
+     * Transient confirmation, kept in the ViewModel so both handlers can report
+     * without threading a callback back through the screen.
+     *
+     * Uses the Application context rather than an Activity one, so a toast fired
+     * from a coroutine cannot outlive and leak the screen that started it. Safe from
+     * [viewModelScope], which dispatches on the main thread.
+     */
+    private fun showToast(message: String) {
+        android.widget.Toast.makeText(app, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /**
