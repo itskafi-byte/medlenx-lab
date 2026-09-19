@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -97,7 +100,13 @@ fun AnalyticsScreen(
         // Two across, matching the export's `gridTemplateColumns:"1fr 1fr"`.
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             (vm.kpis?.toKpiData() ?: emptyList()).chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Intrinsic sizing makes both cards in a row the same height. Without
+                // it each card sized to its own content, so a card with micro-pills or a
+                // progress bar sat taller than its neighbour and the pair looked ragged.
+                Row(
+                    modifier = Modifier.height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     row.forEach { kpi ->
                         KpiCard(
                             label = kpi.label,
@@ -110,7 +119,7 @@ fun AnalyticsScreen(
                                 kpi.month?.let { "Month $it" },
                             ),
                             progress = kpi.track?.let { it / 100f },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                     }
                     // Odd trailing row: keep the columns equal width.
@@ -256,9 +265,7 @@ private fun HeroBanner() {
 private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () -> Unit) {
     MlxCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -267,29 +274,38 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
                 style = MlxType.MicroPill.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.08.em),
                 color = Mlx.Text500,
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(text = "$activeCount active", style = MlxType.MicroPill, color = Mlx.Brand400)
-                MlxButton(
-                    text = "Filters ($activeCount)",
-                    tone = ButtonTone.Primary,
-                    onClick = onOpenFilters,
-                    icon = Icons.Filled.Tune,
-                )
-                MlxButton(
-                    text = "Export Data",
-                    tone = ButtonTone.Primary,
-                    onClick = onExport,
-                    icon = Icons.Filled.FileDownload,
-                )
-            }
+            Text(text = "$activeCount active", style = MlxType.MicroPill, color = Mlx.Brand400)
+        }
+        // The two buttons get their own row. Sharing a row with the label made them
+        // compete with it for width: on a phone the row overran the card's inner
+        // width, so the buttons were squeezed to different sizes and the card read as
+        // crooked. Each now takes half the row, so they are always equal.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MlxButton(
+                text = "Filters ($activeCount)",
+                tone = ButtonTone.Primary,
+                onClick = onOpenFilters,
+                icon = Icons.Filled.Tune,
+                modifier = Modifier.weight(1f),
+            )
+            MlxButton(
+                text = "Export Data",
+                tone = ButtonTone.Primary,
+                onClick = onExport,
+                icon = Icons.Filled.FileDownload,
+                modifier = Modifier.weight(1f),
+            )
         }
         Text(
             text = "Dhaka South · Last 30 Days · All Specialties · All MRs",
             style = MlxType.Meta,
             color = Mlx.Brand400,
+            modifier = Modifier.padding(top = 10.dp),
         )
     }
 }
