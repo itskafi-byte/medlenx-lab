@@ -42,9 +42,18 @@ python3 android/checks/imports.py    # missing imports, duplicate members, compo
 python3 android/checks/audit.py      # declaration counts, Room/Hilt wiring sanity
 python3 agent/roomcheck.py           # every @Query column resolves against its entity
 ```
-- `imports.py` healthy: `imports: no findings`
+- `imports.py` healthy: `imports: no findings` (5 checks: missing imports,
+  duplicate members, orphaned `private set`, composable-in-`remember`, missing
+  return)
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
   (9 entities, 60 queries)
+
+All four resolve their input roots from their own file path, so they give the same
+answer from the repo root or from `android/`. This matters more than it sounds:
+`imports.py` used to use a CWD-relative root, so `python3 android/checks/imports.py`
+from the repo root walked a non-existent directory and reported a clean tree it had
+never examined. If a checker reports clean suspiciously fast, make it fail on
+purpose and confirm it notices.
 
 Self-test any of them before trusting a clean run:
 ```bash

@@ -16,6 +16,13 @@ Checks
 3. Orphaned `private set` - a `private set` that does not follow a property.
 4. `@Composable` call inside `remember { }` - that lambda is not a composable
    context, so `LocalContext.current` there is illegal.
+5. Missing return in a block-bodied function - `fun f(): T { ... }` must return
+   explicitly; only `= expr` bodies infer their result.
+
+Run it from anywhere: the source root is derived from this file's own path. A
+previous revision used a relative root, so running it from the repo root walked a
+directory that did not exist, found no files and reported a clean tree that had
+never been looked at.
 
 Usage
 -----
@@ -27,7 +34,13 @@ import re
 import sys
 from collections import defaultdict
 
-ROOT = os.path.join("app", "src", "main", "java")
+# Resolved from this file's own location, NOT from the current directory. The
+# relative path this used to hold meant running `python3 android/checks/imports.py`
+# from the repo root walked a directory that does not exist, found zero files and
+# printed "no findings" -- a pass that was silently vacuous. Any invocation now
+# checks the same tree.
+HERE = os.path.dirname(os.path.abspath(__file__))            # .../android/checks
+ROOT = os.path.normpath(os.path.join(HERE, "..", "app", "src", "main", "java"))
 
 # Symbol -> the import its use requires. Kept to symbols this codebase actually
 # touches; extend as new APIs are adopted.
@@ -240,6 +253,86 @@ def check_composable_in_remember():
                 if opened_here or opened_above:
                     findings.append((path, i + 1, line.strip()))
     return findings
+# TODO() and error() return Nothing, so a body ending in one is complete.
+#
+# Labeled returns (`return@use`, `return@launch`) are deliberately NOT counted: they
+# return from the enclosing LAMBDA, not from the function, so a body whose only
+# returns are labeled still has no way out. The case this check was written for was
+# exactly that -- a body full of `return@use` and no return of its own.
+TERMINATOR = re.compile(r"\breturn(?!@)\b|\bthrow\b|\bTODO\s*\(|\berror\s*\(")
+
+
+def match_paren(text: str, open_idx: int) -> int:
+    """Index of the `)` matching the `(` at open_idx."""
+    depth = 0
+    for i in range(open_idx, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return len(text)
+
+
+def check_missing_return():
+    """Block-bodied function with a non-Unit return type and no return/throw.
+
+    Kotlin only infers a result for an EXPRESSION body (`fun f(): T = ...`). A block
+    body (`fun f(): T { ... }`) has to return explicitly, so ending one on a bare
+    expression is a compile error -- "Missing return statement".
+
+    It is an easy mistake to introduce by extraction: lifting a lambda body into a
+    named function converts an expression body, where the last expression WAS the
+    result, into a block body, where it is only a discarded value. That is exactly
+    how this one reached the user's compiler.
+
+    Two false-positive sources were designed out, both found by running it:
+      * Anchoring on `): Type {` alone also matched CLASS declarations carrying a
+        supertype (`class X(...) : ViewModelProvider.Factory {`), which are not
+        functions. The match now starts at `fun`.
+      * Letting the type span newlines made a bodyless abstract method
+        (`abstract fun rsmDao(): RsmDao`) run on into the next `companion object {`.
+        The type may not cross a line break now; only the separator before the
+        colon may, so multi-line signatures still match.
+    """
+    findings = []
+    # Optional generic list, so `fun <T> foo(): T {` is covered too.
+    decl = re.compile(r"\bfun\b(\s*<[^>]*>)?\s+\w+\s*\(")
+    for dirpath, _, files in os.walk(ROOT):
+        for fn_ in sorted(files):
+            if not fn_.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn_)
+            text = strip_comments(open(path, encoding="utf-8").read())
+            for m in decl.finditer(text):
+                close = match_paren(text, m.end() - 1)
+                mm = re.match(
+                    r"\s*:\s*([A-Za-z_][ \t\w.<>?\[\]\->]*?)[ \t]*\n?[ \t]*\{",
+                    text[close + 1 :],
+                )
+                if not mm:
+                    continue
+                ret = mm.group(1).strip()
+                if ret in ("Unit", ""):
+                    continue
+                open_brace = close + 1 + mm.end() - 1
+                depth = 0
+                body_end = len(text)
+                for i in range(open_brace, len(text)):
+                    if text[i] == "{":
+                        depth += 1
+                    elif text[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            body_end = i
+                            break
+                body = text[open_brace + 1 : body_end]
+                if TERMINATOR.search(body):
+                    continue
+                line = text[: m.start()].count("\n") + 1
+                findings.append((path, line, ret))
+    return findings
 
 
 def main() -> int:
@@ -275,6 +368,15 @@ def main() -> int:
         print("@Composable CALL INSIDE remember {}")
         for path, line, text in comp:
             print(f"  {path}:{line}  {text}")
+        print()
+
+    noret = check_missing_return()
+    if noret:
+        findings += len(noret)
+        print("MISSING RETURN IN BLOCK-BODIED FUNCTION")
+        for path, line, ret in noret:
+            print(f"  {path}:{line}  returns {ret} but the body has no return/throw")
+            print("       a block body needs `return`; only `= expr` bodies infer it")
         print()
 
     if findings:

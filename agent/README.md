@@ -33,7 +33,12 @@ Nothing in `agent/` is compiled or shipped. `android/checks/guard.py` treats
    entries and produced a false "no such feature". Pipe to `wc -l` first, then
    read the range you actually need.
 5. **A clean checker run proves nothing until a fault proves it fires.** Both
-   tools here were self-tested with injected faults before being trusted.
+   tools here were self-tested with injected faults before being trusted. Also
+   confirm the checker is actually reading files: `imports.py` once used a path
+   relative to the CWD, so running it from the repo root walked a directory that
+   did not exist and printed "no findings" for a tree it never looked at. All four
+   checkers now resolve their roots from their own file path and work from any
+   directory.
 6. **Images cannot be read in this session.** `read_file` on any image returns
    "no vision capabilities". Screenshots are a dead design-audit channel; use
    `adb shell uiautomator dump` (text with pixel bounds) or plain descriptions.

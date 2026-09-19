@@ -131,7 +131,7 @@ class MedLenXVlClient(
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
 
-        runCatching {
+        return runCatching {
             httpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {

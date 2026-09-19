@@ -23,6 +23,7 @@ Usage
     python3 agent/parity.py <ModuleName>    # one module, e.g. python3 agent/parity.py compliance
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -60,9 +61,15 @@ def git_show(path: str) -> str:
 
 def kotlin_corpus() -> str:
     """All Kotlin/Android source concatenated, for plain substring search."""
+    # Resolve from the repo root: a relative pathspec is interpreted against the
+    # CWD, so this returned nothing when the tool was run from anywhere else.
+    root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    ).stdout.strip()
     files = subprocess.run(
-        ["git", "ls-files", "--", "android"], capture_output=True, text=True
+        ["git", "ls-files", "--", "android"], capture_output=True, text=True, cwd=root
     ).stdout.split()
+    files = [os.path.join(root, f) for f in files]
     parts = []
     for f in files:
         if f.endswith((".kt", ".kts", ".xml")):

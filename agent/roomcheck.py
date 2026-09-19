@@ -29,11 +29,20 @@ Usage
     python3 agent/roomcheck.py
 """
 
+import os
 import re
 import sys
 
-ENTITIES = "android/app/src/main/java/com/medlenx/lab/data/local/Entities.kt"
-DAOS = "android/app/src/main/java/com/medlenx/lab/data/local/Daos.kt"
+# Anchored on this script's own location: absolute paths keep the checks working
+# from any directory. The relative paths this used to hold meant the tool silently
+# read nothing when run from anywhere but the repo root.
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENTITIES = os.path.join(
+    _REPO, "android/app/src/main/java/com/medlenx/lab/data/local/Entities.kt"
+)
+DAOS = os.path.join(
+    _REPO, "android/app/src/main/java/com/medlenx/lab/data/local/Daos.kt"
+)
 
 SQL_STOP = {
     "select", "from", "where", "and", "or", "not", "null", "is", "in", "as", "on",
