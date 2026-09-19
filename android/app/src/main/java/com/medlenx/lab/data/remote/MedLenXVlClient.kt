@@ -46,6 +46,9 @@ class MedLenXVlClient(
     private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
     private val baseUrl: String = BuildConfig.OPENROUTER_BASE_URL,
     private val primaryModel: String = BuildConfig.VL_MODEL_PRIMARY,
+    // build.gradle declared VL_MODEL_FALLBACK but nothing ever read it, so a rate
+    // limit or timeout on the big model failed the read outright.
+    private val fallbackModel: String = BuildConfig.VL_MODEL_FALLBACK,
 ) {
 
     val hasKey: Boolean get() = apiKey.isNotBlank()
@@ -65,6 +68,36 @@ class MedLenXVlClient(
     ): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
 
+        // Shrink before encoding: a raw 12MP capture is a multi-megabyte base64 body.
+        val (uploadBytes, uploadMime) = prepareUpload(imageBytes, mimeType)
+
+        val first = call(uploadBytes, uploadMime, primaryModel)
+
+        // Retry once on the smaller model. The 235B endpoint rate-limits and times
+        // out far more readily than the 30B one, and a failed read costs the officer
+        // the whole scan. Only a failure is retried - a successful but empty read is
+        // a real answer and is returned as-is.
+        if (first is VlOutcome.Failure &&
+            fallbackModel.isNotBlank() &&
+            fallbackModel != primaryModel
+        ) {
+            val retry = call(uploadBytes, uploadMime, fallbackModel)
+            if (retry !is VlOutcome.Failure) return@withContext retry
+        }
+        return@withContext first
+    }
+
+    /** Re-encodes for upload, keeping the original bytes if the image cannot be decoded. */
+    private fun prepareUpload(bytes: ByteArray, mimeType: String): Pair<ByteArray, String> {
+        val prepared = ImagePrep.toUploadJpeg(bytes)
+        return if (prepared != null) prepared to "image/jpeg" else bytes to mimeType
+    }
+
+    private suspend fun call(
+        imageBytes: ByteArray,
+        mimeType: String,
+        model: String,
+    ): VlOutcome {
         val dataUri = "data:$mimeType;base64," +
             Base64.encodeToString(imageBytes, Base64.NO_WRAP)
 
@@ -81,7 +114,7 @@ class MedLenXVlClient(
         val payload = json.encodeToString(
             ChatRequest.serializer(),
             ChatRequest(
-                model = primaryModel,
+                model = model,
                 messages = messages,
                 maxTokens = 4000,
                 temperature = 0.1,

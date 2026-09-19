@@ -36,6 +36,21 @@ def git(*args: str) -> str:
     ).stdout.strip()
 
 
+def git_status_lines() -> list[str]:
+    """`git status --porcelain` lines with leading whitespace intact.
+
+    Do NOT strip() the whole output: porcelain puts two status columns before the
+    path, so a worktree-only change starts with a space (' M path'). Stripping the
+    result shifts the first line one character left and the path is then sliced
+    wrong -- which turned 'android/...' into 'ndroid/...' and falsely reported a
+    change outside android/.
+    """
+    out = subprocess.run(
+        ["git", "status", "--porcelain"], capture_output=True, text=True
+    ).stdout
+    return [line for line in out.split("\n") if line.strip()]
+
+
 def main() -> int:
     problems: list[str] = []
 
@@ -64,10 +79,10 @@ def main() -> int:
             )
 
     # 2. Nothing outside android/ may be deleted, staged or not.
-    status = git("status", "--porcelain")
+    status_lines = git_status_lines()
     deletions = [
         line
-        for line in status.splitlines()
+        for line in status_lines
         if line[:2].strip().startswith("D") and not line[3:].startswith(ALLOWED_PREFIX)
     ]
     if deletions:
@@ -78,8 +93,9 @@ def main() -> int:
         )
 
     # 3. Everything staged must live under android/ too.
+    # Column 0 is the index status: a space or '?' means nothing is staged.
     staged = [
-        line for line in status.splitlines()
+        line for line in status_lines
         if line[0] != " " and line[0] != "?" and not line[3:].startswith(ALLOWED_PREFIX)
     ]
     if staged:
