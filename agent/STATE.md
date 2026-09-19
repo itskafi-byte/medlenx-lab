@@ -19,22 +19,30 @@ counterpart — see `MAP.md`.
 | 1 | Overflow zoom behind doctor name | **Reversed** — zoom is clipped to its frame; the fullscreen viewer is the escape hatch |
 | 2 | Per-medicine region box live while editing | Done |
 | 3 | Train/learn from corrections | **Deferred, and now confirmed as a parity gap** — see findings |
-| 4 | Verify all controls work | **Open — two dead controls found**, see findings |
+| 4 | Verify all controls work | Two dead controls **fixed** (`344c27c`); the rest needs a device |
 | 5 | Full prescription viewer + per-medicine orange box | Done |
 | 6 | Editing shows suggestions + pack image | Fixed, **not device-verified** |
 
 ## Open work, in priority order
 
-1. **Wire the two dead controls** (`ScanScreen.kt:249-250`) — `onReportMisId`
-   and `onVerifyAgainstMedex` are no-op lambdas on a card whose buttons are
-   visibly tappable. Ten-minute fix; the plumbing already exists.
-2. **Camera crash** — needs the user's logcat. Not diagnosable from source;
-   `file_paths.xml`, the manifest and `onImagePicked` all check out.
-3. **Device-verify rounds 2, 3, 4** — all committed, none confirmed on hardware.
-4. **Training queue** — persist the correction image slice; add list + stats.
-5. Company drill-down, DGDA monitor — low-severity parity gaps.
+1. **Camera crash** — one cause fixed (`e161485`): the pending URI sat in plain
+   `remember`, which dies with the process the camera launch kills, so the photo
+   was silently discarded. **Still needs the logcat** to confirm that was the
+   cause rather than something else.
+2. **Device-verify rounds 2, 3, 4** — all committed, none confirmed on hardware.
+3. **Training queue** — persist the correction image slice; add list + stats.
+4. Company drill-down, DGDA monitor — low-severity parity gaps.
 
 ## Recently fixed (committed, unverified)
+
+- **`e161485`** — the pending camera URI survives process death
+  (`rememberSaveable`). Was the closest thing to the camera crash that is
+  findable from source; logcat still wanted to confirm it.
+- **`344c27c`** — the two dead controls on the medicine card are wired:
+  `verifyAgainstMedex` re-runs the catalogue lookup (a retyped brand previously
+  kept the manufacturer from the first pass), and `reportMisId` writes an
+  `ErrorReportEntity` recording what the model read versus what the field says
+  now, then toasts.
 
 - **`dea98f9`** — uploads are now downscaled (`ImagePrep`, 1600px / JPEG 85,
   EXIF rotation baked in) and `VL_MODEL_FALLBACK` is actually used as a retry.
