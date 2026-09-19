@@ -26,8 +26,10 @@ import subprocess
 import sys
 
 BRANCH = "arena/01a09bf9-medlenx-lab"
-# This branch is contractually Android-only.
-ALLOWED_PREFIX = "android/"
+# This branch is contractually Android-only, plus the agent working folder the
+# user asked for (notes, tools and scan reports that live outside android/).
+ALLOWED_PREFIXES = ("android/", "agent/")
+ALLOWED_PREFIX = "android/"  # used in messages
 
 
 def git(*args: str) -> str:
@@ -80,10 +82,15 @@ def main() -> int:
 
     # 2. Nothing outside android/ may be deleted, staged or not.
     status_lines = git_status_lines()
+    def outside_allowed(path: str) -> bool:
+        return not path.startswith(ALLOWED_PREFIXES)
+
+    # Deletions anywhere outside the allowed roots are the reset signature and
+    # are always a hard stop, whatever the file is.
     deletions = [
         line
         for line in status_lines
-        if line[:2].strip().startswith("D") and not line[3:].startswith(ALLOWED_PREFIX)
+        if line[:2].strip().startswith("D") and outside_allowed(line[3:])
     ]
     if deletions:
         problems.append(
@@ -95,8 +102,9 @@ def main() -> int:
     # 3. Everything staged must live under android/ too.
     # Column 0 is the index status: a space or '?' means nothing is staged.
     staged = [
-        line for line in status_lines
-        if line[0] != " " and line[0] != "?" and not line[3:].startswith(ALLOWED_PREFIX)
+        line
+        for line in status_lines
+        if line[0] != " " and line[0] != "?" and outside_allowed(line[3:])
     ]
     if staged:
         problems.append(
