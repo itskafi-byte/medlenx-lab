@@ -39,6 +39,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,7 +111,15 @@ fun ScanScreen(
     val topInset = MlxD.AppBarHeight + MlxD.Space2
 
     // Camera capture writes into the FileProvider path declared in the manifest.
-    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    //
+    // rememberSaveable, not remember. Handing off to the camera is the most common
+    // trigger for process death there is: the camera app is memory-hungry and Android
+    // routinely kills the caller to feed it. Plain remember does not survive that, so
+    // the callback below came back with success == true and a null URI, dropped the
+    // photo through `?.let`, and left the officer on an empty scan screen having just
+    // taken a picture -- which reads exactly like a camera crash. Uri is Parcelable,
+    // so it saves without a custom saver.
+    var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
     ) { success ->
