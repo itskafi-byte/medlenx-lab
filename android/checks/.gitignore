@@ -1,0 +1,3 @@
+# Created when a check is imported rather than run as a script.
+__pycache__/
+*.pyc
