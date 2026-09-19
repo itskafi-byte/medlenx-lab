@@ -83,7 +83,7 @@ fun AnalyticsScreen(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(top = MlxD.AppBarHeight + MlxD.SectionGap),
+            .padding(top = MlxD.AppBarHeight + MlxD.Space2),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroBanner()

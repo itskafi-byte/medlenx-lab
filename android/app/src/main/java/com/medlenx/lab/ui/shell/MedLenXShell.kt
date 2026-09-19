@@ -207,7 +207,7 @@ fun MedLenXShell(
                                 PaddingValues(
                                     start = MlxD.ScreenMargin,
                                     end = MlxD.ScreenMargin,
-                                    top = if (scrollsUnderBar) 0.dp else MlxD.AppBarHeight + MlxD.SectionGap,
+                                    top = if (scrollsUnderBar) 0.dp else MlxD.AppBarHeight + MlxD.Space2,
                                     bottom = MlxD.ContentBottomClearance,
                                 ),
                             ),
@@ -229,6 +229,10 @@ fun MedLenXShell(
                                 Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
                                     onOpenFilters = { filterOpen = true },
+                                    // Already accepted by the screen and forwarded to
+                                    // RecentPrescriptions, but never supplied here, so
+                                    // the rows fell through to the empty default.
+                                    onSelectPrescription = analyticsVm::showBreakdown,
                                     onExport = {
                                         android.widget.Toast.makeText(
                                             context,
@@ -268,7 +272,7 @@ fun MedLenXShell(
                             PaddingValues(
                                 start = MlxD.ScreenMargin,
                                 end = MlxD.ScreenMargin,
-                                top = MlxD.AppBarHeight + MlxD.SectionGap,
+                                top = MlxD.AppBarHeight + MlxD.Space2,
                                 bottom = MlxD.ContentBottomClearance,
                             ),
                         ),
@@ -327,7 +331,7 @@ fun MedLenXShell(
                         contentPadding = PaddingValues(
                             start = MlxD.ScreenMargin,
                             end = MlxD.ScreenMargin,
-                            top = MlxD.AppBarHeight + MlxD.SectionGap,
+                            top = MlxD.AppBarHeight + MlxD.Space2,
                             bottom = MlxD.ContentBottomClearance,
                         ),
                     )
