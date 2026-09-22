@@ -261,6 +261,166 @@ def check_composable_in_remember():
 # exactly that -- a body full of `return@use` and no return of its own.
 TERMINATOR = re.compile(r"\breturn(?!@)\b|\bthrow\b|\bTODO\s*\(|\berror\s*\(")
 
+#kotlin.* and java.lang.* are auto-imported, so these need no import line.
+AUTO_IMPORTED = {
+    # kotlin primitives and collections
+    "Any", "Nothing", "Unit", "Boolean", "Byte", "Short", "Int", "Long", "Float",
+    "Double", "Char", "String", "Number", "Array", "ByteArray", "CharArray",
+    "ShortArray", "IntArray", "LongArray", "FloatArray", "DoubleArray",
+    "BooleanArray", "List", "MutableList", "Map", "MutableMap", "Set",
+    "MutableSet", "Entry", "MutableEntry", "Iterable", "MutableIterable",
+    "Iterator", "MutableIterator", "Collection", "MutableCollection", "Sequence",
+    "Comparable", "Comparator", "Pair", "Triple", "Result", "Lazy", "LazyThreadSafetyMode",
+    "Enum", "Annotation", "Throwable", "Error", "Exception", "RuntimeException",
+    "IllegalArgumentException", "IllegalStateException", "IndexOutOfBoundsException",
+    "NullPointerException", "ClassCastException", "UnsupportedOperationException",
+    "NoSuchElementException", "ArithmeticException", "NumberFormatException",
+    "ConcurrentModificationException", "AssertionError", "OutOfMemoryError",
+    # java.lang
+    "Object", "System", "Math", "Thread", "Runnable", "Integer", "Character",
+    "StringBuilder", "StringBuffer", "Class", "ClassLoader", "Process", "Package",
+    "StackTraceElement", "Void", "Iterable", "AutoCloseable",
+    # kotlin.collections.* / kotlin.text.*  (default imports, no import line)
+    "ArrayList", "HashMap", "HashSet", "LinkedHashMap", "LinkedHashSet",
+    "ArrayDeque", "TreeMap", "TreeSet", "Regex", "RegexOption", "MatchResult",
+    "MatchGroup", "MatchGroupCollection", "GroupCollection",
+    # kotlin.jvm.* annotations and friends
+    "Volatile", "OptIn", "Suppress", "JvmStatic", "JvmName", "JvmOverloads",
+    "JvmField", "JvmDefault", "JvmSuppressWildcards", "JvmWildcard", "Transient",
+    "Synchronized", "Throws", "Strictfp", "Override", "Deprecated", "Repeatable",
+    "Retention", "Target", "MustBeDocumented", "InlineOnly", "PublishedApi",
+}
+
+
+def project_declarations() -> set[str]:
+    """Every name declared anywhere under ROOT, at any depth."""
+    names: set[str] = set()
+    for dirpath, _, files in os.walk(ROOT):
+        for fn_ in sorted(files):
+            if not fn_.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn_)
+            names |= declared_names_in(open(path, encoding="utf-8").read())
+    return names
+
+
+def file_imported_names(path: str) -> set[str]:
+    """Names this file can see through its imports, plus same-package siblings."""
+    text = strip_comments(open(path, encoding="utf-8").read())
+    names: set[str] = set()
+    for m in re.finditer(r"^import\s+([\w.]+)(?:\s+as\s+(\w+))?", text, re.M):
+        fq, alias = m.group(1), m.group(2)
+        if alias:
+            names.add(alias)
+        elif fq.endswith(".*"):
+            names.add(fq[:-2])          # wildcard: remember the package stem
+        else:
+            names.add(fq.rsplit(".", 1)[-1])
+    # Kotlin resolves same-package names with no import at all.
+    pkg = re.search(r"^package\s+([\w.]+)", text, re.M)
+    if pkg:
+        for dirpath, _, files in os.walk(ROOT):
+            for fn_ in sorted(files):
+                if not fn_.endswith(".kt"):
+                    continue
+                other = os.path.join(dirpath, fn_)
+                ot = open(other, encoding="utf-8").read()
+                op = re.search(r"^package\s+([\w.]+)", ot, re.M)
+                if op and op.group(1) == pkg.group(1):
+                    names |= declared_names_in(ot)
+    return names
+
+
+DECL_PAT = re.compile(
+    r"^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t]*)*(?:public |internal |private |protected |"
+    r"open |data |sealed |value |actual |expect |inline |suspend |abstract |final |"
+    r"const |lateinit |operator |infix |override )*"
+    r"(?:(?:class|object|interface|enum class|typealias)\s+([A-Za-z_]\w*)"
+    # `fun|val|var` may carry a receiver: `fun RowScope.Spacer1Cell()`.
+    r"|(?:fun|val|var)\s+(?:[\w.]+[ \t]*\.[ \t]*)?([A-Za-z_]\w*))",
+    re.M,
+)
+
+
+def declared_names_in(text: str) -> set[str]:
+    """Every name declared at any depth: top level, nested, const val, enum entry."""
+    text = strip_comments(text)
+    names = {m.group(1) or m.group(2) for m in DECL_PAT.finditer(text)}
+    # Enum entries are declared neither by `class` nor by `val`: they are bare
+    # identifiers inside the enum body, and they resolve as names.
+    for m in re.finditer(r"\benum class\s+\w+[^{]*\{", text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        body = text[m.end() : i - 1]
+        # Only up to the first `;`, which ends the entry list.
+        body = body.split(";")[0]
+        for em in re.finditer(r"(?:^|[,{\s])([A-Z]\w*)", body):
+            names.add(em.group(1))
+    return names
+
+
+def check_undefined_symbols():
+    """A capitalised name that is used but declared nowhere and imported nowhere.
+
+    This is the check that was missing when a slice-and-replace deleted
+    `MapBubbleSpec` and `LegendDot` from TeamSections.kt while leaving every call
+    site intact. imports.py stayed silent -- it only asks whether a *known* symbol
+    has its import, never whether an unknown symbol exists at all -- and the file
+    still looked fine in review. It was caught by reading the diff, which is luck,
+    not process.
+
+    Kotlin resolves a capitalised name three ways: it is declared in this file or
+    elsewhere in the project, it comes in through an import, or it is auto-imported
+    from kotlin.* / java.lang.*. Anything else is unresolved and will not compile.
+
+    Restricted to capitalised identifiers on purpose. Lowercase names are locals,
+    parameters and properties, which cannot be resolved without a real scope model,
+    and guessing there produced nothing but noise.
+    """
+    declared = project_declarations()
+    findings = []
+    # Used as a type, a constructor call, a generic argument, or the root of a
+    # qualified reference: `Foo(`, `: Foo`, `<Foo`, `Foo<`, `Foo.`
+    use = re.compile(r"(?<![\w.])([A-Z]\w*)")
+    for dirpath, _, files in os.walk(ROOT):
+        for fn_ in sorted(files):
+            if not fn_.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn_)
+            text = strip_comments(open(path, encoding="utf-8").read())
+            # Triple-quoted blocks hold prompt prose ("Dr", "Dhaka", "FCPS") that
+            # is capitalised exactly like a type. Strip before scanning or every
+            # word of the VL system prompt reads as an unresolved symbol.
+            text = re.sub(r'""".*?"""', '""', text, flags=re.S)
+            # Drop string and char literals, and the import block itself.
+            text = re.sub(r'"(?:[^"\\]|\\.)*"', '""', text)
+            # Trailing comments too: `22.65f, 89.78f,  // Bagerhat` reads the
+            # district name as a type. strip_comments only drops whole-line ones.
+            # Safe here because string literals are already gone, so a "//" inside
+            # a URL cannot be mistaken for a comment.
+            text = re.sub(r"//.*$", "", text, flags=re.M)
+            text = re.sub(r"^import\s+[\w.]+.*$", "", text, flags=re.M)
+            visible = file_imported_names(path)
+            seen: dict[str, int] = {}
+            for i, line in enumerate(text.split("\n"), 1):
+                for m in use.finditer(line):
+                    name = m.group(1)
+                    if len(name) == 1:
+                        continue        # a generic parameter: T, E, R, K, V
+                    if name in declared or name in visible or name in AUTO_IMPORTED:
+                        continue
+                    # Enum entries and nested references resolve through their parent.
+                    seen.setdefault(name, i)
+            for name, line in sorted(seen.items()):
+                findings.append((path, line, name))
+    return findings
+
+
 
 def match_paren(text: str, open_idx: int) -> int:
     """Index of the `)` matching the `(` at open_idx."""
@@ -368,6 +528,14 @@ def main() -> int:
         print("@Composable CALL INSIDE remember {}")
         for path, line, text in comp:
             print(f"  {path}:{line}  {text}")
+        print()
+
+    undef = check_undefined_symbols()
+    if undef:
+        findings += len(undef)
+        print("UNRESOLVED SYMBOL - used but declared nowhere and imported nowhere")
+        for path, line, name in undef:
+            print(f"  {path}:{line}  {name}")
         print()
 
     noret = check_missing_return()
