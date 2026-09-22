@@ -17,15 +17,22 @@ every commit.** Healthy:
 ```
 guard: ok - on arena/01a09bf9-medlenx-lab, HEAD <sha>, all changes under android/
 ```
-If it refuses, it is almost always a sandbox reset. Recover before doing
-anything else:
+If it refuses, it is almost always a sandbox reset. **Repair it in one step:**
 ```bash
-git fetch origin arena/01a09bf9-medlenx-lab && git reset --hard FETCH_HEAD
+python3 android/checks/recover.py            # report only, changes nothing
+python3 android/checks/recover.py --apply    # repair
 ```
-then re-apply the turn's edits. A refusal looks like:
+It snapshots every file under `android/` and `agent/`, resets git to the remote
+tip, then writes back only the files that differ — i.e. exactly the work done
+since the last push. Only `.git` regresses in a reset; the files survive, so
+nothing is lost and nothing is ever deleted. Verified end to end against a
+simulated reset (`git reset --soft 2befd2c`).
+
+A refusal looks like:
 ```
 guard: REFUSING - the working tree is not safe to commit
-  - HEAD (2befd2c) is NOT a descendant of the remote tip (dea98f9).
+  - HEAD (2befd2c) is NOT a descendant of the remote tip (f9299fc).
+        This is the sandbox-reset signature ...
   - 162 deletion(s) outside android/ -- e.g. .env.example
 ```
 

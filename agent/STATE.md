@@ -62,9 +62,8 @@ counterpart — see `MAP.md`.
   polygon outline in the repo, only centroids, and the dots use real coordinates so
   the shape is guaranteed correct. If a proper vector outline is ever wanted, it has
   to be sourced and bundled — it cannot be derived from what is checked in.
-- **Help and Rx Audit still carry the old 8dp inset** (shell lines ~275 and ~334).
-  They are pushed routes rather than tabs, so they were left alone pending a word
-  from the user.
+- **All six routes are flush now** — the four tabs plus Help and Rx Audit, which
+  are pushed routes. Every top inset in the shell is `MlxD.AppBarHeight`.
 
 ## Known risks
 

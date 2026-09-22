@@ -76,8 +76,10 @@ def main() -> int:
                 f"({remote_tip[:7]}).\n"
                 f"        This is the sandbox-reset signature: local history fell "
                 f"back to the\n        branch base. Recover before committing:\n"
-                f"          git fetch origin {BRANCH} && git reset --hard FETCH_HEAD\n"
-                f"        then re-apply this turn's edits."
+                f"          python3 android/checks/recover.py --apply\n"
+                f"        which snapshots the working tree, resets git to the remote "
+                f"tip, and\n        writes back only the files that differ - the "
+                f"work done since the last push."
             )
 
     # 2. Nothing outside android/ may be deleted, staged or not.

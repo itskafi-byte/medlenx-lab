@@ -277,7 +277,9 @@ fun MedLenXShell(
                             PaddingValues(
                                 start = MlxD.ScreenMargin,
                                 end = MlxD.ScreenMargin,
-                                top = MlxD.AppBarHeight + MlxD.Space2,
+                                // AppBarHeight alone, matching the tab routes: 63dp bar + 1dp
+                                // divider, so 64dp is flush.
+                                top = MlxD.AppBarHeight,
                                 bottom = MlxD.ContentBottomClearance,
                             ),
                         ),
@@ -336,7 +338,9 @@ fun MedLenXShell(
                         contentPadding = PaddingValues(
                             start = MlxD.ScreenMargin,
                             end = MlxD.ScreenMargin,
-                            top = MlxD.AppBarHeight + MlxD.Space2,
+                            // AppBarHeight alone, matching the tab routes: 63dp bar + 1dp
+                            // divider, so 64dp is flush.
+                            top = MlxD.AppBarHeight,
                             bottom = MlxD.ContentBottomClearance,
                         ),
                     )

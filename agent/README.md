@@ -24,8 +24,11 @@ Nothing in `agent/` is compiled or shipped. `android/checks/guard.py` treats
 1. **Run the guard at the start of every turn and again before every commit.**
    `python3 android/checks/guard.py`. A sandbox reset drops local `HEAD` back to
    the branch base while the working tree keeps current edits; the next commit
-   then records the entire web app as deleted. This happened once. The guard
-   refuses to let it happen again.
+   then records the entire web app as deleted. This has happened three times. The
+   guard refuses to let that commit happen; `python3 android/checks/recover.py
+   --apply` repairs the state in one step. Only `.git` regresses -- the files
+   survive -- so recovery snapshots the tree, resets to the remote tip and writes
+   back only what differs.
 2. **Never force-push.** On a rejected push: `git fetch` → diff → `git reset
    --hard FETCH_HEAD` → re-apply → commit → fast-forward push.
 3. **Never use backticks inside `git commit -m "..."`** — bash eats them.
