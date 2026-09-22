@@ -95,13 +95,16 @@ fun HubScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(MlxD.CardGap),
     ) {
-        MlxCard {
-            Text("Pharma Intelligence Hub", style = MlxType.PanelTitle)
+        // DarkHero, matching the Analytics and Teams header cards. It used to be a
+        // plain MlxCard, which rendered solid white and broke the visual hierarchy
+        // set by the other three tabs.
+        DarkHero {
+            Text("Pharma Intelligence Hub", style = MlxType.HeroTitle, color = Color.White)
             Text(
                 text = "Real-time Medex market intelligence, DGDA notifications, " +
                     "industry jobs & WHO health campaigns",
-                style = MlxType.Meta,
-                color = Mlx.Text500,
+                style = MlxType.BodySmall,
+                color = Color.White.copy(alpha = 0.80f),
                 modifier = Modifier.padding(top = MlxD.Space1),
             )
         }

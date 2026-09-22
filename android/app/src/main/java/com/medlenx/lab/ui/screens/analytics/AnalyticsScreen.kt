@@ -83,10 +83,13 @@ fun AnalyticsScreen(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
         // The top inset sits *inside* the scroll so content passes behind the blurred
         // app bar, exactly as the Scan tab does.
+        //
+        // AppBarHeight alone, not AppBarHeight + Space2: the bar is 63dp plus the 1dp
+        // divider, so 64dp leaves the hero flush against it.
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(top = MlxD.AppBarHeight + MlxD.Space2),
+            .padding(top = MlxD.AppBarHeight),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroBanner()

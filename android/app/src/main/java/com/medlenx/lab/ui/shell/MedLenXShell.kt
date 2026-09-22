@@ -207,7 +207,12 @@ fun MedLenXShell(
                                 PaddingValues(
                                     start = MlxD.ScreenMargin,
                                     end = MlxD.ScreenMargin,
-                                    top = if (scrollsUnderBar) 0.dp else MlxD.AppBarHeight + MlxD.Space2,
+                                    // AppBarHeight alone: the bar is 63dp plus the 1dp
+                                    // divider below it, so 64dp brings the first card
+                                    // flush to the bar's underside. The extra Space2
+                                    // that used to sit here read as a stray white band
+                                    // rather than as deliberate spacing.
+                                    top = if (scrollsUnderBar) 0.dp else MlxD.AppBarHeight,
                                     bottom = MlxD.ContentBottomClearance,
                                 ),
                             ),

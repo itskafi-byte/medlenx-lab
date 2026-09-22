@@ -51,6 +51,21 @@ counterpart — see `MAP.md`.
 - **`05de3a7`** — `android/checks/imports.py`, the symbol-level checker.
 - **`8d1a375`** — `android/checks/guard.py`, the reset guard.
 
+## UI decisions worth remembering
+
+- **App bar inset is `AppBarHeight` (64dp), never `AppBarHeight + Space2`.** The bar
+  is 63dp plus a 1dp divider, so 64dp is exactly flush and the extra 8dp read as a
+  stray white band. Scan and Analytics own their inset inside their own scroll
+  container; every other tab takes it from `MedLenXShell`.
+- **The Bangladesh heatmap's base layer is 64 district centroid dots**, drawn
+  unconditionally from `data/bd_geo.json`, with data bubbles overlaid. There is no
+  polygon outline in the repo, only centroids, and the dots use real coordinates so
+  the shape is guaranteed correct. If a proper vector outline is ever wanted, it has
+  to be sourced and bundled — it cannot be derived from what is checked in.
+- **Help and Rx Audit still carry the old 8dp inset** (shell lines ~275 and ~334).
+  They are pushed routes rather than tabs, so they were left alone pending a word
+  from the user.
+
 ## Known risks
 
 - **MedEx may hotlink-protect non-browser requests.** If pack photos come back

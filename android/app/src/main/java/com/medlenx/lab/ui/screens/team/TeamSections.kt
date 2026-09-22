@@ -43,6 +43,7 @@ import com.medlenx.lab.data.local.DoctorTargetRow
 import com.medlenx.lab.data.local.DoctorVisitRow
 import com.medlenx.lab.data.local.OffTerritoryRow
 import com.medlenx.lab.data.repo.BrandProgress
+import com.medlenx.lab.data.repo.Centroid
 import com.medlenx.lab.data.repo.GeoRegion
 import com.medlenx.lab.data.repo.RsmTrends
 import com.medlenx.lab.data.repo.ScanPoint
@@ -78,6 +79,8 @@ import java.time.format.DateTimeFormatter
 fun TeamMapSection(
     regions: List<GeoRegion>,
     points: List<ScanPoint>,
+    /** District centroids — the always-drawn base layer. */
+    centroids: Map<String, Centroid>,
     mode: MapMode,
     onModeChange: (MapMode) -> Unit,
 ) {
@@ -152,17 +155,29 @@ fun TeamMapSection(
                 .background(Mlx.Screen)
                 .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(12.dp)),
         ) {
+            // The country is drawn first and always. An empty window used to replace
+            // the whole map with a caption, so the module looked broken rather than
+            // simply empty - and geography is the one thing here that does not depend
+            // on having audited anything.
+            BangladeshBaseLayer(centroids.values)
+
             if (bubbles.isEmpty()) {
-                Column(
+                // Overlay, not a replacement: the map stays visible underneath.
+                Box(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    contentAlignment = Alignment.BottomCenter,
                 ) {
-                    Text("Bangladesh Territory Map", style = MlxType.Footnote, color = Mlx.Text400)
                     Text(
                         text = "No geo-resolved audits in this window yet.",
                         style = MlxType.Footnote,
-                        color = Mlx.Text400,
+                        color = Mlx.Text500,
+                        modifier = Modifier
+                            .padding(bottom = MlxD.Space2)
+                            .background(
+                                Mlx.Screen.copy(alpha = 0.85f),
+                                RoundedCornerShape(6.dp),
+                            )
+                            .padding(horizontal = MlxD.Space2, vertical = MlxD.Space1),
                     )
                 }
             } else {
@@ -210,6 +225,30 @@ fun TeamMapSection(
                 text = "Bubble size = prescription volume",
                 style = MlxType.Footnote,
                 color = Mlx.Text500,
+            )
+        }
+    }
+}
+
+/**
+ * The base map: one dot per district centroid, projected into the canvas.
+ *
+ * These are real coordinates from `data/bd_geo.json`, so the 64 dots sit in their
+ * true positions and the familiar shape of Bangladesh emerges without shipping a
+ * tile provider or a vector outline. It renders unconditionally; the bubbles above
+ * it are the only part that depends on the data.
+ */
+@Composable
+private fun BangladeshBaseLayer(centroids: Collection<Centroid>) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val radius = 3.dp.toPx()
+        val area = Mlx.Brand300
+        for (c in centroids) {
+            val f = project(c.lat, c.lng)
+            drawCircle(
+                color = area,
+                radius = radius,
+                center = Offset(f.x * size.width, f.y * size.height),
             )
         }
     }

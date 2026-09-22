@@ -107,6 +107,16 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
     var geoRegions by mutableStateOf<List<GeoRegion>>(emptyList())
         private set
 
+    /**
+     * District centroids from `data/bd_geo.json` — the map's base layer.
+     *
+     * These are geography, not metrics: all 64 districts exist whether or not this
+     * device has audited anything in them. The heatmap draws them unconditionally so
+     * the country is always on screen, and only the data bubbles come and go.
+     */
+    var districtCentroids by mutableStateOf<Map<String, Centroid>>(emptyMap())
+        private set
+
     /** `find_off_territory_audits`. */
     var offTerritory by mutableStateOf<List<OffTerritoryRow>>(emptyList())
         private set
@@ -162,6 +172,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
 
                 val centroids = app.graph.locationRepository.geo().districts
                     .mapValues { Centroid(it.value.lat, it.value.lng) }
+                districtCentroids = centroids
                 // Same `%token%` own-brand matcher the tiering query above uses.
                 val ownLike = "%$ownToken%"
                 geoRegions = TeamMetrics.geoHeatmap(
