@@ -185,11 +185,12 @@ fun MedLenXShell(
             ) {
                 Destination.bottomBar.forEach { dest ->
                     composable(dest.route) {
-                        // Scan scrolls under the app bar (its own scroll container
-                        // carries the top offset, so content disappears behind the
-                        // blurred bar). Every other screen is simply offset below it
-                        // until Steps 5-9 give them real scrolling content.
-                        val scrollsUnderBar = dest == Destination.Scan || dest == Destination.Analytics
+                        // NO top inset here. Scaffold measures the topBar slot and
+                        // reports its full height (status bar + 63dp bar + 1dp divider)
+                        // through inner.calculateTopPadding(), which the Box below
+                        // already applies. Adding AppBarHeight on top of that offset
+                        // the content a second time and produced the uniform ~64dp
+                        // white band above every card.
                         // Re-pull aggregates on entry. The ViewModels are hoisted and
                         // live across tabs, so a prescription saved on the Scan tab
                         // would otherwise not reach Analytics/Team/Hub until the app
@@ -207,12 +208,6 @@ fun MedLenXShell(
                                 PaddingValues(
                                     start = MlxD.ScreenMargin,
                                     end = MlxD.ScreenMargin,
-                                    // AppBarHeight alone: the bar is 63dp plus the 1dp
-                                    // divider below it, so 64dp brings the first card
-                                    // flush to the bar's underside. The extra Space2
-                                    // that used to sit here read as a stray white band
-                                    // rather than as deliberate spacing.
-                                    top = if (scrollsUnderBar) 0.dp else MlxD.AppBarHeight,
                                     bottom = MlxD.ContentBottomClearance,
                                 ),
                             ),
@@ -221,7 +216,7 @@ fun MedLenXShell(
                             // `when { scrollsUnderBar -> ScanScreen(...) }`, which also
                             // matched Analytics and so rendered the Scan screen on the
                             // Analytics tab - every AnalyticsScreen branch below it was
-                            // unreachable. `scrollsUnderBar` is a padding concern only.
+                            // unreachable.
                             when (dest) {
                                 Destination.Scan -> ScanScreen(
                                     vm = scanVm,
@@ -277,9 +272,6 @@ fun MedLenXShell(
                             PaddingValues(
                                 start = MlxD.ScreenMargin,
                                 end = MlxD.ScreenMargin,
-                                // AppBarHeight alone, matching the tab routes: 63dp bar + 1dp
-                                // divider, so 64dp is flush.
-                                top = MlxD.AppBarHeight,
                                 bottom = MlxD.ContentBottomClearance,
                             ),
                         ),
@@ -338,9 +330,6 @@ fun MedLenXShell(
                         contentPadding = PaddingValues(
                             start = MlxD.ScreenMargin,
                             end = MlxD.ScreenMargin,
-                            // AppBarHeight alone, matching the tab routes: 63dp bar + 1dp
-                            // divider, so 64dp is flush.
-                            top = MlxD.AppBarHeight,
                             bottom = MlxD.ContentBottomClearance,
                         ),
                     )

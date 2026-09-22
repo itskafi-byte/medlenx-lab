@@ -81,15 +81,14 @@ fun AnalyticsScreen(
 ) {
     Column(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
-        // The top inset sits *inside* the scroll so content passes behind the blurred
-        // app bar, exactly as the Scan tab does.
         //
-        // AppBarHeight alone, not AppBarHeight + Space2: the bar is 63dp plus the 1dp
-        // divider, so 64dp leaves the hero flush against it.
+        // No top padding: MedLenXShell's Scaffold already places this below the app
+        // bar via inner.calculateTopPadding(). Padding here as well offset the hero
+        // a second time, which is where the gap above "Prescription Capture" came
+        // from -- not from a window inset and not from AppBarHeight.
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(top = MlxD.AppBarHeight),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         HeroBanner()

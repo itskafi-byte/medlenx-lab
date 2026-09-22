@@ -75,7 +75,6 @@ fun TeamScreen(
         TeamMapSection(
             regions = vm.geoRegions,
             points = vm.scanPoints,
-            centroids = vm.districtCentroids,
             mode = vm.mapMode,
             onModeChange = vm::updateMapMode,
         )

@@ -100,15 +100,11 @@ fun ScanScreen(
             null
         }
 
-    // The shell lets this screen start at y=0 so it scrolls *under* the blurred app
-    // bar. The offset is therefore carried by the screen itself: inside the scroll
-    // container for the scrolling phases (so content disappears behind the bar), and
-    // as a plain offset for the non-scrolling empty state.
-    // The app bar is an overlay that content scrolls under, so this offset is what
-    // holds the first card clear of it at rest. AppBarHeight alone would tuck the card
-    // against the bar; adding a full SectionGap left a 24dp band that reads as a
-    // layout fault rather than as breathing room.
-    val topInset = MlxD.AppBarHeight + MlxD.Space2
+    // Zero. The shell's Scaffold measures the app bar and offsets all content past
+    // it through inner.calculateTopPadding(), so any offset here is a second one.
+    // This used to be AppBarHeight + Space2, which put a 72dp band above every
+    // phase of the flow.
+    val topInset = 0.dp
 
     // Camera capture writes into the FileProvider path declared in the manifest.
     //

@@ -33,17 +33,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.local.DoctorTargetRow
 import com.medlenx.lab.data.local.DoctorVisitRow
 import com.medlenx.lab.data.local.OffTerritoryRow
 import com.medlenx.lab.data.repo.BrandProgress
-import com.medlenx.lab.data.repo.Centroid
 import com.medlenx.lab.data.repo.GeoRegion
 import com.medlenx.lab.data.repo.RsmTrends
 import com.medlenx.lab.data.repo.ScanPoint
@@ -79,8 +78,6 @@ import java.time.format.DateTimeFormatter
 fun TeamMapSection(
     regions: List<GeoRegion>,
     points: List<ScanPoint>,
-    /** District centroids — the always-drawn base layer. */
-    centroids: Map<String, Centroid>,
     mode: MapMode,
     onModeChange: (MapMode) -> Unit,
 ) {
@@ -155,14 +152,13 @@ fun TeamMapSection(
                 .background(Mlx.Screen)
                 .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(12.dp)),
         ) {
-            // The country is drawn first and always. An empty window used to replace
-            // the whole map with a caption, so the module looked broken rather than
-            // simply empty - and geography is the one thing here that does not depend
-            // on having audited anything.
-            BangladeshBaseLayer(centroids.values)
+            // Base map first, so it sits at the bottom of the Z-order. It takes no
+            // data, so there is nothing here that an empty result set can skip.
+            BaseMapLayer(modifier = Modifier.fillMaxSize())
 
+            // The `if` selects an OVERLAY, never the map: the country is already
+            // on screen and stays on screen whatever the window holds.
             if (bubbles.isEmpty()) {
-                // Overlay, not a replacement: the map stays visible underneath.
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.BottomCenter,
@@ -181,31 +177,11 @@ fun TeamMapSection(
                     )
                 }
             } else {
-                val w = maxWidth
-                val h = maxHeight
-                bubbles.forEach { b ->
-                    val size = (14 + b.volume.coerceAtMost(60) * 0.8).dp
-                    val f = project(b.lat, b.lng)
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset(x = w * f.x - size / 2, y = h * f.y - size / 2)
-                            .size(size)
-                            .clip(CircleShape)
-                            .background(b.tint.copy(alpha = 0.5f))
-                            .border(BorderStroke(2.dp, b.tint), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (size >= 24.dp) {
-                            Text(
-                                text = b.volume.toString(),
-                                style = MlxType.MicroPill,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                        }
-                    }
-                }
+                DataBubbleLayer(
+                    bubbles = bubbles,
+                    width = maxWidth,
+                    height = maxHeight,
+                )
             }
         }
 
@@ -231,40 +207,42 @@ fun TeamMapSection(
 }
 
 /**
- * The base map: one dot per district centroid, projected into the canvas.
+ * The data overlay: one bubble per district, drawn on top of [BaseMapLayer].
  *
- * These are real coordinates from `data/bd_geo.json`, so the 64 dots sit in their
- * true positions and the familiar shape of Bangladesh emerges without shipping a
- * tile provider or a vector outline. It renders unconditionally; the bubbles above
- * it are the only part that depends on the data.
+ * Split from the base map so the two can fail independently. If this layer is
+ * empty the officer still sees the country and reads "no audits yet"; previously a
+ * combined layer meant an empty window took the whole map down with it.
  */
 @Composable
-private fun BangladeshBaseLayer(centroids: Collection<Centroid>) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val radius = 3.dp.toPx()
-        val area = Mlx.Brand300
-        for (c in centroids) {
-            val f = project(c.lat, c.lng)
-            drawCircle(
-                color = area,
-                radius = radius,
-                center = Offset(f.x * size.width, f.y * size.height),
-            )
+private fun DataBubbleLayer(
+    bubbles: List<MapBubbleSpec>,
+    width: Dp,
+    height: Dp,
+) {
+    bubbles.forEach { b ->
+        val size = (14 + b.volume.coerceAtMost(60) * 0.8).dp
+        val f = project(b.lat, b.lng)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = width * f.x - size / 2, y = height * f.y - size / 2)
+                .size(size)
+                .clip(CircleShape)
+                .background(b.tint.copy(alpha = 0.5f))
+                .border(BorderStroke(2.dp, b.tint), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (size >= 24.dp) {
+                Text(
+                    text = b.volume.toString(),
+                    style = MlxType.MicroPill,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
         }
     }
 }
-
-/** Bangladesh's rough bounding box, for the equirectangular fit. */
-private const val BD_LAT_MAX = 26.7
-private const val BD_LAT_MIN = 20.5
-private const val BD_LNG_MIN = 88.0
-private const val BD_LNG_MAX = 92.7
-
-/** Projects a fix onto 0..1 canvas fractions, clamped so a stray pin stays visible. */
-private fun project(lat: Double, lng: Double): Offset = Offset(
-    x = ((lng - BD_LNG_MIN) / (BD_LNG_MAX - BD_LNG_MIN)).toFloat().coerceIn(0f, 1f),
-    y = ((BD_LAT_MAX - lat) / (BD_LAT_MAX - BD_LAT_MIN)).toFloat().coerceIn(0f, 1f),
-)
 
 private data class MapBubbleSpec(
     val label: String,
