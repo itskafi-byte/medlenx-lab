@@ -69,8 +69,12 @@ counterpart — see `MAP.md`.
   produced a blank module. A base layer that depends on data is not a base layer.
   The repo holds centroids, not a polygon outline; a real outline would have to be
   sourced and bundled.
-- **All six routes are flush** — the four tabs plus Help and Rx Audit plus Scan.
-  No screen applies a top inset; the shell's Scaffold inset is the only one.
+- **Four tabs plus Help and Rx Audit are flush. Scan is not, deliberately.** Scan
+  still carries `AppBarHeight + Space2` (72dp) because the brief covered the four
+  navigation tabs only, and the user chose to revert the Scan fix rather than let
+  an unrequested screen into the change set. It is the same defect — the Scaffold
+  already offsets content via `inner.calculateTopPadding()`, so the screen's own
+  inset is a second offset — and it is a one-line fix whenever it is wanted.
 
 ## Known risks
 

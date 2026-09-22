@@ -35,7 +35,11 @@ Nothing in `agent/` is compiled or shipped. `android/checks/guard.py` treats
 4. **Do not trust `grep … | head`.** It truncated a route list at 60 of 60+
    entries and produced a false "no such feature". Pipe to `wc -l` first, then
    read the range you actually need.
-5. **A clean checker run proves nothing until a fault proves it fires.** Both
+5. **Prefer a new check over a careful diff.** Deleting a declaration while leaving
+   its call sites intact is unresolved-symbol territory and `imports.py` now catches
+   it — but only because it was added after that exact bug shipped to the compiler.
+   When a defect reaches the user, ask which check should have caught it.
+6. **A clean checker run proves nothing until a fault proves it fires.** Both
    tools here were self-tested with injected faults before being trusted. Also
    confirm the checker is actually reading files: `imports.py` once used a path
    relative to the CWD, so running it from the repo root walked a directory that

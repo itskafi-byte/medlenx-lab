@@ -49,9 +49,9 @@ python3 android/checks/imports.py    # missing imports, duplicate members, compo
 python3 android/checks/audit.py      # declaration counts, Room/Hilt wiring sanity
 python3 agent/roomcheck.py           # every @Query column resolves against its entity
 ```
-- `imports.py` healthy: `imports: no findings` (5 checks: missing imports,
+- `imports.py` healthy: `imports: no findings` (6 checks: missing imports,
   duplicate members, orphaned `private set`, composable-in-`remember`, missing
-  return)
+  return, unresolved symbol)
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
   (9 entities, 60 queries)
 
