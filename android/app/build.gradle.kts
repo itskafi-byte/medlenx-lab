@@ -27,6 +27,17 @@ fun secret(key: String): String =
 
 val openRouterKey: String = secret("OPENROUTER_API_KEY")
 
+/**
+ * Mapbox public access token, read from the same local.properties (git-ignored) as
+ * the OpenRouter key so it never reaches version control.
+ *
+ * LEFT BLANK ON PURPOSE. With no token the heatmap falls back to the offline
+ * Canvas dot map and the rest of the app is unaffected, so a bare checkout still
+ * builds and runs. Add `MAPBOX_ACCESS_TOKEN=pk.***` to android/local.properties to
+ * switch the heatmap to Mapbox tiles.
+ */
+val mapboxToken: String = secret("MAPBOX_ACCESS_TOKEN")
+
 android {
     namespace = "com.medlenx.lab"
     // 37, not 36: haze-android 1.7.3 and the Compose 1.12.0 artifacts it pulls in both
@@ -45,6 +56,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
+        // Blank means "no Mapbox"; the heatmap renders its offline fallback instead.
+        buildConfigField("String", "MAPBOX_ACCESS_TOKEN", "\"$mapboxToken\"")
         buildConfigField("String", "OPENROUTER_BASE_URL", "\"https://openrouter.ai/api/v1/chat/completions\"")
         buildConfigField("String", "VL_MODEL_PRIMARY", "\"qwen/qwen3-vl-235b-a22b-instruct\"")
         buildConfigField("String", "VL_MODEL_FALLBACK", "\"qwen/qwen3-vl-30b-a3b-instruct\"")
@@ -183,6 +196,21 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.datastore.preferences)
+
+    /*
+     * Mapbox Maps SDK v11 + its Jetpack Compose extension, to match the web app's
+     * Leaflet/OpenStreetMap heatmap.
+     *
+     * The `-ndk27` variants are deliberate. This app targets SDK 36, and Android 15+
+     * devices configured with 16 KB page sizes cannot load a native library built
+     * for 4 KB pages -- the plain `com.mapbox.maps:android` artifact would crash on
+     * exactly those devices. NDK 27 is the version that emits 16 KB-aligned output.
+     *
+     * Note the SDK pulls in Google Play Services from v11.8.0 (for an HTTP/3
+     * client). See docs.mapbox.com "Removing Google Play dependency" to strip it.
+     */
+    implementation("com.mapbox.maps:android-ndk27:11.31.0")
+    implementation("com.mapbox.extension:maps-compose-ndk27:11.31.0")
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)

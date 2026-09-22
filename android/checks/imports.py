@@ -507,6 +507,12 @@ def check_scope_leak():
 
 
 
+# Emitted by build tooling into the applicationId package, so they appear in no
+# .kt file. A source-only scanner has no way to see them; listing them here is
+# honest about that limit rather than pretending the scan is complete.
+GENERATED_SYMBOLS = {"BuildConfig", "R", "BuildConfigKt"}
+
+
 def check_undefined_symbols():
     """A capitalised name that is used but declared nowhere and imported nowhere.
 
@@ -517,9 +523,14 @@ def check_undefined_symbols():
     still looked fine in review. It was caught by reading the diff, which is luck,
     not process.
 
-    Kotlin resolves a capitalised name three ways: it is declared in this file or
-    elsewhere in the project, it comes in through an import, or it is auto-imported
-    from kotlin.* / java.lang.*. Anything else is unresolved and will not compile.
+    Kotlin resolves a capitalised name four ways: it is declared in this file or
+    elsewhere in the project, it comes in through an import, it is auto-imported
+    from kotlin.* / java.lang.*, or build tooling generated it into the
+    applicationId package (BuildConfig, R). Anything else is unresolved and will
+    not compile.
+
+    That fourth case is the honest limit of this check: it reads source, so a
+    generated class is invisible to it and has to be named in GENERATED_SYMBOLS.
 
     Restricted to capitalised identifiers on purpose. Lowercase names are locals,
     parameters and properties, which cannot be resolved without a real scope model,
@@ -555,7 +566,12 @@ def check_undefined_symbols():
                     name = m.group(1)
                     if len(name) == 1:
                         continue        # a generic parameter: T, E, R, K, V
-                    if name in declared or name in visible or name in AUTO_IMPORTED:
+                    if (
+                        name in declared
+                        or name in visible
+                        or name in AUTO_IMPORTED
+                        or name in GENERATED_SYMBOLS
+                    ):
                         continue
                     # Enum entries and nested references resolve through their parent.
                     seen.setdefault(name, i)

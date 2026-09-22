@@ -17,7 +17,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Leaflet-equivalent tile sources / osmdroid live on Maven Central.
+        // Mapbox Maven repository. The Maps SDK is NOT on Maven Central; without
+        // this block `:app` fails with "Could not resolve com.mapbox.maps:android".
+        // It must live in dependencyResolutionManagement, not pluginManagement.
+        maven { url = uri("https://api.mapbox.com/downloads/v2/releases/maven") }
     }
 }
 

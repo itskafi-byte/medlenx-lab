@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.BuildConfig
 import com.medlenx.lab.data.local.DoctorTargetRow
 import com.medlenx.lab.data.local.DoctorVisitRow
 import com.medlenx.lab.data.local.OffTerritoryRow
@@ -153,36 +154,47 @@ fun TeamMapSection(
                 .background(Mlx.Screen)
                 .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(12.dp)),
         ) {
-            // Base map first, so it sits at the bottom of the Z-order. It takes no
-            // data, so there is nothing here that an empty result set can skip.
-            BaseMapLayer(modifier = Modifier.fillMaxSize())
+            // With a Mapbox token configured, render real tiles and put the bubbles
+            // on the map itself. Without one, fall back to the offline Canvas map --
+            // geography still renders, nothing crashes, and a checkout that has not
+            // been given a token simply looks like it did before.
+            if (BuildConfig.MAPBOX_ACCESS_TOKEN.isNotBlank()) {
+                MapboxHeatmapLayer(bubbles = bubbles, modifier = Modifier.fillMaxSize())
+                // No caption overlay in this branch: Mapbox draws its own
+                // attribution, and a caption stacked on a pannable map would sit
+                // right under the user's finger.
+            } else {
+                // Base map first, so it sits at the bottom of the Z-order. It takes
+                // no data, so an empty result set cannot skip it.
+                BaseMapLayer(modifier = Modifier.fillMaxSize())
 
-            // The `if` selects an OVERLAY, never the map: the country is already
-            // on screen and stays on screen whatever the window holds.
-            if (bubbles.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
-                    Text(
-                        text = "No geo-resolved audits in this window yet.",
-                        style = MlxType.Footnote,
-                        color = Mlx.Text500,
-                        modifier = Modifier
-                            .padding(bottom = MlxD.Space2)
-                            .background(
-                                Mlx.Screen.copy(alpha = 0.85f),
-                                RoundedCornerShape(6.dp),
-                            )
-                            .padding(horizontal = MlxD.Space2, vertical = MlxD.Space1),
+                // The `if` selects an OVERLAY, never the map: the country is already
+                // on screen and stays on screen whatever the window holds.
+                if (bubbles.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Text(
+                            text = "No geo-resolved audits in this window yet.",
+                            style = MlxType.Footnote,
+                            color = Mlx.Text500,
+                            modifier = Modifier
+                                .padding(bottom = MlxD.Space2)
+                                .background(
+                                    Mlx.Screen.copy(alpha = 0.85f),
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .padding(horizontal = MlxD.Space2, vertical = MlxD.Space1),
+                        )
+                    }
+                } else {
+                    DataBubbleLayer(
+                        bubbles = bubbles,
+                        width = maxWidth,
+                        height = maxHeight,
                     )
                 }
-            } else {
-                DataBubbleLayer(
-                    bubbles = bubbles,
-                    width = maxWidth,
-                    height = maxHeight,
-                )
             }
         }
 
@@ -249,7 +261,7 @@ private fun BoxScope.DataBubbleLayer(
     }
 }
 
-private data class MapBubbleSpec(
+internal data class MapBubbleSpec(
     val label: String,
     val caption: String,
     val volume: Int,

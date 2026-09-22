@@ -146,3 +146,22 @@ Assets in `android/app/src/main/assets/data/`: `medex_full.json` (16 MB, 25,105
 rows), `neml_list.json`, `dgda_prices.json`, `trips_waiver.json`,
 `health_days.json`, `pharma_news.json`, `pharma_jobs.json`, `bd_locations.json`,
 `bd_geo.json`.
+
+## Mapbox (optional - the Team heatmap's tile map)
+
+The heatmap renders the offline Canvas dot map by default. To switch it to Mapbox
+tiles, matching the web app's Leaflet/OpenStreetMap panel:
+
+    echo 'MAPBOX_ACCESS_TOKEN=pk.***' >> android/local.properties
+
+`local.properties` is git-ignored, so the token never reaches version control. It
+is read into `BuildConfig.MAPBOX_ACCESS_TOKEN` by the same `secret()` helper as the
+OpenRouter key. With no token the app builds and runs exactly as before.
+
+Two things worth knowing before you turn it on:
+  * The Maps SDK is not on Maven Central. `settings.gradle.kts` adds Mapbox's own
+    repository; without it the build fails with "Could not resolve com.mapbox.maps".
+  * The `-ndk27` artifacts are used because this app targets SDK 36, and Android
+    15+ devices with 16 KB pages cannot load 4 KB-page native libraries.
+  * From v11.8.0 the SDK pulls in Google Play Services for an HTTP/3 client.
+    Mapbox documents how to strip it if you want the app free of Play.
