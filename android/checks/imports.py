@@ -363,6 +363,149 @@ def declared_names_in(text: str) -> set[str]:
             names.add(em.group(1))
     return names
 
+# Compose members that exist ONLY as extensions on a layout scope. Calling one
+# from a function that does not carry that receiver will not compile, and the
+# error is reported at the call site with no hint that the real cause is the
+# enclosing function's signature.
+SCOPE_MEMBERS = {
+    "align": ("BoxScope", "RowScope", "ColumnScope"),
+    "matchParentSize": ("BoxScope",),
+    "alignBy": ("RowScope", "ColumnScope"),
+    "alignByBaseline": ("RowScope", "ColumnScope"),
+}
+# Calls whose trailing lambda runs with one of those scopes as its receiver.
+SCOPE_OPENERS = {
+    "Box": "BoxScope",
+    "BoxWithConstraints": "BoxScope",
+    "Row": "RowScope",
+    "Column": "ColumnScope",
+}
+# `Modifier.weight()` is a Row/ColumnScope extension too, but it is used so widely
+# and in such varied nesting that it has produced nothing but noise. Excluded.
+
+FUN_DECL = re.compile(
+    r"(?:@\w+(?:\([^)]*\))?[ \t]*)*(?:public |internal |private |protected |open |"
+    r"inline |suspend |override )*fun\s+(?:(\w+)\s*\.\s*)?(?:(\w+)\s*\.\s*)?(\w+)\s*\("
+)
+
+
+def blank_keeping_lines(text: str) -> str:
+    """Blank out string and comment bodies without removing any line.
+
+    Replacing a block with "" collapses it and shifts every line number after it,
+    which is worse than a false positive: it makes the reported location wrong. A
+    21-line KDoc once moved a real finding from :165 to :144.
+    """
+    def repl(m: re.Match) -> str:
+        return "\n" * m.group(0).count("\n")
+
+    text = re.sub(r'"""(?:[^"]|"(?!""))*"""', repl, text, flags=re.S)
+    text = re.sub(r"/\*.*?\*/", repl, text, flags=re.S)
+    text = re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', text)
+    text = re.sub(r"//.*$", "", text, flags=re.M)
+    return text
+
+
+def check_scope_leak():
+    """A layout-scope member called where that scope is not the receiver.
+
+    Splitting TeamMapSection into separate layers lifted the bubble loop out of
+    the BoxWithConstraints content lambda into a plain function. `Modifier.align()`
+    resolved there before only because that lambda is a BoxScope; once lifted, the
+    receiver was gone and it became `Unresolved reference 'align'`.
+
+    This is invisible to check_undefined_symbols, which looks at capitalised type
+    names, and to every other check here. It is also invisible in review: the call
+    site is unchanged and correct-looking, and the defect is in the signature
+    several lines above.
+
+    A scope member is legal in exactly two places: inside a function declared as an
+    extension on that scope, or inside the trailing lambda of a call that provides
+    it. Both are tracked here.
+    """
+    findings = []
+    use = re.compile(r"\.\s*(" + "|".join(SCOPE_MEMBERS) + r")\s*\(")
+    for dirpath, _, files in os.walk(ROOT):
+        for fn_ in sorted(files):
+            if not fn_.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn_)
+            raw = open(path, encoding="utf-8").read()
+            text = blank_keeping_lines(raw)
+
+            # A bracket stack, not a depth counter. `Box( modifier = Modifier
+            # .height(x) )` closes a paren back to the depth the Box opened at, so a
+            # depth-only stack evicts the Box the moment its own modifier chain
+            # ends and reports its perfectly legal contents as out of scope.
+            # Frame: (bracket, active scope, enclosing fun receiver,
+            #         deferred scope, deferred fun receiver).
+            stack: list[tuple[str, str | None, str | None, str | None, str | None]] = []
+            pending_open: str | None = None
+            pending_fun: str | None = None
+            # A scope deferred across a call's argument list. `Box(modifier = ...)`
+            # is NOT inside the Box's content -- a child's .align() is legal there
+            # only because it is a different composable. The scope activates at the
+            # trailing lambda, so `Box(...) {` keeps it on the `{`, while
+            # `Box(modifier = Modifier.align(...))` never activates it at all.
+            trailing: str | None = None
+            opener_re = re.compile(
+                r"(?<![\w.])(" + "|".join(SCOPE_OPENERS) + r")\s*[({]"
+            )
+            for lineno, line in enumerate(text.split("\n"), 1):
+                events: list[tuple[int, str, object]] = []
+                for m in FUN_DECL.finditer(line):
+                    events.append((m.start(), "fun", m.group(2) or m.group(1)))
+                for m in opener_re.finditer(line):
+                    events.append((m.start(), "open", SCOPE_OPENERS[m.group(1)]))
+                for m in use.finditer(line):
+                    events.append((m.start(), "use", m.group(1)))
+                for i, ch in enumerate(line):
+                    if ch in "{([":
+                        events.append((i, "push", ch))
+                    elif ch in "})]":
+                        events.append((i, "pop", ch))
+                events.sort(key=lambda e: e[0])
+
+                for _, kind, val in events:
+                    if kind == "fun":
+                        pending_fun = val
+                    elif kind == "open":
+                        pending_open = val
+                    elif kind == "push":
+                        # Scope binds to a lambda body, never to an argument list.
+                        scope = (pending_open or trailing) if val == "{" else None
+                        # A parameter list suspends both: the body `{` that follows
+                        # it is what actually carries the function's receiver, just
+                        # as the trailing lambda carries the layout scope.
+                        stack.append((
+                            val, scope,
+                            pending_fun if val == "{" else None,
+                            pending_open if val == "(" else None,
+                            pending_fun if val == "(" else None,
+                        ))
+                        pending_open = None
+                        pending_fun = None
+                        trailing = None
+                    elif kind == "pop":
+                        if stack:
+                            char, _, _, deferred, deferred_fun = stack.pop()
+                            trailing = deferred if char == "(" else None
+                            if char == "(":
+                                pending_fun = deferred_fun
+                    else:  # use
+                        allowed = SCOPE_MEMBERS[val]
+                        if any(sc in allowed for _, sc, _, _, _ in stack):
+                            continue
+                        recv = next(
+                            (rv for _, _, rv, _, _ in reversed(stack) if rv), None
+                        )
+                        if recv in allowed:
+                            continue
+                        findings.append((path, lineno, val, recv))
+            del raw, lineno
+    return findings
+
+
 
 def check_undefined_symbols():
     """A capitalised name that is used but declared nowhere and imported nowhere.
@@ -528,6 +671,16 @@ def main() -> int:
         print("@Composable CALL INSIDE remember {}")
         for path, line, text in comp:
             print(f"  {path}:{line}  {text}")
+        print()
+
+    leak = check_scope_leak()
+    if leak:
+        findings += len(leak)
+        print("SCOPE LEAK - layout-scope member called outside its scope")
+        for path, line, name, recv in leak:
+            got = recv or "no receiver"
+            print(f"  {path}:{line}  .{name}() needs one of "
+                  f"{SCOPE_MEMBERS[name]}, enclosing fun has {got}")
         print()
 
     undef = check_undefined_symbols()

@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -214,7 +215,11 @@ fun TeamMapSection(
  * combined layer meant an empty window took the whole map down with it.
  */
 @Composable
-private fun DataBubbleLayer(
+// Declared on BoxScope because the bubbles position themselves with
+// Modifier.align(), which only exists as a BoxScope extension. They were inline
+// in the BoxWithConstraints content lambda before, where that receiver came for
+// free; lifting them into a plain function silently dropped it.
+private fun BoxScope.DataBubbleLayer(
     bubbles: List<MapBubbleSpec>,
     width: Dp,
     height: Dp,
