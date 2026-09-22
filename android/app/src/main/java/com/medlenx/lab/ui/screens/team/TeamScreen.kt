@@ -3,6 +3,8 @@ package com.medlenx.lab.ui.screens.team
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +62,17 @@ fun TeamScreen(
     val tiering = vm.tiering
     val stewardship = vm.stewardship
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    // This screen owns its scrolling, like Analytics/Hub/Settings. The shell
+    // deliberately does not scroll the NavHost (a scrollable there gives children
+    // unbounded height), so without this the Column is clipped at the fold and
+    // everything past the KPI row is laid out but unreachable: the tier matrix,
+    // leaderboard, target tracker, off-territory audit and stewardship monitor all
+    // rendered, and simply could not be scrolled to.
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+    ) {
         TeamHero(
             prescriptions = tiering.doctors.sumOf { it.rx },
             ownItems = tiering.doctors.sumOf { it.ownItems },
