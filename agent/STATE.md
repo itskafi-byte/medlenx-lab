@@ -53,17 +53,24 @@ counterpart — see `MAP.md`.
 
 ## UI decisions worth remembering
 
-- **App bar inset is `AppBarHeight` (64dp), never `AppBarHeight + Space2`.** The bar
-  is 63dp plus a 1dp divider, so 64dp is exactly flush and the extra 8dp read as a
-  stray white band. Scan and Analytics own their inset inside their own scroll
-  container; every other tab takes it from `MedLenXShell`.
-- **The Bangladesh heatmap's base layer is 64 district centroid dots**, drawn
-  unconditionally from `data/bd_geo.json`, with data bubbles overlaid. There is no
-  polygon outline in the repo, only centroids, and the dots use real coordinates so
-  the shape is guaranteed correct. If a proper vector outline is ever wanted, it has
-  to be sourced and bundled — it cannot be derived from what is checked in.
-- **All six routes are flush now** — the four tabs plus Help and Rx Audit, which
-  are pushed routes. Every top inset in the shell is `MlxD.AppBarHeight`.
+- **Screens must add NO top inset at all.** `Scaffold` measures its `topBar` slot and
+  reports the full height (status bar + 63dp bar + 1dp divider) through
+  `inner.calculateTopPadding()`, which the content Box in `MedLenXShell` already
+  applies. Any further `padding(top = ...)` is a SECOND offset and shows up as a
+  gap above the first card. Two successive "fixes" that tuned the value
+  (AppBarHeight + Space2, then AppBarHeight) both failed for this reason; the
+  correct value is nothing. If a gap ever reappears, look for a second offset, not
+  for a wrong number.
+- **The Bangladesh heatmap's base layer takes zero data parameters.** 63 district
+  centroids are baked into `BaseMapLayer.kt` from `data/bd_geo.json` at authoring
+  time, and it is drawn first inside the `Box` (bottom of the Z-order) with
+  `DataBubbleLayer` over it. An earlier version fed it from the ViewModel, which
+  re-coupled the "base" map to the async metrics load — so an empty or failed load
+  produced a blank module. A base layer that depends on data is not a base layer.
+  The repo holds centroids, not a polygon outline; a real outline would have to be
+  sourced and bundled.
+- **All six routes are flush** — the four tabs plus Help and Rx Audit plus Scan.
+  No screen applies a top inset; the shell's Scaffold inset is the only one.
 
 ## Known risks
 
