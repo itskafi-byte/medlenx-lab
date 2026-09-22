@@ -92,3 +92,10 @@ counterpart — see `MAP.md`.
 - No JVM in the sandbox and no network route to get one — **do not attempt to
   build**. The user compiles in Quail 4 | 2026.1.4 on JDK 25.
 - Images cannot be read in this session. Use `adb shell uiautomator dump`.
+
+- **Lifting composables out of a scope lambda drops the receiver.** `Modifier.align()`
+  only exists on `BoxScope`, so a block moved out of a `Box`/`BoxWithConstraints`
+  content lambda must be declared `BoxScope.Name(...)` or it will not compile. The
+  call site needs no change: `BoxWithConstraintsScope` extends `BoxScope`. Note
+  `Box(modifier = Modifier.align(...))` is the Box's own argument list and is NOT in
+  scope -- only `Box(...) { content }` is. `check_scope_leak` catches this.
