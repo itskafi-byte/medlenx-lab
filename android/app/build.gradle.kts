@@ -58,6 +58,13 @@ android {
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
         // Blank means "no Mapbox"; the heatmap renders its offline fallback instead.
         buildConfigField("String", "MAPBOX_ACCESS_TOKEN", "\"$mapboxToken\"")
+        // The Maps SDK's PRIMARY token mechanism: on inflation it reads
+        // R.string.mapbox_access_token itself. Preferred over calling
+        // MapboxOptions.accessToken, which lives in com.mapbox.common - an artifact
+        // the SDK declares with `implementation` scope, so it is not reliably on a
+        // consumer's compile classpath. A resValue also keeps the token out of git,
+        // since it is generated from local.properties at build time.
+        resValue("string", "mapbox_access_token", mapboxToken)
         buildConfigField("String", "OPENROUTER_BASE_URL", "\"https://openrouter.ai/api/v1/chat/completions\"")
         buildConfigField("String", "VL_MODEL_PRIMARY", "\"qwen/qwen3-vl-235b-a22b-instruct\"")
         buildConfigField("String", "VL_MODEL_FALLBACK", "\"qwen/qwen3-vl-30b-a3b-instruct\"")

@@ -165,3 +165,8 @@ Two things worth knowing before you turn it on:
     15+ devices with 16 KB pages cannot load 4 KB-page native libraries.
   * From v11.8.0 the SDK pulls in Google Play Services for an HTTP/3 client.
     Mapbox documents how to strip it if you want the app free of Play.
+  * The token is injected as R.string.mapbox_access_token via resValue, NOT by
+    calling MapboxOptions.accessToken. MapboxOptions lives in com.mapbox.common,
+    which the SDK declares with `implementation` scope, so it is not reliably on a
+    consumer's compile classpath - importing it produced "Unresolved reference".
+    The string resource is the SDK's own primary lookup and needs no import.

@@ -6,3 +6,11 @@ sdk.dir=/absolute/path/to/Android/sdk
 # Also accepted as the OPENROUTER_API_KEY environment variable.
 # WARNING: compiled into the APK and extractable. Use a rate-limited key.
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
+
+# OPTIONAL - Mapbox public access token - https://console.mapbox.com/account/access-tokens/
+# Also accepted as the MAPBOX_ACCESS_TOKEN environment variable.
+# Leave it out (or blank) and the Team heatmap renders its offline Canvas dot map
+# instead: the app builds and runs with no Mapbox account at all.
+# Supply a pk.* token to switch the heatmap to Mapbox tile maps, matching the
+# web app's Leaflet/OpenStreetMap panel. Requires network for tiles.
+MAPBOX_ACCESS_TOKEN=pk.xxxxxxxxxxxxxxxx

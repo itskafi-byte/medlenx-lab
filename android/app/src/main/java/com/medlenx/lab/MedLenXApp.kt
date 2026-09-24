@@ -1,7 +1,6 @@
 package com.medlenx.lab
 
 import android.app.Application
-import com.mapbox.maps.MapboxOptions
 import com.medlenx.lab.data.config.AppGraph
 
 /**
@@ -28,16 +27,5 @@ class MedLenXApp : Application() {
         // "N queued" chip never appears, and a capture parked in a dead zone is never
         // noticed coming back online.
         graph.deviceState.start(graph.scope)
-
-        // The Maps SDK reads its token from MapboxOptions at MapView inflation.
-        // Setting it here, in Application.onCreate, guarantees it happens before any
-        // Activity can inflate one -- inflating without a token crashes the app.
-        //
-        // Guarded on a blank BuildConfig value so the app still builds and runs for
-        // anyone who has not supplied a token: the heatmap falls back to its offline
-        // Canvas layer and nothing else in the app touches Mapbox.
-        if (BuildConfig.MAPBOX_ACCESS_TOKEN.isNotBlank()) {
-            MapboxOptions.accessToken = BuildConfig.MAPBOX_ACCESS_TOKEN
-        }
     }
 }
