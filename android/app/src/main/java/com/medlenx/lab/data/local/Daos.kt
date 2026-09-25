@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -22,6 +23,12 @@ interface DoctorDao {
 
     @Query("SELECT id FROM doctors WHERE identity_key = :key LIMIT 1")
     suspend fun idFor(key: String): Long?
+
+    @Query("SELECT * FROM doctors WHERE identity_key = :key LIMIT 1")
+    suspend fun byKey(key: String): DoctorEntity?
+
+    @Update
+    suspend fun update(doctor: DoctorEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnoring(doctor: DoctorEntity): Long
@@ -108,28 +115,34 @@ interface PrescriptionDao {
     suspend fun scannedSince(since: Long): List<ScannedItemRow>
 
     /**
-     * Per-doctor prescribing volumes for the tiering matrix.
+     * Per-doctor prescribing volumes for the tiering matrix — `get_doctor_tiers`
+     * (database.py:2361).
      *
-     * Grouped by doctor *name* rather than id: the Android prescription row
-     * carries the name and BMDC number but no doctor primary key, unlike the
-     * backend's `prescriptions.doctor_id`.
+     * Grouped by `p.doctor_id` and reading specialty / district / territory from
+     * the joined `doctors` row, which is what the web does. It grouped by name
+     * before the doctors table existed, and two doctors sharing a name were one
+     * row here and two on the web.
      *
      * Own-brand items are matched on the first token of the officer's company,
      * exactly as `get_doctor_tiers` does with `company_name LIKE '%token%'`.
+     *
+     * The web's `d.*` columns are refreshed on every save, so they carry the
+     * doctor's current profile rather than the first one ever recorded.
      */
     @Query(
         """
         SELECT p.doctor_name AS doctorName,
-               IFNULL(p.doctor_specialty, '') AS specialty,
-               IFNULL(p.district, '') AS district,
-               IFNULL(p.territory, '') AS territory,
+               IFNULL(d.specialty, '') AS specialty,
+               IFNULL(d.district, '') AS district,
+               IFNULL(d.territory, '') AS territory,
                COUNT(DISTINCT p.id) AS rx,
                COUNT(sm.id) AS items,
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
         FROM prescriptions p
+        LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
         WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
-        GROUP BY p.doctor_name
+        GROUP BY p.doctor_id
         HAVING rx >= :minRx
         ORDER BY rx DESC
         LIMIT :limit
@@ -595,20 +608,21 @@ interface PrescriptionDao {
     /** Widget C: doctor conversion leaderboard, one page. */
     @Query(
         """
-        SELECT p.doctor_name AS doctorName, IFNULL(p.chamber, '') AS chamber,
-               IFNULL(p.doctor_specialty, '') AS specialty,
-               IFNULL(p.district, '') AS district, IFNULL(p.territory, '') AS territory,
+        SELECT p.doctor_name AS doctorName, IFNULL(d.chamber, '') AS chamber,
+               IFNULL(d.specialty, '') AS specialty,
+               IFNULL(d.district, '') AS district, IFNULL(d.territory, '') AS territory,
                COUNT(DISTINCT p.id) AS prescriptions,
                SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) AS totalMeds,
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds
         FROM prescriptions p
+        LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
         WHERE p.created_at >= :since
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
-        GROUP BY p.doctor_name
+        GROUP BY p.doctor_id
         ORDER BY prescriptions DESC, totalMeds DESC
         LIMIT :limit OFFSET :offset
         """
@@ -626,8 +640,11 @@ interface PrescriptionDao {
 
     /** Widget C: total matching doctors, for the pagination caption. */
     @Query(
-        "SELECT COUNT(*) FROM (SELECT p.doctor_name FROM prescriptions p " +
-            "WHERE p.created_at >= :since" + RX_FILTER_SQL + " GROUP BY p.doctor_name)"
+        // Grouped by doctor_id to match the page it counts; the web's total does
+        // the same (database.py:1116). Counting by name would disagree with the
+        // rows whenever two doctors share one.
+        "SELECT COUNT(*) FROM (SELECT p.doctor_id FROM prescriptions p " +
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL + " GROUP BY p.doctor_id)"
     )
     suspend fun doctorLeaderTotal(
         since: Long,

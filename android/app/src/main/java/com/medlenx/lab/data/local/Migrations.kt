@@ -65,6 +65,72 @@ object Migrations {
     }
 
     /**
+     * Adds `doctors.territory`.
+     *
+     * The doctor profile is the join target for the tiering and leaderboard
+     * queries, and they read specialty / district / territory off it rather than
+     * off the prescription row. `territory` was missed in v2 and the queries fell
+     * back to `prescriptions.territory`, which under a `GROUP BY doctor` is
+     * whichever row SQLite happened to scan last — a value that could change
+     * between two runs of the same query. A profile column is one value per
+     * doctor, so it is both correct and stable.
+     *
+     * `NOT NULL DEFAULT ''` rather than nullable: `ALTER TABLE ADD COLUMN` cannot
+     * add a NOT NULL column to a populated table without a default, and every
+     * other text column on this entity is non-null with `''` standing in for
+     * unknown. The web's own columns are nullable, but there `None` and `''` are
+     * the same value to every reader — the queries all wrap them in `IFNULL`.
+     */
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `doctors` ADD COLUMN `territory` TEXT NOT NULL DEFAULT ''",
+            )
+            backfillTerritory(db)
+        }
+    }
+
+    /**
+     * Fills `territory` from the most recent prescription that has one.
+     *
+     * The save path refreshes the profile on every scan from then on, so this is
+     * only about making an existing database match what a fresh install would
+     * have. Latest-first because the profile tracks the doctor's current
+     * territory, not the first one ever recorded.
+     *
+     * A correlated subquery in one `UPDATE` would be shorter, but the rule above
+     * is a statement about ordering that SQLite would have to re-derive per row;
+     * a single pass with an in-memory map also keeps this consistent with
+     * [backfillDoctors].
+     */
+    private fun backfillTerritory(db: SupportSQLiteDatabase) {
+        val latest = HashMap<Long, String>()
+        db.query(
+            "SELECT doctor_id, territory FROM prescriptions " +
+                "WHERE doctor_id IS NOT NULL ORDER BY created_at ASC",
+        ).use { cursor ->
+            val idIdx = cursor.getColumnIndex("doctor_id")
+            val territoryIdx = cursor.getColumnIndex("territory")
+            if (idIdx < 0 || territoryIdx < 0) return
+            while (cursor.moveToNext()) {
+                // Ascending order, so the last non-blank value seen for a doctor
+                // is the one from their most recent prescription.
+                val value = cursor.getString(territoryIdx)
+                if (!value.isNullOrBlank()) latest[cursor.getLong(idIdx)] = value
+            }
+        }
+        for ((doctorId, territory) in latest) {
+            db.execSQL(
+                "UPDATE `doctors` SET `territory` = ? WHERE `id` = ?",
+                // Explicit type argument: the two bind values are a String and a
+                // Long, and nothing here can confirm which common supertype Kotlin
+                // would infer for them.
+                arrayOf<Any?>(territory, doctorId),
+            )
+        }
+    }
+
+    /**
      * Attributes existing prescriptions to doctors.
      *
      * Reads the distinct doctor blocks, resolves each to an id, then writes the id

@@ -18,7 +18,7 @@ import androidx.room.RoomDatabase
         DoctorVisitEntity::class,
         ErrorReportEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
@@ -45,7 +45,7 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 // fires for a version it has no route for -- and a wipe is the
                 // right answer there, since the rest of the schema is derived data
                 // that the next scan rebuilds.
-                .addMigrations(Migrations.MIGRATION_1_2)
+                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 .also { instance = it }

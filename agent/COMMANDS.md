@@ -51,11 +51,22 @@ python3 agent/roomcheck.py           # every @Query column resolves against its 
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 ```
-- `imports.py` healthy: `imports: no findings` (7 checks: missing imports,
-  duplicate members, orphaned `private set`, composable-in-`remember`, missing
-  return, unresolved symbol, scope leak)
+- `imports.py` healthy: `imports: no findings` (9 checks: missing imports,
+  duplicate members, orphaned `private set`, orphaned KDoc,
+  composable-in-`remember`, scope leak, missing icon import, unresolved symbol,
+  missing return)
+
+An orphaned KDoc is a doc block immediately followed by another one. Two
+consecutive docs are never meaningful -- the second attaches to the declaration
+and the first attaches to nothing -- and they only arise one way: something is
+inserted *between* a doc comment and the function it described. The text then
+sits above the wrong function, reading as if it documents it, while the real one
+silently loses its docs. It has happened three times here (`copyToClipboard`
+above `shareSummary`, `saveVerified` above `resolveDoctorId`, and `healthDays`
+above `healthDayDetail`), which makes it a check rather than a habit of reading
+upwards before every edit.
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
-  (9 entities, 64 queries)
+  (10 entities, 70 queries)
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
 - `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
 
@@ -66,14 +77,34 @@ the worst pairing of the two. `roomcheck.py` cannot cover it: it resolves column
 *names* and carries no type or nullability, so a migration with the right names,
 the wrong affinity and a stray NOT NULL passes there and crashes at open.
 
-It reads the DDL out of a Kotlin `execSQL("..." + "..." + ...)` chain by
+It reads the DDL out of a Kotlin `execSQL(\"...\" + \"...\" + ...)` chain by
 concatenating the literal *contents* first — the statement does not exist as
 contiguous text in the file, and parsing the raw source silently saw fragments
 while still reporting a clean run.
 
-Verified against six faults, each caught: a dropped NOT NULL, a wrong affinity, a
+Migrations are replayed as a chain and the *result* is held to the entities.
+Validating each statement against the current entity on its own reports a fault
+Room would never raise — `MIGRATION_1_2` correctly creates `doctors` without
+`territory`, which `MIGRATION_2_3` then adds — and the apparent fix, editing the
+older migration, breaks every device already on that version.
+
+Verified against nine faults, each caught: a dropped NOT NULL, a wrong affinity, a
 UNIQUE index declared non-unique, an omitted column, an index name Room would not
-generate, and an ALTER adding the wrong type and nullability.
+generate, an ALTER adding the wrong type, an ALTER dropping NOT NULL, a column the
+chain never creates, and `ADD COLUMN ... NOT NULL` with no DEFAULT (SQLite refuses
+that on a populated table, inside `migrate()`).
+
+One parsing trap is worth remembering: because the flattened stream concatenates
+every literal in the file, a statement does not end at a newline or a `;`, so a
+greedy declaration tail runs into the *next* statement. A later `WHERE x IS NOT
+NULL` then satisfies the nullability check the fault was meant to fail.
+
+`roomcheck.py` resolves a qualified column against the table its alias names, not
+against the union of every table in the query. Before that, `d.territory` passed
+because `territory` existed on `prescriptions` — the qualifier was decoration, and
+a column written against the wrong table was invisible. Unqualified columns are
+still judged against the union, deliberately: SQLite binds those at run time
+against any joined table, so rejecting one that a sibling owns is a false alarm.
 
 `roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
 call site to a column: roomcheck validates the SQL *inside* a `@Query` against the

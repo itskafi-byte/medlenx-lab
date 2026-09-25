@@ -21,6 +21,11 @@ Checks
 ------
   1. Every table referenced in a @Query is a real @Entity table.
   2. Every column referenced in a @Query exists on a table that query touches.
+     A column written with a table alias (`d.territory`) is resolved against the
+     table that alias names, not against every table the query touches. Without
+     that, a qualifier pointing at the wrong table passes whenever any other
+     table in the query happens to own the column -- which is how `d.territory`
+     reached a `doctors` table that had no such column.
   3. A @Query whose return type is a projection data class selects every field
      that class declares (Room binds by name and fails on a missing column).
 
@@ -169,8 +174,8 @@ def parse_queries(src: str) -> list[dict]:
     return out
 
 
-def analyse(sql: str) -> tuple[set[str], set[str], set[str]]:
-    """(tables referenced, column identifiers, output aliases)."""
+def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]]]:
+    """(tables, column identifiers, output aliases, alias->table, alias->columns)."""
     sql_nc = re.sub(r"'[^']*'", " ", sql)
     sql_nc = re.sub(r"\?\d*|:\w+", " ", sql_nc)
 
@@ -185,13 +190,22 @@ def analyse(sql: str) -> tuple[set[str], set[str], set[str]]:
 
     # `FROM prescriptions p` / `JOIN scanned_medicines AS sm` -- the alias is a
     # table reference, not a column, and would otherwise read as an unknown column.
-    table_aliases = {
-        m.group(2)
-        for m in re.finditer(
-            r"\b(?:from|join)\s+([A-Za-z_]\w*)\s+(?:AS\s+)?([A-Za-z_]\w*)", sql_nc, re.I
-        )
-        if m.group(2).lower() not in SQL_STOP
-    }
+    # The mapping is kept, not just the set: `d.territory` can only be judged
+    # against whatever `d` names.
+    alias_to_table: dict[str, str] = {}
+    for m in re.finditer(
+        r"\b(?:from|join)\s+([A-Za-z_]\w*)\s+(?:AS\s+)?([A-Za-z_]\w*)", sql_nc, re.I
+    ):
+        if m.group(2).lower() not in SQL_STOP:
+            alias_to_table[m.group(2)] = m.group(1).lower()
+    table_aliases = set(alias_to_table)
+
+    # Columns referenced through an alias, kept per alias.
+    qualified: dict[str, set[str]] = {}
+    for m in re.finditer(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)", sql_nc):
+        if m.group(2).lower() in SQL_STOP:
+            continue
+        qualified.setdefault(m.group(1), set()).add(m.group(2))
 
     cols: set[str] = set()
     for m in re.finditer(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)|\b([A-Za-z_]\w*)\b", sql_nc):
@@ -202,7 +216,7 @@ def analyse(sql: str) -> tuple[set[str], set[str], set[str]]:
     # table names and aliases are not columns
     cols -= tables
     cols -= table_aliases
-    return tables, cols, aliases
+    return tables, cols, aliases, alias_to_table, qualified
 
 
 def main() -> int:
@@ -224,7 +238,7 @@ def main() -> int:
 
     problems: list[str] = []
     for q in queries:
-        used_tables, cols, aliases = analyse(q["sql"])
+        used_tables, cols, aliases, alias_to_table, qualified = analyse(q["sql"])
         unknown_tables = used_tables - set(tables)
         for t in sorted(unknown_tables):
             problems.append(f"{q['fn']} (Daos.kt:{q['line']}) unknown table '{t}'")
@@ -235,6 +249,20 @@ def main() -> int:
             problems.append(
                 f"{q['fn']} (Daos.kt:{q['line']}) column '{c}' not on {scope}"
             )
+
+        # A qualified column is judged against the one table its alias names.
+        # Unqualified columns stay on the union below: SQLite resolves those at
+        # run time against every joined table, so rejecting one that lives on a
+        # sibling table in the same query would be a false alarm.
+        for alias, used in qualified.items():
+            target = alias_to_table.get(alias)
+            if target is None or target not in tables:
+                continue
+            for c in sorted(used - tables[target]):
+                problems.append(
+                    f"{q['fn']} (Daos.kt:{q['line']}) column '{c}' is not on "
+                    f"table '{target}' (written as {alias}.{c})"
+                )
 
         base = re.sub(r"[<>,\[\]\s?]", "", q["ret"]).split(".")[-1]
         if base in projections:

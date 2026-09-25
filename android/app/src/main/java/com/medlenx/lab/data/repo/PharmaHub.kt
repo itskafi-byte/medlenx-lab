@@ -261,14 +261,6 @@ object PharmaHub {
     }
 
     /**
-     * Python's `get_health_days`: resolve every entry against a real calendar
-     * year and classify it as today / upcoming / past.
-     *
-     * Entries whose month/day is not a valid date in [year] are dropped, exactly
-     * as the Python `except ValueError: continue` does — that is what keeps a
-     * 29 February entry from crashing a non-leap year.
-     */
-    /**
      * The campaign card for one health day — `get_health_day_detail`
      * (pharma_hub.py:508).
      *
@@ -360,6 +352,14 @@ object PharmaHub {
         return "general"
     }
 
+    /**
+     * Python's `get_health_days`: resolve every entry against a real calendar
+     * year and classify it as today / upcoming / past.
+     *
+     * Entries whose month/day is not a valid date in [year] are dropped, exactly
+     * as the Python `except ValueError: continue` does — that is what keeps a
+     * 29 February entry from crashing a non-leap year.
+     */
     fun healthDays(
         data: HealthDays,
         today: LocalDate,

@@ -36,7 +36,6 @@ data class MedexEntity(
     val url: String?,
 )
 
-/** One verified prescription scan. */
 /**
  * A doctor, with the identity `prescriptions.doctor_id` points at.
  *
@@ -63,10 +62,12 @@ data class DoctorEntity(
     val specialty: String,
     val chamber: String,
     val district: String,
+    val territory: String,
     val upazila: String,
     @ColumnInfo(name = "bmdc_no") val bmdcNo: String,
 )
 
+/** One verified prescription scan. */
 @Entity(
     tableName = "prescriptions",
     indices = [Index("created_at"), Index("mr_id"), Index("doctor_name")],

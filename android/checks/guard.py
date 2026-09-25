@@ -29,7 +29,10 @@ BRANCH = "arena/01a09bf9-medlenx-lab"
 # This branch is contractually Android-only, plus the agent working folder the
 # user asked for (notes, tools and scan reports that live outside android/).
 ALLOWED_PREFIXES = ("android/", "agent/")
-ALLOWED_PREFIX = "android/"  # used in messages
+# Derived, not written out again: this said "android/" on its own and kept saying
+# it after `agent/` was allowed, so every refusal message and the success line
+# understated the rule the check actually enforces.
+ALLOWED_PREFIX = " or ".join(ALLOWED_PREFIXES)
 
 
 def git(*args: str) -> str:

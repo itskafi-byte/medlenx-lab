@@ -14,9 +14,15 @@ Checks
 2. Duplicate member declarations - the same `fun`/`val`/`var` name declared
    twice in one interface or class (conflicting overloads at codegen time).
 3. Orphaned `private set` - a `private set` that does not follow a property.
-4. `@Composable` call inside `remember { }` - that lambda is not a composable
+4. Orphaned KDoc - a doc block immediately followed by another one, which means
+   something was inserted between the doc and the declaration it described.
+5. `@Composable` call inside `remember { }` - that lambda is not a composable
    context, so `LocalContext.current` there is illegal.
-5. Missing return in a block-bodied function - `fun f(): T { ... }` must return
+6. Scope leak - a layout-scope member (`.weight`, `.align`, ...) called from a
+   receiver that is not the enclosing scope.
+7. Missing icon import - `Icons.Filled.X` used without its per-icon import.
+8. Unresolved symbol - a name used, declared in no file and imported nowhere.
+9. Missing return in a block-bodied function - `fun f(): T { ... }` must return
    explicitly; only `= expr` bodies infer their result.
 
 Run it from anywhere: the source root is derived from this file's own path. A
@@ -374,6 +380,48 @@ def check_orphan_private_set():
                 ).strip()
                 if not prop.search(prev):
                     findings.append((path, i + 1, prev))
+    return findings
+
+
+def check_orphaned_kdoc():
+    """
+    A KDoc block immediately followed by another one.
+
+    Two consecutive doc comments are never meaningful in Kotlin -- the second
+    attaches to the declaration and the first attaches to nothing -- and the way
+    they arise is always the same: a function is inserted *between* a doc comment
+    and the function it described. The text then sits above the wrong function,
+    reads as if it documents it, and the real one silently loses its docs.
+
+    This has happened twice in this project (`copyToClipboard`'s doc above
+    `shareSummary`, and `saveVerified`'s above `resolveDoctorId`), which makes it
+    worth a check rather than a habit of reading upwards before every edit.
+    """
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            lines = open(path, encoding="utf-8").read().split("\n")
+            i = 0
+            while i < len(lines):
+                if lines[i].strip().startswith("/**"):
+                    # End of this doc block.
+                    j = i
+                    while j < len(lines) and "*/" not in lines[j]:
+                        j += 1
+                    # Skip blank lines; another doc block right after is the fault.
+                    k = j + 1
+                    while k < len(lines) and not lines[k].strip():
+                        k += 1
+                    if k < len(lines) and lines[k].strip().startswith("/**"):
+                        findings.append((path, i + 1, lines[k].strip()))
+                        i = k
+                        continue
+                    i = j + 1
+                    continue
+                i += 1
     return findings
 
 
@@ -890,6 +938,14 @@ def main() -> int:
         print("ORPHANED `private set`")
         for path, line, prev in orphan:
             print(f"  {path}:{line}  (preceded by: {prev!r})")
+        print()
+
+    kdoc = check_orphaned_kdoc()
+    if kdoc:
+        findings += len(kdoc)
+        print("ORPHANED KDoc - a doc block whose declaration was pushed away")
+        for path, line, following in kdoc:
+            print(f"  {path}:{line}  followed by another doc block: {following[:60]!r}")
         print()
 
     comp = check_composable_in_remember()

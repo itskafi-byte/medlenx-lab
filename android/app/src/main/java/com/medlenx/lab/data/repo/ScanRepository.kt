@@ -68,19 +68,6 @@ class ScanRepository(
         )
 
     /**
-     * Persists a verified prescription with its itemised medicines.
-     *
-     * Re-verifying replaces the medicine rows instead of appending, matching the web
-     * backend's append-only-but-replace-per-prescription behaviour.
-     *
-     * @param enriched index-aligned with [VlScanResult.medicines] - the output of
-     *   [com.medlenx.lab.data.repo.MedicineEnricher.enrich] for this read. It carries the
-     *   catalogue match and the compliance verdicts; without it every audit column would
-     *   be written as a blank/false, which silently empties the market-share widget
-     *   (`company_name != ''`) and mislabels the Live Scans feed. Empty is tolerated so
-     *   the row still lands rather than the save failing.
-     */
-    /**
      * The [DoctorEntity] id this prescription belongs to, creating it if needed.
      *
      * Keyed by [DoctorIdentity], which is the same rule the v1->v2 migration
@@ -97,21 +84,59 @@ class ScanRepository(
      */
     private suspend fun resolveDoctorId(prescription: PrescriptionEntity): Long? {
         val key = DoctorIdentity.keyOf(prescription) ?: return null
-        doctorDao.idFor(key)?.let { return it }
-        val inserted = doctorDao.insertIgnoring(
-            DoctorEntity(
-                identityKey = key,
-                name = DoctorIdentity.displayName(prescription.doctorName),
-                specialty = prescription.doctorSpecialty,
-                chamber = prescription.chamber,
-                district = prescription.district,
-                upazila = prescription.upazila,
-                bmdcNo = prescription.doctorBmdcNo,
-            ),
+
+        val incoming = DoctorEntity(
+            identityKey = key,
+            name = DoctorIdentity.displayName(prescription.doctorName),
+            specialty = prescription.doctorSpecialty,
+            chamber = prescription.chamber,
+            district = prescription.district,
+            territory = prescription.territory,
+            upazila = prescription.upazila,
+            bmdcNo = prescription.doctorBmdcNo,
         )
+
+        val existing = doctorDao.byKey(key)
+        if (existing != null) {
+            // The web refreshes the profile on every save, and its rule is that a
+            // non-empty incoming value always wins (database.py:508): the value
+            // came from a human verifying the prescription, so it is more current
+            // than whatever was stored. Without this the joined columns the
+            // tiering and leaderboard queries read would keep the *first* value
+            // ever recorded, and correcting a doctor's specialty would never show
+            // up.
+            val merged = existing.copy(
+                name = incoming.name.ifBlank { existing.name },
+                specialty = incoming.specialty.ifBlank { existing.specialty },
+                chamber = incoming.chamber.ifBlank { existing.chamber },
+                district = incoming.district.ifBlank { existing.district },
+                territory = incoming.territory.ifBlank { existing.territory },
+                upazila = incoming.upazila.ifBlank { existing.upazila },
+                bmdcNo = incoming.bmdcNo.ifBlank { existing.bmdcNo },
+            )
+            // Only write when something actually changed: an update per scan would
+            // touch the table on every save for no reason.
+            if (merged != existing) doctorDao.update(merged)
+            return existing.id
+        }
+
+        val inserted = doctorDao.insertIgnoring(incoming)
         return if (inserted != -1L) inserted else doctorDao.idFor(key)
     }
 
+    /**
+     * Persists a verified prescription with its itemised medicines.
+     *
+     * Re-verifying replaces the medicine rows instead of appending, matching the web
+     * backend's append-only-but-replace-per-prescription behaviour.
+     *
+     * @param enriched index-aligned with [VlScanResult.medicines] - the output of
+     *   [com.medlenx.lab.data.repo.MedicineEnricher.enrich] for this read. It carries the
+     *   catalogue match and the compliance verdicts; without it every audit column would
+     *   be written as a blank/false, which silently empties the market-share widget
+     *   (`company_name != ''`) and mislabels the Live Scans feed. Empty is tolerated so
+     *   the row still lands rather than the save failing.
+     */
     suspend fun saveVerified(
         prescription: PrescriptionEntity,
         result: VlScanResult,

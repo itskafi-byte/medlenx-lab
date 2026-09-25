@@ -16,6 +16,22 @@ carries no type or nullability information, and the two are exactly what Room
 compares. A migration can create the right column names with the wrong affinity
 or a stray NOT NULL and pass roomcheck while failing at open.
 
+Migrations are a chain, not a set
+---------------------------------
+Room compares the schema *after replaying every migration in order* against the
+entity definitions, so a migration that leaves the table in the shape it had at
+its own version is correct, not broken. `MIGRATION_1_2` creates `doctors` without
+`territory` and `MIGRATION_2_3` adds it; validating either statement against the
+current entity on its own reports a fault that Room would never raise, and
+"fixing" it by editing the older migration is exactly the mistake that breaks
+every device already on that version.
+
+So the checks below replay `object : Migration(a, b)` blocks in `a` order,
+accumulating each table's columns, and hold the *result* to the entity. A table
+no migration creates (Room builds those from the entities on a fresh install)
+is exempt from the whole-table comparison; its `ALTER`ed columns are still
+checked one by one.
+
 What it checks
 --------------
 For every `CREATE TABLE` inside a `Migration`:
@@ -33,6 +49,8 @@ For every `CREATE [UNIQUE] INDEX`:
 
 For every `ALTER TABLE ... ADD COLUMN`:
   8. the column exists on the entity, with matching affinity and nullability
+  9. a `NOT NULL` column carries a `DEFAULT` -- SQLite will not add one to a
+     table that already has rows, and that throws inside `migrate()` itself
 
 Types it does not understand are reported as unverifiable rather than as
 findings, so an unfamiliar Kotlin type cannot produce a false alarm.
@@ -238,6 +256,29 @@ def flatten_sql_literals(text: str) -> tuple[str, dict[str, int]]:
     return "".join(parts), lines
 
 
+def parse_migrations(raw: str) -> list[dict]:
+    """
+    Every `object : Migration(a, b) { ... }` block, in source order.
+
+    Sliced from one `Migration(a, b)` marker to the next, so the private helpers
+    a migration calls (`backfillDoctors`, which lives after the block it serves)
+    ride along with it rather than being attributed to the following one.
+    """
+    marks = list(re.finditer(r":\s*Migration\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)", raw))
+    out = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(raw)
+        out.append(
+            {
+                "from": int(m.group(1)),
+                "to": int(m.group(2)),
+                "text": raw[m.end() : end],
+                "line": raw[: m.start()].count("\n") + 1,
+            }
+        )
+    return out
+
+
 def parse_table_creates(text: str) -> list[dict]:
     """Every `CREATE TABLE [IF NOT EXISTS] x (...)` in the text."""
     out = []
@@ -323,7 +364,17 @@ def parse_index_creates(text: str) -> list[dict]:
 
 def parse_alter_adds(text: str) -> list[dict]:
     out = []
-    pat = r"ALTER\s+TABLE\s+`?(\w+)`?\s+ADD\s+COLUMN\s+`?(\w+)`?\s+([A-Za-z ]+)"
+    # The declaration has to be bounded by hand. `flatten_sql_literals` concatenates
+    # every literal in the file, so the statement does not end at a newline or a
+    # `;` -- a greedy tail runs on into the *next* statement and a later `IS NOT
+    # NULL` silently satisfies the nullability check it was supposed to fail.
+    # Stopping at the next statement keyword keeps `NOT NULL` and `DEFAULT ...` in
+    # the declaration (they are not statement starts) while cutting the run-on.
+    pat = (
+        r"ALTER\s+TABLE\s+`?(\w+)`?\s+ADD\s+COLUMN\s+`?(\w+)`?\s+"
+        r"([A-Za-z0-9_ ']*?)"
+        r"(?=\s*(?:ALTER|CREATE|SELECT|UPDATE|INSERT|DELETE|DROP|WHERE|ORDER|GROUP|HAVING|LIMIT|$))"
+    )
     for m in re.finditer(pat, text):
         decl = m.group(3).strip().upper()
         affinity = next((a for a in ("INTEGER", "TEXT", "REAL", "BLOB", "NUMERIC") if a in decl), None)
@@ -333,6 +384,11 @@ def parse_alter_adds(text: str) -> list[dict]:
                 "column": m.group(2),
                 "affinity": affinity,
                 "not_null": "NOT NULL" in decl,
+                # A `DEFAULT` clause is tracked separately: SQLite refuses
+                # `ADD COLUMN ... NOT NULL` with no default on a table that already
+                # has rows, and the failure happens inside `migrate()` -- before
+                # Room ever gets to compare schemas.
+                "has_default": "DEFAULT" in decl,
                 "line": text[: m.start()].count("\n") + 1,
             }
         )
@@ -358,121 +414,167 @@ def main() -> int:
     for pattern in MIGRATION_GLOBS:
         for path in sorted(ROOT.glob("android/" + pattern)):
             raw = strip_comments(path.read_text(encoding="utf-8"))
-            text, ddl_lines = flatten_sql_literals(raw)
             rel = path.relative_to(ROOT)
 
-            for create in parse_table_creates(text):
-                table = create["table"]
-                entity = entities.get(table)
-                if entity is None:
-                    findings.append(
-                        f"    {rel}:{ddl_lines.get(table, create['line'])}  CREATE TABLE `{table}` has no "
-                        f"@Entity with that tableName"
-                    )
-                    continue
-                checked["tables"] += 1
-                expected = entity["columns"]
+            steps = parse_migrations(raw)
+            if not steps:
+                # No `Migration(a, b)` marker anywhere: treat the file as a single
+                # step, which is what this check did before migrations chained.
+                steps = [{"from": 0, "to": 0, "text": raw, "line": 1}]
 
-                for column, (affinity, not_null, raw) in create["columns"].items():
-                    if column not in expected:
+            # Replayed state. `schema` accumulates what the chain builds, table by
+            # table; `created_by` remembers which tables a migration is responsible
+            # for, so the tables Room builds straight from the entity on a fresh
+            # install are never held to the migrations.
+            schema: dict[str, dict[str, tuple]] = {}
+            created_by: dict[str, int] = {}
+            line_of: dict[str, int] = {}
+
+            for step, mig in enumerate(sorted(steps, key=lambda m: m["from"])):
+                text, ddl_lines = flatten_sql_literals(mig["text"])
+                # Line numbers come out relative to the slice; shift them back onto
+                # the file. The slice opens on the line holding `Migration(a, b)`.
+                off = mig["line"] - 1
+                ddl_lines = {k: v + off for k, v in ddl_lines.items()}
+                line_of.update(ddl_lines)
+
+                for create in parse_table_creates(text):
+                    table = create["table"]
+                    entity = entities.get(table)
+                    if entity is None:
                         findings.append(
-                            f"    {rel}:{ddl_lines.get(column, create['line'])}  `{table}`.{column} is not on "
+                            f"    {rel}:{ddl_lines.get(table, create['line'] + off)}  CREATE TABLE `{table}` has no "
+                            f"@Entity with that tableName"
+                        )
+                        continue
+                    checked["tables"] += 1
+                    created_by[table] = step
+                    line_of.setdefault(table, create["line"] + off)
+                    # Additive on purpose: the same table may be created by a later
+                    # migration's rebuild, and then the columns it re-declares are
+                    # the ones that count.
+                    schema.setdefault(table, {}).update(
+                        {c: (a, nn) for c, (a, nn, _) in create["columns"].items()}
+                    )
+                    expected = entity["columns"]
+
+                    for column, (affinity, not_null, raw_decl) in create["columns"].items():
+                        if column not in expected:
+                            findings.append(
+                                f"    {rel}:{ddl_lines.get(column, create['line'] + off)}  `{table}`.{column} is not on "
+                                f"the entity"
+                            )
+                            continue
+                        exp_affinity, exp_not_null = expected[column]
+                        checked["columns"] += 1
+                        if exp_affinity is None:
+                            unverifiable.append(f"{table}.{column} (unmapped Kotlin type)")
+                            continue
+                        # A column that is the primary key is written as
+                        # `INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL`; affinity still
+                        # has to be INTEGER, and Room's notNull is true for a
+                        # non-nullable Long.
+                        if affinity != exp_affinity:
+                            findings.append(
+                                f"    {rel}:{ddl_lines.get(column, create['line'] + off)}  `{table}`.{column} is "
+                                f"{affinity}, entity expects {exp_affinity}  [{raw_decl}]"
+                            )
+                        if not_null != exp_not_null:
+                            want = "NOT NULL" if exp_not_null else "nullable"
+                            findings.append(
+                                f"    {rel}:{ddl_lines.get(column, create['line'] + off)}  `{table}`.{column} should be "
+                                f"{want}  [{raw_decl}]"
+                            )
+
+                for idx in parse_index_creates(text):
+                    table = idx["table"]
+                    entity = entities.get(table)
+                    if entity is None:
+                        findings.append(
+                            f"    {rel}:{idx['line'] + off}  index `{idx['name']}` is on unknown "
+                            f"table `{table}`"
+                        )
+                        continue
+                    checked["indices"] += 1
+                    derived = "index_" + table + "_" + "_".join(idx["columns"])
+                    if idx["name"] != derived:
+                        findings.append(
+                            f"    {rel}:{idx['line'] + off}  index `{idx['name']}` -- Room would "
+                            f"name it `{derived}`"
+                        )
+                    declared = entity["indices"]
+                    match = next((d for d in declared if d[0] == idx["columns"]), None)
+                    if match is None:
+                        findings.append(
+                            f"    {rel}:{idx['line'] + off}  index on {idx['columns']} is not "
+                            f"declared on @Entity(\"{table}\")"
+                        )
+                    elif match[1] != idx["unique"]:
+                        want = "UNIQUE" if match[1] else "not unique"
+                        findings.append(
+                            f"    {rel}:{idx['line'] + off}  index `{idx['name']}` should be {want}"
+                        )
+                    for column in idx["columns"]:
+                        if column not in entity["columns"]:
+                            findings.append(
+                                f"    {rel}:{idx['line'] + off}  index `{idx['name']}` covers "
+                                f"`{column}`, which is not on `{table}`"
+                            )
+
+                for add in parse_alter_adds(text):
+                    table = add["table"]
+                    entity = entities.get(table)
+                    if entity is None:
+                        findings.append(
+                            f"    {rel}:{add['line'] + off}  ALTER on unknown table `{table}`"
+                        )
+                        continue
+                    if add["column"] not in entity["columns"]:
+                        findings.append(
+                            f"    {rel}:{add['line'] + off}  `{table}`.{add['column']} is not on "
                             f"the entity"
                         )
                         continue
-                    exp_affinity, exp_not_null = expected[column]
                     checked["columns"] += 1
-                    if exp_affinity is None:
-                        unverifiable.append(f"{table}.{column} (unmapped Kotlin type)")
-                        continue
-                    # A column that is the primary key is written as
-                    # `INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL`; affinity still
-                    # has to be INTEGER, and Room's notNull is true for a
-                    # non-nullable Long.
-                    if affinity != exp_affinity:
-                        findings.append(
-                            f"    {rel}:{ddl_lines.get(column, create['line'])}  `{table}`.{column} is "
-                            f"{affinity}, entity expects {exp_affinity}  [{raw}]"
+                    if table in created_by:
+                        # The chain owns this table, so record the column for the
+                        # end-of-chain comparison below.
+                        schema.setdefault(table, {})[add["column"]] = (
+                            add["affinity"],
+                            add["not_null"],
                         )
-                    if not_null != exp_not_null:
+                    exp_affinity, exp_not_null = entity["columns"][add["column"]]
+                    if exp_affinity is None:
+                        unverifiable.append(f"{table}.{add['column']} (unmapped Kotlin type)")
+                        continue
+                    if add["affinity"] != exp_affinity:
+                        findings.append(
+                            f"    {rel}:{add['line'] + off}  `{table}`.{add['column']} added as "
+                            f"{add['affinity']}, entity expects {exp_affinity}"
+                        )
+                    if add["not_null"] != exp_not_null:
                         want = "NOT NULL" if exp_not_null else "nullable"
                         findings.append(
-                            f"    {rel}:{ddl_lines.get(column, create['line'])}  `{table}`.{column} should be "
-                            f"{want}  [{raw}]"
+                            f"    {rel}:{add['line'] + off}  `{table}`.{add['column']} should be "
+                            f"{want}"
                         )
-
-                for column in expected:
-                    if column not in create["columns"]:
+                    if add["not_null"] and not add["has_default"]:
                         findings.append(
-                            f"    {rel}:{ddl_lines.get(column, create['line'])}  `{table}`.{column} is on the "
-                            f"entity but the migration never creates it"
+                            f"    {rel}:{add['line'] + off}  `{table}`.{add['column']} is added "
+                            f"NOT NULL with no DEFAULT -- SQLite rejects that on a table with rows"
                         )
 
-            for idx in parse_index_creates(text):
-                table = idx["table"]
-                entity = entities.get(table)
-                if entity is None:
-                    findings.append(
-                        f"    {rel}:{idx['line']}  index `{idx['name']}` is on unknown "
-                        f"table `{table}`"
-                    )
-                    continue
-                checked["indices"] += 1
-                derived = "index_" + table + "_" + "_".join(idx["columns"])
-                if idx["name"] != derived:
-                    findings.append(
-                        f"    {rel}:{idx['line']}  index `{idx['name']}` -- Room would "
-                        f"name it `{derived}`"
-                    )
-                declared = entity["indices"]
-                match = next((d for d in declared if d[0] == idx["columns"]), None)
-                if match is None:
-                    findings.append(
-                        f"    {rel}:{idx['line']}  index on {idx['columns']} is not "
-                        f"declared on @Entity(\"{table}\")"
-                    )
-                elif match[1] != idx["unique"]:
-                    want = "UNIQUE" if match[1] else "not unique"
-                    findings.append(
-                        f"    {rel}:{idx['line']}  index `{idx['name']}` should be {want}"
-                    )
-                for column in idx["columns"]:
-                    if column not in entity["columns"]:
+            # The end-of-chain comparison: whatever a migration created, replayed
+            # through every later ALTER, has to arrive at the entity. Checking this
+            # per statement instead would flag MIGRATION_1_2 for not creating a
+            # column MIGRATION_2_3 is there to add.
+            for table, built in schema.items():
+                for column in entities[table]["columns"]:
+                    if column not in built:
                         findings.append(
-                            f"    {rel}:{idx['line']}  index `{idx['name']}` covers "
-                            f"`{column}`, which is not on `{table}`"
+                            f"    {rel}:{line_of.get(table, 0)}  `{table}`.{column} is on the "
+                            f"entity but the migration chain never creates it"
                         )
-
-            for add in parse_alter_adds(text):
-                table = add["table"]
-                entity = entities.get(table)
-                if entity is None:
-                    findings.append(
-                        f"    {rel}:{add['line']}  ALTER on unknown table `{table}`"
-                    )
-                    continue
-                if add["column"] not in entity["columns"]:
-                    findings.append(
-                        f"    {rel}:{add['line']}  `{table}`.{add['column']} is not on "
-                        f"the entity"
-                    )
-                    continue
-                checked["columns"] += 1
-                exp_affinity, exp_not_null = entity["columns"][add["column"]]
-                if exp_affinity is None:
-                    unverifiable.append(f"{table}.{add['column']} (unmapped Kotlin type)")
-                    continue
-                if add["affinity"] != exp_affinity:
-                    findings.append(
-                        f"    {rel}:{add['line']}  `{table}`.{add['column']} added as "
-                        f"{add['affinity']}, entity expects {exp_affinity}"
-                    )
-                if add["not_null"] != exp_not_null:
-                    want = "NOT NULL" if exp_not_null else "nullable"
-                    findings.append(
-                        f"    {rel}:{add['line']}  `{table}`.{add['column']} should be "
-                        f"{want}"
-                    )
 
     print(
         f"  checked: {checked['tables']} table(s), {checked['columns']} column(s), "
