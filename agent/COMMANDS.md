@@ -109,6 +109,14 @@ every literal in the file, a statement does not end at a newline or a `;`, so a
 greedy declaration tail runs into the *next* statement. A later `WHERE x IS NOT
 NULL` then satisfies the nullability check the fault was meant to fail.
 
+Known limit: only DDL is validated. The `SELECT`/`UPDATE`/`INSERT` statements the
+backfill helpers run are not checked against anything, and they execute inside
+`migrate()` at first launch after an upgrade -- the least forgiving place for a
+mistyped column. A migration helper written against a past schema version cannot
+honestly be checked against the current entities, so the helpers guard their
+column indices at runtime and return rather than write garbage. Do not delete
+those guards as noise.
+
 `roomcheck.py` resolves a qualified column against the table its alias names, not
 against the union of every table in the query. Before that, `d.territory` passed
 because `territory` existed on `prescriptions` — the qualifier was decoration, and
