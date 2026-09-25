@@ -16,6 +16,8 @@ import com.medlenx.lab.data.local.ScannedItemRow
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.NewsFeed
 import com.medlenx.lab.data.model.RegulatoryData
+import com.medlenx.lab.data.model.HealthDay
+import com.medlenx.lab.data.model.HealthDayDetail
 import com.medlenx.lab.data.model.HealthDays
 import com.medlenx.lab.data.model.JobBoard
 import com.medlenx.lab.data.model.PharmaJobs
@@ -84,6 +86,24 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var newsLoading by mutableStateOf(false)
         private set
+
+    /**
+     * The open campaign card, or null when the sheet is closed.
+     *
+     * Derived synchronously from the bundled calendar, so opening it cannot fail
+     * and has no loading state — which is why there is no `dayDetailLoading`
+     * beside it.
+     */
+    var dayDetail by mutableStateOf<HealthDayDetail?>(null)
+        private set
+
+    fun openDayDetail(day: HealthDay) {
+        dayDetail = PharmaHub.healthDayDetail(day)
+    }
+
+    fun closeDayDetail() {
+        dayDetail = null
+    }
 
     /** Month being displayed in the health-day calendar (1-12). */
     var month by mutableIntStateOf(today.monthValue)

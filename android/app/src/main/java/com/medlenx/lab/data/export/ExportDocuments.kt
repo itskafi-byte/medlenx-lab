@@ -243,6 +243,126 @@ object ExportDocuments {
     }
 
     /**
+     * The chamber summary's body text — `_build_receipt_lines` (main.py:1802).
+     *
+     * Shared by the PDF and the WhatsApp share, exactly as the Python shares it
+     * between `/api/receipt.pdf` and `/api/receipt/whatsapp`. The two must stay
+     * identical: a rep who sends the message and then the PDF would otherwise
+     * send two documents that disagree.
+     *
+     * The spacing is reproduced literally, including the leading two spaces on
+     * each list item and the blank lines — `chamberSummaryPdf` turns a blank line
+     * back into vertical space, so collapsing them here would change the page.
+     */
+    fun receiptLines(
+        doctor: String,
+        medicines: List<ReceiptMedicine>,
+        brandFocus: List<String>,
+    ): String {
+        val docName = doctor.ifBlank { "the doctor" }
+        val lines = mutableListOf(
+            "Dear $docName,",
+            "",
+            "Thank you for your time today. Please find a summary of the detailing " +
+                "for our portfolio:",
+            "",
+        )
+        val named = medicines.filter { it.brandName.isNotBlank() }
+        if (named.isNotEmpty()) {
+            lines += "Key products discussed:"
+            for (m in named) {
+                lines += "  • ${m.brandName} — ${m.strength} ${m.type} " +
+                    "(${m.generic})"
+            }
+        }
+        if (brandFocus.isNotEmpty()) {
+            lines += ""
+            lines += "Suggested areas to explore further:"
+            for (b in brandFocus) lines += "  · $b"
+        }
+        lines += listOf(
+            "",
+            "We'd be glad to walk you through any safety, efficacy or pricing detail " +
+                "at your convenience.",
+            "",
+            "Warm regards,",
+            "Your MedLenX Field Officer",
+        )
+        return lines.joinToString("\n")
+    }
+
+    /**
+     * The branded one-page chamber summary — `receipt_pdf` (main.py:1836).
+     *
+     * A4 portrait with the same title and subtitle as the web's, and the body
+     * drawn line by line.
+     */
+    fun chamberSummaryPdf(
+        doctor: String,
+        ownCompany: String,
+        medicines: List<ReceiptMedicine>,
+        brandFocus: List<String>,
+        generatedAt: Long = System.currentTimeMillis(),
+    ): ByteArray {
+        val body = receiptLines(doctor, medicines, brandFocus)
+
+        val w = PdfWriter()
+        w.footerText = "MedLenX Lab · Chamber Detailing Summary"
+
+        w.title("Chamber Detailing Summary", brandColor(ownCompany))
+        w.subtitle(
+            "${ownCompany.ifBlank { "MedLenX" }} · Prepared by MedLenX Lab Sample Receipt",
+        )
+
+        // The Python turns an empty line into a 6pt spacer and everything else
+        // into a paragraph, so the blank lines in the body are layout, not noise.
+        val bodyStyle = PdfWriter.Style(11f, PdfWriter.INK, leading = 16f)
+        for (part in body.split("\n")) {
+            if (part.isBlank()) w.gap(6f) else w.paragraph(part, bodyStyle)
+        }
+
+        w.gap(10f)
+        w.subtitle("Generated ${stamp(generatedAt)} · MedLenX Lab")
+        return w.finish()
+    }
+
+    /**
+     * The web's per-company title colour (main.py:1858), keyed on a substring of
+     * the company name and falling back to the same blue.
+     */
+    private fun brandColor(ownCompany: String): Int {
+        val own = ownCompany.lowercase()
+        val table = listOf(
+            "square" to 0xFF1E40AF,
+            "incepta" to 0xFF0284C7,
+            "beximco" to 0xFF0D9488,
+            "renata" to 0xFFD97706,
+            "aci" to 0xFFDC2626,
+            "healthcare" to 0xFF7C3AED,
+            "opsonin" to 0xFF0891B2,
+            "eskayef" to 0xFF4F46E5,
+        )
+        for ((key, color) in table) {
+            if (key in own) return color.toInt()
+        }
+        return 0xFF1E40AF.toInt()
+    }
+
+    /** A medicine as the chamber summary prints it. */
+    data class ReceiptMedicine(
+        val brandName: String,
+        val strength: String = "",
+        val type: String = "",
+        val generic: String = "",
+    )
+
+    /** The web's `Chamber_Summary_{yyyymmddHHMM}.pdf`. */
+    fun chamberSummaryFileName(generatedAt: Long = System.currentTimeMillis()): String =
+        "Chamber_Summary_" +
+            SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()).format(Date(generatedAt)) +
+            ".pdf"
+
+    /**
      * `main.py:853`'s column list, in its order.
      *
      * `created_at` is a millisecond epoch on the device and an ISO string on the

@@ -1,6 +1,11 @@
 package com.medlenx.lab.ui.screens.hub
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,8 +13,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,11 +25,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.automirrored.filled.Article
@@ -40,18 +51,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.model.DgdaAdjustedRow
 import com.medlenx.lab.data.model.DgdaBannedRow
 import com.medlenx.lab.data.model.DgdaPriceRow
+import com.medlenx.lab.data.model.HealthDayDetail
 import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.NewsItem
 import com.medlenx.lab.data.repo.TripsMoleculeVolume
 import com.medlenx.lab.ui.components.MedicineThumb
+import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxButton
@@ -63,6 +80,7 @@ import com.medlenx.lab.ui.components.CompanyBadge
 import com.medlenx.lab.ui.components.MiniKpiTile
 import com.medlenx.lab.ui.components.MlxSegmented
 import com.medlenx.lab.ui.components.MlxTextField
+import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.StatusPill
@@ -93,9 +111,34 @@ fun HubScreen(
     vm: HubViewModel,
     onOpenJob: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** The campaign card's two exports, supplied by the shell that owns the picker. */
+    onShareDayPdf: (HealthDayDetail) -> Unit = {},
+    onShareDayWhatsApp: (HealthDayDetail) -> Unit = {},
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
     val tabs = HubTab.entries
+
+    val copyTarget = LocalContext.current
+
+    // A Dialog composes into its own window, so it is rendered as a sibling of
+    // the scrolling column rather than inside it — nested in the Column it would
+    // be clipped to the scroller's bounds.
+    vm.dayDetail?.let { detail ->
+        HealthDaySheet(
+            detail = detail,
+            onDismiss = vm::closeDayDetail,
+            onSharePdf = { onShareDayPdf(detail) },
+            onShareWhatsApp = { onShareDayWhatsApp(detail) },
+            onCopyScript = {
+                val clipboard = copyTarget.getSystemService(Context.CLIPBOARD_SERVICE)
+                    as? ClipboardManager
+                clipboard?.setPrimaryClip(
+                    ClipData.newPlainText("Campaign script", detail.promoScript),
+                )
+                Toast.makeText(copyTarget, "Campaign script copied", Toast.LENGTH_SHORT).show()
+            },
+        )
+    }
 
     Column(
         modifier = modifier
@@ -131,6 +174,188 @@ fun HubScreen(
             HubTab.HealthDays -> HealthDaysTab(vm)
             HubTab.Dgda -> DgdaTab(vm)
         }
+    }
+}
+
+// ══════════════════════════════ HEALTH DAY SHEET ═════════════════════════════
+
+/**
+ * The campaign card for one health day — the web's `#healthDayModal`
+ * (`openHealthDayModal`, index.html:3845).
+ *
+ * This is where the chamber summary lives on the web, and therefore where it
+ * lives here: the receipt PDF *and* the WhatsApp share are both offered from this
+ * card, over the day's brand focus. The pitch card's own share button was removed
+ * when this sheet arrived, because the web offers that card as a PDF only — the
+ * button had been an approximation of this screen rather than a port of anything.
+ *
+ * @param onSharePdf      hands the generated PDF to the system file picker.
+ * @param onShareWhatsApp sends the same body text the PDF is built from.
+ */
+@Composable
+private fun HealthDaySheet(
+    detail: HealthDayDetail,
+    onDismiss: () -> Unit,
+    onSharePdf: () -> Unit,
+    onShareWhatsApp: () -> Unit,
+    onCopyScript: () -> Unit,
+) {
+    val day = detail.day
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MlxCard {
+                // Bounded and scrolling: the script, three chip rows and the tip
+                // strip together run past a phone screen.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = day.name,
+                                style = MlxType.PanelTitle,
+                                color = Mlx.Text900,
+                            )
+                            Text(
+                                text = "${day.org.ifBlank { "WHO" }} • " +
+                                    "${monthName(day.month)} ${day.day}",
+                                style = MlxType.Meta,
+                                color = Mlx.Text500,
+                            )
+                        }
+                        MlxIconButton(Icons.Filled.Close, "Close", onDismiss)
+                    }
+
+                    // Focus pills — blue, as the web's `bg-blue-50 text-blue-700`.
+                    FlowRowCompat(
+                        modifier = Modifier.padding(top = MlxD.Space3),
+                        horizontalSpacing = 4.dp,
+                        verticalSpacing = 4.dp,
+                    ) {
+                        detail.focus.forEach { RegulatoryPill(text = it, tone = PillTone.Blue) }
+                    }
+
+                    Text(
+                        text = day.summary,
+                        style = MlxType.BodySmall,
+                        color = Mlx.Text600,
+                        modifier = Modifier.padding(top = MlxD.Space3),
+                    )
+
+                    // The web's `bg-slate-50` script block, with its uppercase label.
+                    Text(
+                        text = "PRE-GENERATED MPO SCRIPT",
+                        style = MlxType.SectionLabel,
+                        color = Mlx.Text500,
+                        modifier = Modifier.padding(top = MlxD.Space4, bottom = MlxD.Space2),
+                    )
+                    Text(
+                        text = detail.promoScript,
+                        style = MlxType.BodySmall,
+                        color = Mlx.Text900,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MlxShape.Medium)
+                            .background(Mlx.Brand50)
+                            .border(1.dp, Mlx.Brand200, MlxShape.Medium)
+                            .padding(MlxD.Space3),
+                    )
+
+                    LabelledChips("CAMPAIGN BRAND FOCUS", detail.brandFocus, PillTone.Emerald)
+                    LabelledChips("COLLATERAL TO CARRY", detail.collateral, PillTone.Blue)
+
+                    if (day.mpoTip.isNotBlank()) {
+                        Text(
+                            text = day.mpoTip,
+                            style = MlxType.Meta,
+                            color = Mlx.Brand700,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = MlxD.Space3)
+                                .clip(MlxShape.Medium)
+                                .background(Mlx.Brand50)
+                                .border(1.dp, Mlx.Accent100, MlxShape.Medium)
+                                .padding(MlxD.Space3),
+                        )
+                    }
+
+                    // The web's three actions. "Copy script" is full width on its
+                    // own row because three equal-weight buttons at these label
+                    // lengths do not fit across a phone.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = MlxD.Space4),
+                        horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+                    ) {
+                        MlxButton(
+                            text = "PDF summary",
+                            onClick = onSharePdf,
+                            icon = Icons.Filled.Description,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MlxButton(
+                            text = "WhatsApp",
+                            onClick = onShareWhatsApp,
+                            tone = ButtonTone.Outline,
+                            icon = Icons.Filled.Share,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    MlxButton(
+                        text = "Copy script",
+                        onClick = onCopyScript,
+                        tone = ButtonTone.Outline,
+                        icon = Icons.Filled.ContentCopy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = MlxD.Space2),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A titled row of pills, with the web's literal "none" when the list is empty. */
+@Composable
+private fun LabelledChips(title: String, values: List<String>, tone: PillTone) {
+    Text(
+        text = title,
+        style = MlxType.SectionLabel,
+        color = Mlx.Text500,
+        modifier = Modifier.padding(top = MlxD.Space3),
+    )
+    if (values.isEmpty()) {
+        Text("none", style = MlxType.Meta, color = Mlx.Text400)
+        return
+    }
+    FlowRowCompat(
+        modifier = Modifier.padding(top = 4.dp),
+        horizontalSpacing = 4.dp,
+        verticalSpacing = 4.dp,
+    ) {
+        values.forEach { RegulatoryPill(text = it, tone = tone) }
     }
 }
 
@@ -990,7 +1215,7 @@ private fun HealthDaysTab(vm: HubViewModel) {
                             label = "${entry.day.name} • ${formatDay(entry.day.day)} " +
                                 monthShort(entry.day.month),
                             selected = entry.status == "today",
-                            onClick = { /* day detail sheet - get_health_day_detail */ },
+                            onClick = { vm.openDayDetail(entry.day) },
                         )
                     }
                 }

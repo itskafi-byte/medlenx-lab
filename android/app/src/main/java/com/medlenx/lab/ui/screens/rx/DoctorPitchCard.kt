@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MedicalInformation
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,7 +73,6 @@ fun DoctorPitchCard(
     onClose: () -> Unit,
     onDownloadPdf: () -> Unit,
     onCopyPitch: () -> Unit,
-    onShare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val competitor = substitution.competitor
@@ -176,21 +174,10 @@ fun DoctorPitchCard(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                // On its own row rather than a third button in the one above:
-                // three equal-weight buttons at these label lengths do not fit,
-                // and the web offers this as a sibling of the PDF export rather
-                // than a variation of it. Spacing via padding keeps the import
-                // list untouched.
-                PitchFooterButton(
-                    text = "Share to WhatsApp",
-                    icon = Icons.Filled.Share,
-                    filled = false,
-                    onClick = onShare,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = MlxD.Space2),
-                )
-
+                // The web's pitch card offers a PDF only. A WhatsApp button lived
+                // here between gap 6 and the health-day sheet, as an approximation
+                // of the campaign card that actually has one; it is gone now that
+                // that card exists, so this screen has no action the web does not.
                 Text(
                     text = "Show during chamber visit",
                     style = MlxType.Footnote,

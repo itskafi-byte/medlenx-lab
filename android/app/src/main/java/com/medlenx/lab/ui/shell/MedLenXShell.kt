@@ -277,6 +277,54 @@ fun MedLenXShell(
                                 Destination.Hub -> HubScreen(
                                     vm = hubVm,
                                     onOpenJob = { url -> openUrl(context, url) },
+                                    // The chamber summary, to both destinations the
+                                    // web offers it from: the same body text that
+                                    // becomes the PDF is what the WhatsApp message
+                                    // carries, because _build_receipt_lines feeds
+                                    // both there too.
+                                    onShareDayPdf = { detail ->
+                                        val focus = detail.brandFocus
+                                        runCatching {
+                                            ExportDocuments.chamberSummaryPdf(
+                                                doctor = teamVm.officerProfile?.fullName.orEmpty(),
+                                                ownCompany =
+                                                    teamVm.officerProfile?.company.orEmpty(),
+                                                // The web maps brand focus into one
+                                                // medicine per brand with the other
+                                                // fields blank, so "Key products
+                                                // discussed" lists them.
+                                                medicines = focus.map {
+                                                    ExportDocuments.ReceiptMedicine(
+                                                        brandName = it,
+                                                    )
+                                                },
+                                                brandFocus = focus,
+                                            )
+                                        }
+                                            .onSuccess { pdf ->
+                                                documentSaver.savePdf(
+                                                    ExportDocuments.chamberSummaryFileName(),
+                                                    pdf,
+                                                )
+                                            }
+                                            .onFailure(exportFailed)
+                                    },
+                                    onShareDayWhatsApp = { detail ->
+                                        val focus = detail.brandFocus
+                                        shareSummary(
+                                            context,
+                                            ExportDocuments.receiptLines(
+                                                doctor =
+                                                    teamVm.officerProfile?.fullName.orEmpty(),
+                                                medicines = focus.map {
+                                                    ExportDocuments.ReceiptMedicine(
+                                                        brandName = it,
+                                                    )
+                                                },
+                                                brandFocus = focus,
+                                            ),
+                                        )
+                                    },
                                 )
                                 Destination.Team -> TeamScreen(
                                     vm = teamVm,
@@ -452,7 +500,6 @@ fun MedLenXShell(
                         onCopyPitch = {
                             copyToClipboard(context, sub.pitch, "Doctor pitch")
                         },
-                        onShare = { shareSummary(context, sub.pitch) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -494,14 +541,10 @@ fun MedLenXShell(
 }
 
 /**
- * Puts export text on the system clipboard.
+ * Shares the chamber summary to WhatsApp — a native port of `receipt_whatsapp`.
  *
- * There is no DocumentsUI write path yet, so "Export CSV" and "Copy" both land
- * here. That is deliberate: a clipboard result the officer can paste into
- * WhatsApp is genuinely useful, whereas a half-wired SAF picker is not.
- */
-/**
- * Hands the chamber summary to WhatsApp.
+ * Called from the health-day campaign card, which is where the web puts this
+ * button; the pitch card offers a PDF only.
  *
  * The web builds a `https://wa.me/?text=...` link and opens it in a browser tab
  * (main.py `receipt_whatsapp`). A native share intent is the equivalent and is
@@ -568,6 +611,15 @@ private fun rxLabel(scanVm: ScanViewModel): String =
         ?: scanVm.state.doctor.name.takeIf { it.isNotBlank() }
         ?: "items"
 
+/**
+ * Puts text on the system clipboard.
+ *
+ * This was once where the CSV exports landed, because there was no write path to
+ * a file. That is no longer true — exports go through `CreateDocument` and a real
+ * document — so what remains here is the genuine copy actions: the pitch script
+ * and the market-share summary, both of which are meant to be pasted into a chat
+ * rather than saved.
+ */
 private fun copyToClipboard(context: Context, text: String, label: String) {
     val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     manager.setPrimaryClip(ClipData.newPlainText(label, text))
