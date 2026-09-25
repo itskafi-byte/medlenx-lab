@@ -96,6 +96,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // AGP 9 disables resValues by default, exactly like buildConfig. Without
+        // this, the mapbox_access_token resValue below fails configuration with
+        // "defaultConfig contains custom resource values, but the feature is
+        // disabled" - at configuration time, before any compilation happens.
+        resValues = true
     }
 
     packaging {
