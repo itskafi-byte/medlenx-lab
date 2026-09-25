@@ -10,14 +10,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -26,14 +30,49 @@ import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
+import com.medlenx.lab.ui.components.MiniKpiTile
 import com.medlenx.lab.ui.components.MlxCard
+import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.MlxErrorLine
 import com.medlenx.lab.ui.components.MlxTextField
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxType
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+/**
+ * Counts for the retraining queue. See [HelpViewModel.queue] on the status question.
+ */
+data class TrainingQueueStats(
+    val total: Int,
+    val last7Days: Int,
+    val distinctBrands: Int,
+) {
+    companion object {
+        val Empty = TrainingQueueStats(0, 0, 0)
+
+        fun of(rows: List<ErrorReportEntity>): TrainingQueueStats {
+            val weekAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+            return TrainingQueueStats(
+                total = rows.size,
+                last7Days = rows.count { it.createdAt >= weekAgo },
+                distinctBrands = rows
+                    .map { it.detectedBrand.trim().lowercase() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .count(),
+            )
+        }
+    }
+}
 
 /**
  * Backs the error escalation form on the Help screen.
@@ -50,6 +89,28 @@ class HelpViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
+
+    /**
+     * The read half of the retraining queue - the web's GET /api/training/queue.
+     *
+     * Only `reportError` existed before, so every correction an officer filed went
+     * into a table nothing ever read. `observeErrors()` was already declared in the
+     * DAO and wired to no one; this is its first consumer.
+     *
+     * The web's GET /api/training/queue/stats is
+     * `SELECT status, COUNT(*) FROM vision_training GROUP BY status`, and Android's
+     * `error_reports` table has no status column. Adding one would mean a Room
+     * migration for a field that could only ever hold a single value: there is no
+     * server here to drain the queue and advance it. So the stats are the counts
+     * that stay meaningful without one, and the list shows everything, unsplit.
+     */
+    val queue: StateFlow<List<ErrorReportEntity>> =
+        app.graph.database.rsmDao().observeErrors()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val stats: StateFlow<TrainingQueueStats> = queue
+        .map { rows -> TrainingQueueStats.of(rows) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrainingQueueStats.Empty)
 
     fun submit(detectedBrand: String, correction: String, notes: String) {
         viewModelScope.launch {
@@ -110,6 +171,9 @@ fun HelpScreen(
     var detected by remember { mutableStateOf("") }
     var correction by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+
+    val queue by vm.queue.collectAsState()
+    val stats by vm.stats.collectAsState()
 
     Column(
         modifier = modifier
@@ -200,6 +264,66 @@ fun HelpScreen(
         }
 
         MlxCard {
+            SectionHeader(
+                title = "Training Queue",
+                subtitle = "Everything flagged for handwriting retraining, newest first. " +
+                    "Nothing drains this on-device - it is the local half of what the " +
+                    "backend's queue would collect on sync.",
+            )
+            Spacer(Modifier.height(MlxD.Space3))
+            Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
+                MiniKpiTile("Queued", stats.total.toString(), Modifier.weight(1f))
+                MiniKpiTile(
+                    "Last 7 days",
+                    stats.last7Days.toString(),
+                    Modifier.weight(1f),
+                )
+                MiniKpiTile(
+                    "Brands",
+                    stats.distinctBrands.toString(),
+                    Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(MlxD.Space3))
+            if (queue.isEmpty()) {
+                MlxEmptyState(
+                    message = "Nothing queued yet - flag a misread from any medicine " +
+                        "card after a scan.",
+                )
+            } else {
+                queue.forEach { row ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = MlxD.Space2)
+                            .background(Mlx.Screen, RoundedCornerShape(8.dp))
+                            .padding(MlxD.Space2),
+                    ) {
+                        Text(
+                            text = row.detectedBrand +
+                                " \u2192 " + row.correction.ifBlank { "\u2014" },
+                            style = MlxType.BodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Mlx.Text900,
+                        )
+                        if (row.notes.isNotBlank()) {
+                            Text(
+                                text = row.notes,
+                                style = MlxType.Footnote,
+                                color = Mlx.Text600,
+                            )
+                        }
+                        Text(
+                            text = formatQueueStamp(row.createdAt),
+                            style = MlxType.Footnote,
+                            color = Mlx.Text400,
+                        )
+                    }
+                }
+            }
+        }
+
+        MlxCard {
             SectionHeader(title = "BMDC & DGDA Reference Manual")
             referenceItems.forEach { (bold, text) ->
                 Row(modifier = Modifier.padding(bottom = MlxD.Space2)) {
@@ -215,3 +339,9 @@ fun HelpScreen(
         }
     }
 }
+
+private val queueStampFormat: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+
+private fun formatQueueStamp(epochMillis: Long): String =
+    queueStampFormat.format(Instant.ofEpochMilli(epochMillis))
