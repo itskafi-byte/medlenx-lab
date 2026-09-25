@@ -26,7 +26,10 @@ import com.mapbox.maps.extension.compose.annotation.generated.CircleAnnotation
  * loads the SDK at all - see TeamMapSection.
  */
 @Composable
-fun MapboxHeatmapLayer(
+// internal, not public: it takes List<MapBubbleSpec>, and MapBubbleSpec is internal.
+// A public function may not expose an internal type in its signature. It is only
+// ever called from TeamMapSection, in this same module, so internal costs nothing.
+internal fun MapboxHeatmapLayer(
     bubbles: List<MapBubbleSpec>,
     modifier: Modifier = Modifier,
 ) {
