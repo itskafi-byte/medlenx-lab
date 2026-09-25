@@ -455,6 +455,36 @@ interface PrescriptionDao {
         mrId: String?,
     ): List<BrandDoctorRow>
 
+    /**
+     * Rows behind the web's `/api/export/recent-medicines.csv` (main.py:840).
+     *
+     * `companyVerified` is a Boolean onto an INTEGER column, which Room maps
+     * directly; no converter is involved. Ordered newest-first so a truncated
+     * export keeps the most recent work, matching the web's
+     * `get_recent_scanned_medicines` ordering.
+     */
+    @Query(
+        "SELECT p.created_at AS createdAt, p.mr_id AS mrId, p.doctor_name AS doctorName, " +
+            "p.doctor_specialty AS doctorSpecialty, sm.brand_name AS brandName, " +
+            "sm.generic AS generic, sm.company_name AS companyName, " +
+            "sm.dosage_form AS dosageForm, sm.strength AS strength, sm.dosage AS dosage, " +
+            "sm.confidence_score AS confidenceScore, " +
+            "sm.company_verified AS companyVerified, p.district AS district, " +
+            "p.upazila AS upazila, p.territory AS territory, p.id AS prescriptionId " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL +
+            " ORDER BY p.created_at DESC, sm.id DESC LIMIT :limit"
+    )
+    suspend fun recentMedicineExportRows(
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<RecentMedicineRow>
+
     /** Widget A: most prescribed brands. */
     @Query(
         """

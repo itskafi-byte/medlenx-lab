@@ -13,6 +13,7 @@ import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.ScannedMedicineEntity
 import com.medlenx.lab.data.local.BrandDoctorRow
 import com.medlenx.lab.data.local.DrillCountRow
+import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.local.LiveScanFeedRow
@@ -23,7 +24,9 @@ import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
 import com.medlenx.lab.data.repo.GenericMatrix
 import com.medlenx.lab.data.repo.MostPrescribed
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -183,6 +186,28 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private fun filterSpan(): Long =
         (filters.days?.let { it * 24L * 60 * 60 * 1000 } ?: System.currentTimeMillis())
+
+    /**
+     * The CSV payload for the dashboard's Export button — the web's
+     * `/api/export/recent-medicines.csv`.
+     *
+     * Suspends and runs the row-building on [Dispatchers.Default]: the query
+     * itself hops off the main thread inside Room, but assembling up to
+     * [EXPORT_LIMIT] rows into one string would otherwise land back on it.
+     */
+    suspend fun buildExportCsv(): String = withContext(Dispatchers.Default) {
+        val f = filters
+        ExportDocuments.recentMedicinesCsv(
+            prescriptionDao.recentMedicineExportRows(
+                since = System.currentTimeMillis() - filterSpan(),
+                limit = EXPORT_LIMIT,
+                district = f.district,
+                territory = f.territory,
+                specialty = f.specialty,
+                mrId = f.mrId,
+            ),
+        )
+    }
 
     /** The open drill-down, or null when the modal is closed. */
     var drilldown by mutableStateOf<Drilldown?>(null)
@@ -378,3 +403,6 @@ class AnalyticsViewModelFactory(private val application: Application) : ViewMode
  * and the modal does not reflow between its sections.
  */
 private const val DRILL_LIMIT = 15
+
+/** The web's `limit=5000` default on `/api/export/recent-medicines.csv`. */
+private const val EXPORT_LIMIT = 5000

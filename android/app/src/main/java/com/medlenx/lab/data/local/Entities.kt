@@ -265,6 +265,33 @@ data class LiveScanFeedRow(
     val confidenceScore: Double,
 )
 
+/**
+ * Projection for [PrescriptionDao.recentMedicineExportRows].
+ *
+ * The column set is `main.py:853`'s `cols` list, in that order, because the CSV
+ * it becomes is the file a field rep hands to a reporting channel: a header
+ * whose names or order differ from the web's would be a different file, not a
+ * portable one.
+ */
+data class RecentMedicineRow(
+    val createdAt: Long,
+    val mrId: String,
+    val doctorName: String,
+    val doctorSpecialty: String,
+    val brandName: String,
+    val generic: String,
+    val companyName: String?,
+    val dosageForm: String,
+    val strength: String,
+    val dosage: String,
+    val confidenceScore: Double,
+    val companyVerified: Boolean,
+    val district: String,
+    val upazila: String,
+    val territory: String,
+    val prescriptionId: Long,
+)
+
 /** Projection for [PrescriptionDao.genericMatrixRows] — widget D. */
 data class GenericMatrixRow(val specialty: String, val generic: String, val count: Int)
 

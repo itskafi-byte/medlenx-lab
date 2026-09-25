@@ -92,7 +92,9 @@ object RxAudit {
      */
     fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
         buildString {
-            appendLine(CSV_HEADERS.joinToString(",") { csvEscape(it) })
+            // LF, not PyCsv's CRLF default: rx_audit.py:153 passes
+            // `lineterminator="\n"`, so this export is the one that differs.
+            append(PyCsv.row(CSV_HEADERS, PyCsv.LF))
             for (med in medicines) {
                 val own = ownCompany.isNotBlank() && sameCompanyLoose(med.company, ownCompany)
                 val row = listOf(
@@ -104,7 +106,7 @@ object RxAudit {
                     pyRound(confidencePercentOf(med)).toString(),
                     if (own) "Own" else "Competitor",
                 )
-                appendLine(row.joinToString(",") { csvEscape(it) })
+                append(PyCsv.row(row, PyCsv.LF))
             }
         }
 
@@ -145,11 +147,8 @@ object RxAudit {
         return if (conf <= 1.0) conf * 100.0 else conf
     }
 
-    /** csv.writer's QUOTE_MINIMAL: quote only when the field needs it. */
-    private fun csvEscape(field: String): String {
-        val needsQuotes = field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }
-        return if (needsQuotes) "\"${field.replace("\"", "\"\"")}\"" else field
-    }
+    /** Delegated so both exports escape identically — see [PyCsv]. */
+    private fun csvEscape(field: String): String = PyCsv.escape(field)
 }
 
 /** Own-vs-competitor summary for one prescription. Mirrors `build_market_share`. */

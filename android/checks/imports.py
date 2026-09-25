@@ -141,6 +141,90 @@ def used_symbols(code: str, symbol: str):
     return hits
 
 
+
+def mask_literals(text: str) -> str:
+    """
+    Blank out the *text* of string and char literals, keeping `${...}` as code.
+
+    The regex this replaces was `"(?:[^"\\]|\\.)*"`, which is not template
+    aware. On `"... ${x.ifBlank { "Regional Sales Manager" }} ..."` it matched
+    from the first quote to the quote opening the *nested* literal, so
+    `Regional Sales Manager` was left in the text and read as four unresolved
+    types. Single-token nested literals like `ifEmpty { "form" }` slipped
+    through only because the check is restricted to capitalised names.
+
+    A template expression is Kotlin code: it can reference a real type, and it
+    can contain further literals. So it is kept verbatim and scanned
+    recursively, while the surrounding literal text is replaced by `""`.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"' or c == "'":
+            masked, i = _mask_one_literal(text, i)
+            out.append(masked)
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _mask_one_literal(text: str, i: int):
+    """`i` is the opening quote. Returns (replacement, index past the close)."""
+    quote = text[i]
+    n = len(text)
+    i += 1
+    parts = [quote, quote]           # `""` — the check only cares about length>0
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == quote:
+            return "".join(parts), i + 1
+        if c == "$" and quote == '"' and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt == "{":
+                inner, i = _mask_template(text, i + 2)
+                parts.append(inner)
+                continue
+            if nxt.isalpha() or nxt == "_":
+                # `$name` — a property reference, kept so a capitalised one is
+                # still visible to the check.
+                j = i + 1
+                while j < n and (text[j].isalnum() or text[j] == "_"):
+                    j += 1
+                parts.append(text[i:j])
+                i = j
+                continue
+        i += 1
+    return "".join(parts), i
+
+
+def _mask_template(text: str, i: int):
+    """`i` is just past `${`. Returns (replacement, index past the matching `}`)."""
+    n = len(text)
+    parts = []
+    depth = 1
+    while i < n:
+        c = text[i]
+        if c == '"' or c == "'":
+            masked, i = _mask_one_literal(text, i)
+            parts.append(masked)
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return "".join(parts), i + 1
+        parts.append(c)
+        i += 1
+    return "".join(parts), i
+
+
+
 def check_missing_imports():
     findings = []
     for dirpath, _, files in os.walk(ROOT):
@@ -245,9 +329,18 @@ def check_composable_in_remember():
                 if "LocalContext.current" not in line:
                     continue
                 # `remember {` may open on the same line or on one of the lines above.
-                opened_here = re.search(r"remember[^{]*\{", line)
+                #
+                # The pattern must match a *call* to remember, not any word that
+                # starts with it. `fun rememberDocumentSaver(...): DocumentSaver {`
+                # matched the old `remember[^{]*{` and flagged the function's own
+                # body — and `rememberXxx()` is the standard name for a composable
+                # that returns a remembered value, so the false positive was
+                # guaranteed to recur. Anchoring on a call shape fixes it: the
+                # name may not be continued by a word character, and what follows
+                # is either `{` directly or `(keys) {`.
+                opened_here = re.search(r"(?<![\w])remember\s*(\([^)]*\))?\s*\{", line)
                 opened_above = any(
-                    re.search(r"remember[^\n]*\{\s*$", l)
+                    re.search(r"(?<![\w])remember\s*(\([^)]*\))?\s*\{\s*$", l)
                     for l in lines[max(0, i - 3):i]
                 )
                 if opened_here or opened_above:
@@ -284,6 +377,9 @@ AUTO_IMPORTED = {
     "ArrayList", "HashMap", "HashSet", "LinkedHashMap", "LinkedHashSet",
     "ArrayDeque", "TreeMap", "TreeSet", "Regex", "RegexOption", "MatchResult",
     "MatchGroup", "MatchGroupCollection", "GroupCollection",
+    # kotlin.text.* is a default import too. `Charsets` was missing, so a
+    # `toByteArray(Charsets.UTF_8)` read as an unresolved symbol.
+    "Charsets", "Charset", "Appendable",
     # kotlin.jvm.* annotations and friends
     "Volatile", "OptIn", "Suppress", "JvmStatic", "JvmName", "JvmOverloads",
     "JvmField", "JvmDefault", "JvmSuppressWildcards", "JvmWildcard", "Transient",
@@ -552,7 +648,9 @@ def check_undefined_symbols():
             # word of the VL system prompt reads as an unresolved symbol.
             text = re.sub(r'""".*?"""', '""', text, flags=re.S)
             # Drop string and char literals, and the import block itself.
-            text = re.sub(r'"(?:[^"\\]|\\.)*"', '""', text)
+            # mask_literals keeps `${...}` as code -- see its docstring for the
+            # nested-literal false positive the previous regex produced.
+            text = mask_literals(text)
             # Trailing comments too: `22.65f, 89.78f,  // Bagerhat` reads the
             # district name as a type. strip_comments only drops whole-line ones.
             # Safe here because string literals are already gone, so a "//" inside

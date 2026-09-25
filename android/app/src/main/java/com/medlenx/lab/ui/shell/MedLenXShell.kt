@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.medlenx.lab.data.config.AppGraph
+import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
@@ -60,10 +62,13 @@ import com.medlenx.lab.ui.screens.scan.ScanViewModelFactory
 import com.medlenx.lab.ui.screens.team.TeamScreen
 import com.medlenx.lab.ui.screens.team.TeamViewModel
 import com.medlenx.lab.ui.screens.team.TeamViewModelFactory
+import com.medlenx.lab.ui.export.exportFileName
+import com.medlenx.lab.ui.export.rememberDocumentSaver
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.launch
 
 /**
  * The app shell: translucent top bar, scrolling content area, bottom navigation.
@@ -119,6 +124,21 @@ fun MedLenXShell(
 
     /** Global search overlay; the top bar's search field drives it. */
     var searchOpen by remember { mutableStateOf(false) }
+
+    // Export plumbing. The saver owns the two CreateDocument launchers and the
+    // bytes waiting for a destination; the scope is for the one export whose
+    // payload has to come out of Room before the picker can open.
+    val scope = rememberCoroutineScope()
+    val documentSaver = rememberDocumentSaver { message ->
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+    }
+    val exportFailed: (Throwable) -> Unit = { e ->
+        Toast.makeText(
+            context,
+            "Could not build the export: ${e.message ?: "unknown error"}",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
 
     /** Analytics global filter sheet. */
     var filterOpen by remember { mutableStateOf(false) }
@@ -233,12 +253,24 @@ fun MedLenXShell(
                                     // RecentPrescriptions, but never supplied here, so
                                     // the rows fell through to the empty default.
                                     onSelectPrescription = analyticsVm::showBreakdown,
+                                    // The web navigates at /api/export/recent-medicines.csv
+                                    // and lets the browser download it. There is no server
+                                    // here, so the same rows are queried, serialised and
+                                    // handed to the system picker.
                                     onExport = {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "CSV export is unavailable in the offline build.",
-                                            android.widget.Toast.LENGTH_LONG,
-                                        ).show()
+                                        scope.launch {
+                                            runCatching { analyticsVm.buildExportCsv() }
+                                                .onSuccess { csv ->
+                                                    documentSaver.saveCsv(
+                                                        exportFileName(
+                                                            "recent_scanned_medicines",
+                                                            extension = "csv",
+                                                        ),
+                                                        csv.toByteArray(Charsets.UTF_8),
+                                                    )
+                                                }
+                                                .onFailure(exportFailed)
+                                        }
                                     },
                                 )
                                 Destination.Hub -> HubScreen(
@@ -247,12 +279,34 @@ fun MedLenXShell(
                                 )
                                 Destination.Team -> TeamScreen(
                                     vm = teamVm,
+                                    // Purely local aggregation, so this one needs no
+                                    // coroutine: the tiering and stewardship summaries are
+                                    // already computed for the screen and the PDF is a
+                                    // couple of pages of text.
                                     onExportPdf = {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "PDF export is unavailable in the offline build.",
-                                            android.widget.Toast.LENGTH_LONG,
-                                        ).show()
+                                        // `tiering` is a computed getter, so reading it
+                                        // twice would run the tiering query twice for one
+                                        // export.
+                                        val tiering = teamVm.tiering
+                                        runCatching {
+                                            ExportDocuments.rsmReportPdf(
+                                                officer = teamVm.officerProfile,
+                                                tiering = tiering,
+                                                stewardship = teamVm.stewardship,
+                                                offTerritoryCount = teamVm.offTerritory.size,
+                                                days = tiering.days,
+                                            )
+                                        }
+                                            .onSuccess { pdf ->
+                                                documentSaver.savePdf(
+                                                    exportFileName(
+                                                        "DGDA_Compliance_Audit",
+                                                        extension = "pdf",
+                                                    ),
+                                                    pdf,
+                                                )
+                                            }
+                                            .onFailure(exportFailed)
                                     },
                                 )
                                 Destination.Settings -> SettingsScreen(
@@ -320,7 +374,15 @@ fun MedLenXShell(
                             // would just reproduce the value already on screen.
                             navController.navigate(Destination.Hub.route)
                         },
-                        onExportCsv = { csv -> copyToClipboard(context, csv, "Market share CSV") },
+                        // The web downloads `/api/prescriptions/{id}/export.csv`. The
+                        // string is already built by RxAudit.itemsToCsv, so this only
+                        // changes where it goes.
+                        onExportCsv = { csv ->
+                            documentSaver.saveCsv(
+                                exportFileName("rx_items", rxLabel(scanVm), extension = "csv"),
+                                csv.toByteArray(Charsets.UTF_8),
+                            )
+                        },
                         onCopyClipboard = { text ->
                             copyToClipboard(context, text, "Market share")
                         },
@@ -345,11 +407,33 @@ fun MedLenXShell(
                         bioequivalenceNote = sub.pitch,
                         onClose = { pitchTarget = null },
                         onDownloadPdf = {
-                            Toast.makeText(
-                                context,
-                                "PDF export is not available offline yet.",
-                                Toast.LENGTH_LONG,
-                            ).show()
+                            runCatching {
+                                ExportDocuments.pitchCardPdf(
+                                    rxId = scanVm.state.receipt?.rxNumber ?: "unsaved",
+                                    doctorName = scanVm.state.doctor.name,
+                                    doctorSpecialty = scanVm.state.doctor.specialty,
+                                    substitution = sub,
+                                    // Deliberately the same value the card above is
+                                    // given, not `Compliance.substitutionEvidenceNotes`:
+                                    // the card's "Bioequivalence & dosage evidence" box is
+                                    // currently fed the pitch script, and the PDF must not
+                                    // disagree with the screen it was exported from. The
+                                    // port of the real notes exists and is a one-line swap
+                                    // once that is settled.
+                                    bioequivalenceNote = sub.pitch,
+                                )
+                            }
+                                .onSuccess { pdf ->
+                                    documentSaver.savePdf(
+                                        exportFileName(
+                                            "Pitch_Card",
+                                            sub.ownBrand.brandName,
+                                            extension = "pdf",
+                                        ),
+                                        pdf,
+                                    )
+                                }
+                                .onFailure(exportFailed)
                         },
                         onCopyPitch = {
                             copyToClipboard(context, sub.pitch, "Doctor pitch")
@@ -457,6 +541,18 @@ private fun openUrl(context: Context, url: String) {
         ).show()
     }
 }
+
+/**
+ * A filename stem for the Rx items export.
+ *
+ * Prefers the saved receipt number, because that is the identifier the rep can
+ * find the prescription by later; falls back to the doctor's name so two unsaved
+ * reads from different chambers do not overwrite each other.
+ */
+private fun rxLabel(scanVm: ScanViewModel): String =
+    scanVm.state.receipt?.rxNumber?.takeIf { it.isNotBlank() }
+        ?: scanVm.state.doctor.name.takeIf { it.isNotBlank() }
+        ?: "items"
 
 private fun copyToClipboard(context: Context, text: String, label: String) {
     val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
