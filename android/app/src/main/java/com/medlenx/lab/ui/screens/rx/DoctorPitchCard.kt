@@ -73,6 +73,7 @@ fun DoctorPitchCard(
     onClose: () -> Unit,
     onDownloadPdf: () -> Unit,
     onCopyPitch: () -> Unit,
+    onShare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val competitor = substitution.competitor
@@ -174,6 +175,20 @@ fun DoctorPitchCard(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                // On its own row rather than a third button in the one above:
+                // three equal-weight buttons at these label lengths do not fit,
+                // and the web offers this as a sibling of the PDF export rather
+                // than a variation of it. Spacing via padding keeps the import
+                // list untouched.
+                PitchFooterButton(
+                    text = "Share to WhatsApp",
+                    icon = Icons.Filled.Share,
+                    filled = false,
+                    onClick = onShare,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = MlxD.Space2),
+                )
 
                 Text(
                     text = "Show during chamber visit",

@@ -18,6 +18,22 @@
         android:name="android.hardware.location.gps"
         android:required="false" />
 
+    <!--
+      Package visibility. From Android 11 (API 30) an app cannot see whether a
+      specific package is installed unless it declares it here, so
+      resolveActivity() on a WhatsApp-targeted intent returns null silently and
+      the share would always fall through to the chooser. Declaring the query is
+      what lets the direct-to-WhatsApp path work at all on this targetSdk.
+    -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MedLenXApp"
         android:allowBackup="true"

@@ -354,6 +354,7 @@ fun MedLenXShell(
                         onCopyPitch = {
                             copyToClipboard(context, sub.pitch, "Doctor pitch")
                         },
+                        onShare = { shareSummary(context, sub.pitch) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -401,6 +402,43 @@ fun MedLenXShell(
  * here. That is deliberate: a clipboard result the officer can paste into
  * WhatsApp is genuinely useful, whereas a half-wired SAF picker is not.
  */
+/**
+ * Hands the chamber summary to WhatsApp.
+ *
+ * The web builds a `https://wa.me/?text=...` link and opens it in a browser tab
+ * (main.py `receipt_whatsapp`). A native share intent is the equivalent and is
+ * better on a phone: it opens WhatsApp's own contact picker rather than routing
+ * through the browser, and it works with no network because the text is composed
+ * here.
+ *
+ * WhatsApp is targeted directly when installed, which needs the <queries> entry
+ * in the manifest on API 30+; without it resolveActivity() returns null and this
+ * silently always took the chooser path. Falls back to the system share sheet
+ * rather than failing, since a field officer with no WhatsApp still needs to send
+ * the summary somehow.
+ */
+private fun shareSummary(context: Context, text: String) {
+    val base = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    val direct = Intent(base).setPackage("com.whatsapp")
+    val target = if (runCatching { context.packageManager.resolveActivity(direct, 0) }
+            .getOrNull() != null
+    ) {
+        direct
+    } else {
+        Intent.createChooser(base, "Share chamber summary")
+    }
+    val started = runCatching {
+        context.startActivity(target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.isSuccess
+    if (!started) {
+        Toast.makeText(context, "No app available to share the summary", Toast.LENGTH_LONG)
+            .show()
+    }
+}
+
 /**
  * Hands a URL to the browser.
  *
