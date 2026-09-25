@@ -309,7 +309,10 @@ object PharmaHub {
         }
 
         val org = day.org.ifBlank { "WHO / UN" }
-        val dateLabel = "${day.day} ${monthNames[day.month] ?: ""}"
+        // getOrNull, not an index: `month` comes straight from the JSON, and a
+        // malformed entry would otherwise throw IndexOutOfBounds rather than
+        // render a card with a blank month.
+        val dateLabel = "${day.day} ${monthNames.getOrNull(day.month).orEmpty()}"
         val intro = SCRIPT_INTRO_CAMPAIGN
             .replace("{name}", day.name)
             .replace("{focus}", focus.first())
