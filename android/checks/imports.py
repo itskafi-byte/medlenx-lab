@@ -24,6 +24,8 @@ Checks
 8. Unresolved symbol - a name used, declared in no file and imported nowhere.
 9. Missing return in a block-bodied function - `fun f(): T { ... }` must return
    explicitly; only `= expr` bodies infer their result.
+10. Unknown theme token - `MlxShape.Medium2`. Check 8 sees only the segment
+   before the dot, so the member after it is never resolved.
 
 Run it from anywhere: the source root is derived from this file's own path. A
 previous revision used a relative root, so running it from the repo root walked a
@@ -380,6 +382,94 @@ def check_orphan_private_set():
                 ).strip()
                 if not prop.search(prev):
                     findings.append((path, i + 1, prev))
+    return findings
+
+
+def _object_members(text: str) -> dict[str, set[str] | None]:
+    """
+    For each top-level `object X { ... }` in a theme file, the set of its member
+    names, or None when the object cannot be enumerated safely.
+
+    Members are collected only at depth 0 inside the body. A plain
+    `^\s*val (\w+)` over the whole body also matches *local* vals declared inside
+    the object's functions, which would have added `hue`, `sat` and `a` to `Mlx`
+    and quietly turned the check into a no-op for any wrong token sharing a name
+    with a local variable.
+    """
+    out: dict[str, set[str] | None] = {}
+    for m in re.finditer(r"^object\s+(\w+)\s*(:\s*[\w.<>]+)?\s*\{", text, re.M):
+        name, supertype = m.group(1), m.group(2)
+        i = m.end() - 1
+        depth = 0
+        for j in range(i, len(text)):
+            if text[j] == "{":
+                depth += 1
+            elif text[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+        body = text[i + 1 : j]
+        if supertype or "override " in body:
+            # Inherited members cannot be enumerated from this file alone.
+            out[name] = None
+            continue
+        members, d = set(), 0
+        for line in body.split("\n"):
+            stripped = line.strip()
+            if d == 0:
+                vm = re.match(r"(?:const\s+)?val\s+(\w+)", stripped)
+                fm = re.match(r"(?:private\s+|internal\s+)?fun\s+(\w+)", stripped)
+                if vm:
+                    members.add(vm.group(1))
+                elif fm:
+                    members.add(fm.group(1))
+            d += line.count("{") - line.count("}")
+        out[name] = members
+    return out
+
+
+def check_theme_tokens():
+    """
+    A theme token that does not exist: `MlxShape.Medium2`.
+
+    `check_undefined_symbols` structurally cannot see this. Its pattern captures
+    only the segment before the dot, so it resolves `MlxShape` (which is imported
+    or declared) and never looks at the member after it. That blind spot is why
+    `Icons.Filled.Share` shipped broken; icons got their own check, and the theme
+    objects are the other half of it.
+
+    Only the `object`s declared in `ui/theme` are checked, and only those whose
+    members are all declared in the file (no supertype, no `override`). Those
+    objects are plain `val` containers, so a name missing from them is missing,
+    full stop -- no type inference required and no false positives.
+    """
+    theme_dir = os.path.join(ROOT, "com", "medlenx", "lab", "ui", "theme")
+    members: dict[str, set[str] | None] = {}
+    if os.path.isdir(theme_dir):
+        for fn in sorted(os.listdir(theme_dir)):
+            if fn.endswith(".kt"):
+                path = os.path.join(theme_dir, fn)
+                members.update(_object_members(open(path, encoding="utf-8").read()))
+    members = {k: v for k, v in members.items() if v}
+    if not members:
+        return []
+
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
+            for m in re.finditer(r"\b(\w+)\.(\w+)", code):
+                obj, member = m.group(1), m.group(2)
+                if obj not in members:
+                    continue
+                if member not in members[obj]:
+                    findings.append(
+                        (path, code[: m.start()].count("\n") + 1, obj, member,
+                         sorted(members[obj]))
+                    )
     return findings
 
 
@@ -938,6 +1028,16 @@ def main() -> int:
         print("ORPHANED `private set`")
         for path, line, prev in orphan:
             print(f"  {path}:{line}  (preceded by: {prev!r})")
+        print()
+
+    tokens = check_theme_tokens()
+    if tokens:
+        findings += len(tokens)
+        print("UNKNOWN THEME TOKEN - no such member on the theme object")
+        for path, line, obj, member, available in tokens:
+            near = [a for a in available if a[:3].lower() == member[:3].lower()]
+            hint = f"  did you mean: {', '.join(near)}" if near else ""
+            print(f"  {path}:{line}  {obj}.{member} is not declared on {obj}{hint}")
         print()
 
     kdoc = check_orphaned_kdoc()

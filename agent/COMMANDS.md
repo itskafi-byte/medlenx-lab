@@ -51,10 +51,20 @@ python3 agent/roomcheck.py           # every @Query column resolves against its 
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 ```
-- `imports.py` healthy: `imports: no findings` (9 checks: missing imports,
+- `imports.py` healthy: `imports: no findings` (10 checks: missing imports,
   duplicate members, orphaned `private set`, orphaned KDoc,
   composable-in-`remember`, scope leak, missing icon import, unresolved symbol,
-  missing return)
+  missing return, unknown theme token)
+
+`check_undefined_symbols` sees only the segment *before* a dot, so it resolves
+`MlxShape` and never the `Medium2` after it -- the same blind spot that let
+`Icons.Filled.Share` ship broken. Icons got their own check; the theme objects are
+the other half. Only the plain `val` containers in `ui/theme` are checked (no
+supertype, no `override`), so a missing name is missing without any type
+inference, and members are collected at depth 0 in the object body only: a plain
+`^\s*val (\w+)` over the body also matches locals declared inside the object's
+functions, which added `hue`, `sat` and `a` to `Mlx` and would have accepted a
+wrong `Mlx.hue`.
 
 An orphaned KDoc is a doc block immediately followed by another one. Two
 consecutive docs are never meaningful -- the second attaches to the declaration
