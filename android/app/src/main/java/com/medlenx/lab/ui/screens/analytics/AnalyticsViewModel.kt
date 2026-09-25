@@ -234,20 +234,43 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         if (company.isBlank()) return
         openDrilldown { f, since ->
             val generics = prescriptionDao.companyGenerics(
-                company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                company, since, COMPANY_DRILL_LIMIT,
+                f.district, f.territory, f.specialty, f.mrId,
             )
             Drilldown.Company(
                 company = company,
-                total = generics.sumOf { it.count },
+                // Both totals, so the dialog can show the true count and still
+                // explain where the web's smaller figure comes from.
+                totalItems = prescriptionDao.companyItemCount(
+                    company, since, f.district, f.territory, f.specialty, f.mrId,
+                ),
+                topGenericItems = generics.sumOf { it.count },
                 generics = generics,
                 brands = prescriptionDao.companyBrands(
-                    company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                    company, since, COMPANY_DRILL_LIMIT,
+                    f.district, f.territory, f.specialty, f.mrId,
                 ),
                 doctors = prescriptionDao.companyDoctors(
-                    company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                    company, since, COMPANY_DRILL_LIMIT,
+                    f.district, f.territory, f.specialty, f.mrId,
                 ),
             )
         }
+    }
+
+    /**
+     * The donut's "Others" slice was tapped.
+     *
+     * Nothing is queried: the bucket's members are already on the slice, put
+     * there by `AnalyticsMetrics.companyShare` when it collapsed them. Opening it
+     * is presentation, not retrieval, so it does not go through [openDrilldown]
+     * and cannot fail.
+     */
+    fun openOthersDrilldown(members: List<String>) {
+        drillJob?.cancel()
+        drillJob = null
+        drilldownLoading = false
+        drilldown = Drilldown.Bucket(label = "Others", members = members)
     }
 
     /** A bar in chart A was tapped. */
@@ -257,7 +280,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             Drilldown.Brand(
                 brand = brand,
                 doctors = prescriptionDao.brandDoctors(
-                    brand, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                    brand, since, BRAND_DOCTOR_LIMIT,
+                    f.district, f.territory, f.specialty, f.mrId,
                 ),
             )
         }
@@ -398,11 +422,15 @@ class AnalyticsViewModelFactory(private val application: Application) : ViewMode
 }
 
 /**
- * The web uses `limit=10` for the company drill-down and `limit=15` for brand
- * doctors. One value covers both so a company's three lists stay the same length
- * and the modal does not reflow between its sections.
+ * The web's two limits, kept distinct.
+ *
+ * `/api/dashboard/company-drilldown` defaults to `limit=10` and
+ * `/api/dashboard/brand-doctors` to `limit=15`. They were briefly unified on 15
+ * for layout reasons, which quietly changed what the company modal showed against
+ * the web; they are the endpoint defaults again.
  */
-private const val DRILL_LIMIT = 15
+private const val COMPANY_DRILL_LIMIT = 10
+private const val BRAND_DOCTOR_LIMIT = 15
 
 /** The web's `limit=5000` default on `/api/export/recent-medicines.csv`. */
 private const val EXPORT_LIMIT = 5000

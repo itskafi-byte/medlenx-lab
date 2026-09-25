@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.medlenx.lab.data.config.AppGraph
+import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
@@ -400,11 +401,29 @@ fun MedLenXShell(
 
             pitchTarget?.let { med ->
                 med.substitution?.let { sub ->
+                    // The card's "Bioequivalence & dosage evidence" box was being fed
+                    // sub.pitch, which is the pitch script — so the script rendered
+                    // twice and the box said nothing about bioequivalence. The ported
+                    // notes exist in Compliance; this is the one-line swap, applied to
+                    // the card and the PDF together so they cannot disagree.
+                    //
+                    // Built here rather than inside the card so both consumers get the
+                    // identical string, and memoised against the substitution because
+                    // recomposition would otherwise rebuild it on every frame.
+                    val notes = remember(sub) {
+                        Compliance.substitutionEvidenceNotes(
+                            generic = sub.generic,
+                            competitorStrength = sub.competitor.strength,
+                            competitorType = sub.competitor.type,
+                            ownStrength = sub.ownBrand.strength,
+                            ownType = sub.ownBrand.type,
+                        )
+                    }
                     DoctorPitchCard(
                         rxId = scanVm.state.receipt?.rxNumber ?: "Unsaved read",
                         doctorName = scanVm.state.doctor.name,
                         substitution = sub,
-                        bioequivalenceNote = sub.pitch,
+                        bioequivalenceNote = notes.bioequiv + "\n" + notes.dosageAdvantage,
                         onClose = { pitchTarget = null },
                         onDownloadPdf = {
                             runCatching {
@@ -413,14 +432,9 @@ fun MedLenXShell(
                                     doctorName = scanVm.state.doctor.name,
                                     doctorSpecialty = scanVm.state.doctor.specialty,
                                     substitution = sub,
-                                    // Deliberately the same value the card above is
-                                    // given, not `Compliance.substitutionEvidenceNotes`:
-                                    // the card's "Bioequivalence & dosage evidence" box is
-                                    // currently fed the pitch script, and the PDF must not
-                                    // disagree with the screen it was exported from. The
-                                    // port of the real notes exists and is a one-line swap
-                                    // once that is settled.
-                                    bioequivalenceNote = sub.pitch,
+                                    // Same string the card is given, so the exported PDF
+                                    // and the screen it came from read identically.
+                                    bioequivalenceNote = notes.bioequiv + "\n" + notes.dosageAdvantage,
                                 )
                             }
                                 .onSuccess { pdf ->

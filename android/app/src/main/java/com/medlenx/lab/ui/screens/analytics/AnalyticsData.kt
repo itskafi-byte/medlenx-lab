@@ -23,7 +23,13 @@ data class BarDatum(val name: String, val value: Int)
  * count but is not a company, so it must not be drilled into: querying
  * `company_name = 'Others'` returns nothing at all.
  */
-data class DonutDatum(val name: String, val value: Int, val isOthers: Boolean = false)
+data class DonutDatum(
+    val name: String,
+    val value: Int,
+    val isOthers: Boolean = false,
+    /** For [isOthers] only: the companies folded into the bucket. */
+    val members: List<String> = emptyList(),
+)
 
 /**
  * An open drill-down.
@@ -39,19 +45,44 @@ sealed interface Drilldown {
     val title: String
 
     /**
-     * A company's breakdown. `total` is the sum of the generic counts, which is
-     * how the web computes it (`database.py:1197`) rather than an independent
-     * COUNT — so it is "captured items in the current filter", and a row with a
-     * blank generic folded into 'Unspecified' still contributes.
+     * A company's breakdown.
+     *
+     * Two totals on purpose. `topGenericItems` is the sum of the generic counts
+     * and is the figure the web reports as the total (`database.py:1197`);
+     * `totalItems` is an independent `COUNT(*)` that the web has no equivalent
+     * for. They diverge once a company has more distinct generics than
+     * [TOP_GENERIC_ROWS], and showing both is what keeps the headline honest
+     * without silently disagreeing with the web's number.
      */
     data class Company(
         val company: String,
-        val total: Int,
+        val totalItems: Int,
+        val topGenericItems: Int,
         val generics: List<DrillCountRow>,
         val brands: List<DrillCountRow>,
         val doctors: List<DrillCountRow>,
     ) : Drilldown {
         override val title: String get() = company
+    }
+
+    /**
+     * The donut's synthetic "Others" slice, opened.
+     *
+     * Not a company, so it cannot be drilled into directly — `company_name =
+     * 'Others'` matches nothing. Its members can, though: they are the real
+     * company names that were folded together to build the slice, each of which
+     * has a breakdown of its own.
+     */
+    data class Bucket(
+        val label: String,
+        val members: List<String>,
+    ) : Drilldown {
+        override val title: String get() = label
+    }
+
+    companion object {
+        /** The web's `limit: int = 10` on `/api/dashboard/company-drilldown`. */
+        const val TOP_GENERIC_ROWS = 10
     }
 
     /** The Doctor | Specialty | Chamber | Times table for one brand. */

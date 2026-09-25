@@ -354,6 +354,29 @@ interface PrescriptionDao {
     // web passes the same district / territory / specialty / mr_id / days into
     // `_filter_sql`, so the two cannot drift.
 
+    /**
+     * Every captured item for one company in the current filter.
+     *
+     * Android-only: the web has no such query, because it reports the sum of the
+     * top-`limit` generic counts and calls that the total (database.py:1197).
+     * That number understates the company as soon as it has more distinct
+     * generics than the limit, so this gives the label something true to say and
+     * the two figures are shown together rather than one replacing the other.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL
+    )
+    suspend fun companyItemCount(
+        company: String,
+        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): Int
+
     /** Top generics for one company — the web's `generics` array. */
     @Query(
         "SELECT CASE WHEN IFNULL(sm.generic, '') = '' THEN 'Unspecified' ELSE sm.generic END AS name, " +

@@ -116,7 +116,7 @@ fun ShareOfVoiceDonut(
     data: List<DonutDatum>,
     centreLabel: String,
     modifier: Modifier = Modifier,
-    onSliceClick: (String) -> Unit = {},
+    onSliceClick: (DonutDatum) -> Unit = {},
 ) {
     val total = data.sumOf { it.value }.toFloat().coerceAtLeast(1f)
 
@@ -163,10 +163,14 @@ fun ShareOfVoiceDonut(
                 // a 30dp stroked arc needs polar maths and still leaves the thin
                 // slivers of a long tail nearly untappable, whereas the row is the
                 // full width and is labelled with the name being drilled into.
+                //
+                // The whole datum is passed rather than its name, because the
+                // "Others" slice is not a company: the caller has to know that to
+                // open its member list instead of querying company_name = 'Others'.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (datum.isOthers) Modifier else Modifier.clickable { onSliceClick(datum.name) })
+                        .clickable { onSliceClick(datum) }
                         .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

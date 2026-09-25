@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
@@ -152,7 +153,10 @@ fun AnalyticsScreen(
                 data = vm.companyShare.toDonutData(),
                 centreLabel = vm.companyShare.centreSoVLabel(),
                 modifier = Modifier.padding(top = 12.dp),
-                onSliceClick = { vm.openCompanyDrilldown(it) },
+                onSliceClick = { datum ->
+                    if (datum.isOthers) vm.openOthersDrilldown(datum.members)
+                    else vm.openCompanyDrilldown(datum.name)
+                },
             )
         }
 
@@ -217,10 +221,18 @@ fun AnalyticsScreen(
                 drilldown = vm.drilldown,
                 filterLabel = vm.filters.drilldownCaption(),
                 onDismiss = vm::closeDrilldown,
+                onOpenCompany = vm::openCompanyDrilldown,
             )
         }
     }
 }
+
+/**
+ * Mirrors the ViewModel's own company-drill-down limit, which is private to it.
+ * Used only for the column heading, so a mismatch would be a wrong label rather
+ * than a wrong number.
+ */
+private const val COMPANY_DRILL_COLUMN_ROWS = Drilldown.TOP_GENERIC_ROWS
 
 /** How the modal describes the window it is summarising. */
 private fun FilterState.drilldownCaption(): String = when {
@@ -248,6 +260,7 @@ private fun DrilldownDialog(
     drilldown: Drilldown?,
     filterLabel: String,
     onDismiss: () -> Unit,
+    onOpenCompany: (String) -> Unit,
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -277,6 +290,9 @@ private fun DrilldownDialog(
                                 text = when (drilldown) {
                                     is Drilldown.Brand -> "Doctors prescribing ${drilldown.title}"
                                     is Drilldown.Company -> drilldown.title
+                                    is Drilldown.Bucket ->
+                                        "${drilldown.members.size} companies below the " +
+                                            "minimum share"
                                     null -> "Drill-down"
                                 },
                                 style = MlxType.CardTitle.copy(fontWeight = FontWeight.SemiBold),
@@ -285,9 +301,11 @@ private fun DrilldownDialog(
                             Text(
                                 text = when (drilldown) {
                                     is Drilldown.Company ->
-                                        "${drilldown.total} captured items in the current filter"
+                                        "${drilldown.totalItems} captured items in the current filter"
                                     is Drilldown.Brand ->
                                         "${drilldown.doctors.size} doctors in the current filter"
+                                    is Drilldown.Bucket ->
+                                        "Tap a company for its full breakdown"
                                     null -> "Loading…"
                                 } + " · $filterLabel",
                                 style = MlxType.Meta,
@@ -315,6 +333,7 @@ private fun DrilldownDialog(
                             )
                             is Drilldown.Company -> CompanyDrilldownBody(drilldown)
                             is Drilldown.Brand -> BrandDrilldownBody(drilldown)
+                            is Drilldown.Bucket -> BucketDrilldownBody(drilldown, onOpenCompany)
                         }
                     }
                 }
@@ -325,9 +344,27 @@ private fun DrilldownDialog(
 
 @Composable
 private fun CompanyDrilldownBody(d: Drilldown.Company) {
+    // The two totals only differ once a company has more distinct generics than
+    // the modal lists, and when they do, the difference is the whole point: the
+    // web would report the smaller one as if it were the total. Explaining it
+    // here means the pair never reads as a bug.
+    if (d.topGenericItems < d.totalItems) {
+        Text(
+            text = "The ${d.generics.size} generics below account for " +
+                "${d.topGenericItems} of those items; the rest are spread across " +
+                "smaller generics.",
+            style = MlxType.Meta,
+            color = Mlx.Text500,
+        )
+    }
+
     // Side by side, as the web's `gridTemplateColumns: "1fr 1fr"`.
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        DrilldownColumn("Top Generics", d.generics, Modifier.weight(1f))
+        DrilldownColumn(
+            "Top ${COMPANY_DRILL_COLUMN_ROWS} Generics",
+            d.generics,
+            Modifier.weight(1f),
+        )
         DrilldownColumn("Top Brands", d.brands, Modifier.weight(1f))
     }
     Text(
@@ -398,6 +435,46 @@ private fun BrandDrilldownBody(d: Drilldown.Brand) {
             color = Mlx.Text400,
             modifier = Modifier.padding(top = 4.dp),
         )
+    }
+}
+
+/**
+ * The "Others" slice, opened.
+ *
+ * Lists the companies that were collapsed into it, each of which opens its own
+ * breakdown. No query is issued for the bucket itself — see
+ * [com.medlenx.lab.ui.screens.analytics.AnalyticsViewModel.openOthersDrilldown].
+ */
+@Composable
+private fun BucketDrilldownBody(d: Drilldown.Bucket, onOpenCompany: (String) -> Unit) {
+    if (d.members.isEmpty()) {
+        EmptyDrilldown("This group has no named members.")
+        return
+    }
+    d.members.forEach { company ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenCompany(company) }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = company,
+                style = MlxType.BodySmall,
+                color = Mlx.Text900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Mlx.Text400,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

@@ -692,6 +692,59 @@ def match_paren(text: str, open_idx: int) -> int:
     return len(text)
 
 
+
+# The Material icon packs, and the import path each chain needs.
+ICON_FAMILIES = {
+    "Filled": "androidx.compose.material.icons.filled",
+    "Outlined": "androidx.compose.material.icons.outlined",
+    "Rounded": "androidx.compose.material.icons.rounded",
+    "Sharp": "androidx.compose.material.icons.sharp",
+    "TwoTone": "androidx.compose.material.icons.twotone",
+    "AutoMirrored.Filled": "androidx.compose.material.icons.automirrored.filled",
+    "AutoMirrored.Outlined": "androidx.compose.material.icons.automirrored.outlined",
+}
+
+
+def check_icon_imports():
+    """`Icons.Filled.Foo` with no `import ...filled.Foo`.
+
+    check_undefined_symbols cannot see these. Its use pattern requires the
+    character before a capitalised name to not be a dot, so in
+    `Icons.AutoMirrored.Filled.KeyboardArrowRight` it captures only `Icons` --
+    which is always imported -- and the four segments after it go unexamined.
+    That blind spot shipped a missing icon import: the nested form reads as a
+    qualified member access, and every piece of it is capitalised, so nothing
+    looks wrong.
+
+    The rule here is exact rather than heuristic: an icon is an extension
+    property in a per-family package, so `Icons.Rounded.X` does not compile
+    unless `androidx.compose.material.icons.rounded.X` is imported (or that
+    package is wildcarded). There is no other way for the reference to resolve.
+    """
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
+            imports = set()
+            for m in re.finditer(r"^import\s+([\w.*]+)", code, re.M):
+                imports.add(m.group(1))
+            for m in re.finditer(
+                r"(?<![\w.])Icons\.(" + "|".join(
+                    k.replace(".", "\\.") for k in ICON_FAMILIES
+                ) + r")\.(\w+)", code
+            ):
+                family, icon = m.group(1), m.group(2)
+                package = ICON_FAMILIES[family]
+                if f"{package}.{icon}" in imports or f"{package}.*" in imports:
+                    continue
+                line = code[: m.start()].count("\n") + 1
+                findings.append((path, line, f"Icons.{family}.{icon}", f"{package}.{icon}"))
+    return findings
+
+
 def check_missing_return():
     """Block-bodied function with a non-Unit return type and no return/throw.
 
@@ -795,6 +848,14 @@ def main() -> int:
             got = recv or "no receiver"
             print(f"  {path}:{line}  .{name}() needs one of "
                   f"{SCOPE_MEMBERS[name]}, enclosing fun has {got}")
+        print()
+
+    icons = check_icon_imports()
+    if icons:
+        findings += len(icons)
+        print("MISSING ICON IMPORT")
+        for path, line, ref, imp in icons:
+            print(f"  {path}:{line}  {ref}  ->  needs: import {imp}")
         print()
 
     undef = check_undefined_symbols()
