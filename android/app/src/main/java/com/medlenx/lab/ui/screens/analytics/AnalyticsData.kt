@@ -1,5 +1,7 @@
 package com.medlenx.lab.ui.screens.analytics
 
+import com.medlenx.lab.data.local.BrandDoctorRow
+import com.medlenx.lab.data.local.DrillCountRow
 /**
  * Analytics models and the figures the dashboard renders.
  *
@@ -13,7 +15,53 @@ package com.medlenx.lab.ui.screens.analytics
 
 data class BarDatum(val name: String, val value: Int)
 
-data class DonutDatum(val name: String, val value: Int)
+/**
+ * One donut segment.
+ *
+ * `isOthers` marks the synthetic bucket that [com.medlenx.lab.data.repo.AnalyticsMetrics.companyShare]
+ * builds by collapsing every company under the minimum share. It carries a real
+ * count but is not a company, so it must not be drilled into: querying
+ * `company_name = 'Others'` returns nothing at all.
+ */
+data class DonutDatum(val name: String, val value: Int, val isOthers: Boolean = false)
+
+/**
+ * An open drill-down.
+ *
+ * Two shapes rather than one, because the web serves them from two different
+ * endpoints with two different payloads: `/api/dashboard/company-drilldown`
+ * (donut slice click) returns generics + brands + doctors for a company, while
+ * `/api/dashboard/brand-doctors` (bar click) returns the doctor table for a
+ * brand. Both inherit the filter bar, so both are computed at open time from
+ * the live [FilterState] rather than from whatever the last `load()` saw.
+ */
+sealed interface Drilldown {
+    val title: String
+
+    /**
+     * A company's breakdown. `total` is the sum of the generic counts, which is
+     * how the web computes it (`database.py:1197`) rather than an independent
+     * COUNT — so it is "captured items in the current filter", and a row with a
+     * blank generic folded into 'Unspecified' still contributes.
+     */
+    data class Company(
+        val company: String,
+        val total: Int,
+        val generics: List<DrillCountRow>,
+        val brands: List<DrillCountRow>,
+        val doctors: List<DrillCountRow>,
+    ) : Drilldown {
+        override val title: String get() = company
+    }
+
+    /** The Doctor | Specialty | Chamber | Times table for one brand. */
+    data class Brand(
+        val brand: String,
+        val doctors: List<BrandDoctorRow>,
+    ) : Drilldown {
+        override val title: String get() = brand
+    }
+}
 
 /** One specialty row in the generic-vs-brand stacked matrix. */
 data class StackedDatum(val specialty: String, val values: List<Int>)

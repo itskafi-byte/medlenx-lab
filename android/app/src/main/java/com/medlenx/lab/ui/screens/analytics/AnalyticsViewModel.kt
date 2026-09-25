@@ -11,6 +11,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.ScannedMedicineEntity
+import com.medlenx.lab.data.local.BrandDoctorRow
+import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.local.LiveScanFeedRow
@@ -172,6 +174,91 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clearFilters() = updateFilters(FilterState.None)
 
+    /**
+     * The window the current `days` filter selects, in millis.
+     *
+     * Shared with [load] so the drill-down and the dashboard cannot drift onto
+     * different windows: a null `days` is "all time", which the Python gets by
+     * emitting no clause, and which here means a span reaching back to the epoch.
+     */
+    private fun filterSpan(): Long =
+        (filters.days?.let { it * 24L * 60 * 60 * 1000 } ?: System.currentTimeMillis())
+
+    /** The open drill-down, or null when the modal is closed. */
+    var drilldown by mutableStateOf<Drilldown?>(null)
+        private set
+
+    var drilldownLoading by mutableStateOf(false)
+        private set
+
+    fun closeDrilldown() {
+        drillJob?.cancel()
+        drillJob = null
+        drilldownLoading = false
+        drilldown = null
+    }
+
+    /**
+     * A donut slice (or its legend row) was tapped.
+     *
+     * Runs on its own job rather than inside [load] so opening a drill-down
+     * cannot interleave with a dashboard refresh, and so a slow drill-down is
+     * cancelled by closing the modal instead of landing into a closed one.
+     */
+    fun openCompanyDrilldown(company: String) {
+        if (company.isBlank()) return
+        openDrilldown { f, since ->
+            val generics = prescriptionDao.companyGenerics(
+                company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+            )
+            Drilldown.Company(
+                company = company,
+                total = generics.sumOf { it.count },
+                generics = generics,
+                brands = prescriptionDao.companyBrands(
+                    company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                ),
+                doctors = prescriptionDao.companyDoctors(
+                    company, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                ),
+            )
+        }
+    }
+
+    /** A bar in chart A was tapped. */
+    fun openBrandDrilldown(brand: String) {
+        if (brand.isBlank()) return
+        openDrilldown { f, since ->
+            Drilldown.Brand(
+                brand = brand,
+                doctors = prescriptionDao.brandDoctors(
+                    brand, since, DRILL_LIMIT, f.district, f.territory, f.specialty, f.mrId,
+                ),
+            )
+        }
+    }
+
+    private var drillJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * `filters` is read inside the coroutine rather than passed in, so the modal
+     * always reflects the filter bar as it stands when it is opened.
+     */
+    private inline fun openDrilldown(
+        crossinline fetch: suspend (FilterState, Long) -> Drilldown,
+    ) {
+        drillJob?.cancel()
+        drilldown = null
+        drilldownLoading = true
+        drillJob = viewModelScope.launch {
+            val result = runCatching { fetch(filters, System.currentTimeMillis() - filterSpan()) }
+            drilldownLoading = false
+            result
+                .onSuccess { drilldown = it }
+                .onFailure { e -> error = e.message ?: "Could not load the drill-down" }
+        }
+    }
+
     init {
         // Without this the dashboard is empty until the user opens the FilterSheet
         // and applies a filter, because `load()` is otherwise only called from
@@ -191,7 +278,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     mrIds = prescriptionDao.filterMrIds(),
                 )
                 val now = System.currentTimeMillis()
-                val span = filters.days?.let { it * 24L * 60 * 60 * 1000 } ?: now
+                val span = filterSpan()
                 val since = now - span
                 val prevStart = since - span
                 val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
@@ -284,3 +371,10 @@ class AnalyticsViewModelFactory(private val application: Application) : ViewMode
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         AnalyticsViewModel(application) as T
 }
+
+/**
+ * The web uses `limit=10` for the company drill-down and `limit=15` for brand
+ * doctors. One value covers both so a company's three lists stay the same length
+ * and the modal does not reflow between its sections.
+ */
+private const val DRILL_LIMIT = 15

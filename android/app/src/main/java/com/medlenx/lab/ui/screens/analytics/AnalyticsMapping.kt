@@ -65,7 +65,7 @@ fun List<MostPrescribed>.toBarData(): List<BarDatum> =
     map { BarDatum(it.brandName, it.captureCount) }
 
 fun List<CompanySlice>.toDonutData(): List<DonutDatum> =
-    map { DonutDatum(it.company, it.percentage.toInt()) }
+    map { DonutDatum(it.company, it.percentage.toInt(), isOthers = it.isOthers) }
 
 fun List<CompanySlice>.centreSoVLabel(): String {
     val top = firstOrNull { !it.isOthers } ?: return "SoV —"

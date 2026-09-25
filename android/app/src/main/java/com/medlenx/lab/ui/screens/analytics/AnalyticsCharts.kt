@@ -1,10 +1,13 @@
 package com.medlenx.lab.ui.screens.analytics
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +25,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.ui.theme.Mlx
@@ -47,13 +51,28 @@ private fun seriesColor(index: Int): Color = Mlx.ChartSeries[index % Mlx.ChartSe
  * matching recharts' `radius={[4,4,0,0]}` top rounding.
  */
 @Composable
-fun MostPrescribedBarChart(data: List<BarDatum>, modifier: Modifier = Modifier) {
+fun MostPrescribedBarChart(
+    data: List<BarDatum>,
+    modifier: Modifier = Modifier,
+    onBarClick: (String) -> Unit = {},
+) {
     val maxValue = (data.maxOfOrNull { it.value } ?: 1).toFloat()
     Column(modifier = modifier.fillMaxWidth()) {
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp),
+                .height(190.dp)
+                .pointerInput(data) {
+                    if (data.isEmpty()) return@pointerInput
+                    detectTapGestures { offset ->
+                        // The bar's slot, not the bar itself: the drawing leaves
+                        // 45% of each slot empty, and a tap that lands there is
+                        // still unambiguously aimed at that one bar.
+                        val slot = size.width.toFloat() / data.size
+                        val index = (offset.x / slot).toInt()
+                        if (index in data.indices) onBarClick(data[index].name)
+                    }
+                },
         ) {
             if (data.isEmpty()) return@Canvas
             val slot = size.width / data.size
@@ -97,6 +116,7 @@ fun ShareOfVoiceDonut(
     data: List<DonutDatum>,
     centreLabel: String,
     modifier: Modifier = Modifier,
+    onSliceClick: (String) -> Unit = {},
 ) {
     val total = data.sumOf { it.value }.toFloat().coerceAtLeast(1f)
 
@@ -139,7 +159,15 @@ fun ShareOfVoiceDonut(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             data.forEachIndexed { index, datum ->
+                // The legend row is the tap target rather than the arc. Hit-testing
+                // a 30dp stroked arc needs polar maths and still leaves the thin
+                // slivers of a long tail nearly untappable, whereas the row is the
+                // full width and is labelled with the name being drilled into.
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (datum.isOthers) Modifier else Modifier.clickable { onSliceClick(datum.name) })
+                        .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {

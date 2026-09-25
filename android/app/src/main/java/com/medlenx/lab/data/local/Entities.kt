@@ -306,6 +306,32 @@ data class DoctorLeaderRow2(
 /** Projection for [PrescriptionDao.topBrandRow]. */
 data class TopBrandRow(val brandName: String, val companyName: String?, val count: Int)
 
+/**
+ * A name/count pair from a drill-down group-by — `get_company_drilldown`'s
+ * `generics` / `brands` / `doctors` arrays (database.py:1167-1195).
+ *
+ * The web returns a different key per array (`generic` vs `brand_name` vs
+ * `doctor_name`); one projection covers all three because they are the same
+ * two columns grouped differently.
+ */
+data class DrillCountRow(val name: String, val count: Int)
+
+/**
+ * One doctor from the brand drill-down — `get_brand_doctors` (database.py:1210).
+ *
+ * `lastSeen` is nullable because `MAX()` over an empty group is NULL even though
+ * `created_at` is NOT NULL, and Room reads a nullable column type safely either
+ * way. The web's defaults for specialty and chamber ("General" / "N/A") are
+ * applied in SQL so a blank never reaches the table.
+ */
+data class BrandDoctorRow(
+    val doctorName: String,
+    val specialty: String,
+    val chamber: String,
+    val count: Int,
+    val lastSeen: Long?,
+)
+
 /** Projection for [PrescriptionDao.geoRegionRows] — `get_geo_heatmap`. */
 data class GeoRegionRow(
     val district: String,

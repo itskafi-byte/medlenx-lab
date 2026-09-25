@@ -347,6 +347,107 @@ interface PrescriptionDao {
         mrId: String?,
     ): Int
 
+    // ─── Drill-down (web: get_company_drilldown / get_brand_doctors) ───────────
+    //
+    // These three mirror database.py:1166-1195. They reuse RX_FILTER_SQL, which is
+    // what makes the drill-down inherit the filter bar's dimensions for free: the
+    // web passes the same district / territory / specialty / mr_id / days into
+    // `_filter_sql`, so the two cannot drift.
+
+    /** Top generics for one company — the web's `generics` array. */
+    @Query(
+        "SELECT CASE WHEN IFNULL(sm.generic, '') = '' THEN 'Unspecified' ELSE sm.generic END AS name, " +
+            "COUNT(*) AS count " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
+            " GROUP BY name ORDER BY count DESC LIMIT :limit"
+    )
+    suspend fun companyGenerics(
+        company: String,
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<DrillCountRow>
+
+    /** Top brands for one company — the web's `brands` array. */
+    @Query(
+        "SELECT CASE WHEN IFNULL(sm.brand_name, '') = '' THEN 'Unspecified' ELSE sm.brand_name END AS name, " +
+            "COUNT(*) AS count " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
+            " GROUP BY name ORDER BY count DESC LIMIT :limit"
+    )
+    suspend fun companyBrands(
+        company: String,
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<DrillCountRow>
+
+    /**
+     * Top prescribing doctors for one company — the web's `doctors` array.
+     *
+     * Blank doctor names are excluded rather than grouped into one "Unknown"
+     * bucket, matching the web's `IFNULL(p.doctor_name,'')!=''` guard: an
+     * unnamed prescription is not a doctor who prescribed.
+     */
+    @Query(
+        "SELECT p.doctor_name AS name, COUNT(*) AS count " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.company_name = :company AND p.created_at >= :since " +
+            "AND IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL +
+            " GROUP BY p.doctor_name ORDER BY count DESC LIMIT :limit"
+    )
+    suspend fun companyDoctors(
+        company: String,
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<DrillCountRow>
+
+    /**
+     * Which doctors prescribed a brand — `get_brand_doctors` (database.py:1209).
+     *
+     * Grouped by doctor name rather than the web's `doctor_id`: Android stores
+     * the doctor denormalised on the prescription (there is no doctors table to
+     * join), so the name is the only identity available. Two different doctors
+     * sharing a name collapse into one row, which the web — grouping by id —
+     * would not do.
+     *
+     * `lastSeen` is `MAX(p.created_at)`, the web's "Times" column.
+     */
+    @Query(
+        "SELECT CASE WHEN IFNULL(p.doctor_name, '') = '' THEN 'Unknown' ELSE p.doctor_name END AS doctorName, " +
+            "CASE WHEN IFNULL(p.doctor_specialty, '') = '' THEN 'General' ELSE p.doctor_specialty END AS specialty, " +
+            "CASE WHEN IFNULL(p.chamber, '') = '' THEN 'N/A' ELSE p.chamber END AS chamber, " +
+            "COUNT(*) AS count, MAX(p.created_at) AS lastSeen " +
+            "FROM scanned_medicines sm " +
+            "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "WHERE sm.brand_name = :brand AND p.created_at >= :since" + RX_FILTER_SQL +
+            " GROUP BY p.doctor_name ORDER BY count DESC LIMIT :limit"
+    )
+    suspend fun brandDoctors(
+        brand: String,
+        since: Long,
+        limit: Int,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+    ): List<BrandDoctorRow>
+
     /** Widget A: most prescribed brands. */
     @Query(
         """

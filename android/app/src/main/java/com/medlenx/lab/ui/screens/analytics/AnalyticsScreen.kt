@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Medication
@@ -44,8 +47,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.ConfidenceBadge
 import com.medlenx.lab.ui.components.DarkHero
@@ -54,6 +60,7 @@ import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.MlxFilterChip
+import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.ProgressTrack
 import com.medlenx.lab.ui.components.RegulatoryPill
@@ -135,6 +142,7 @@ fun AnalyticsScreen(
             MostPrescribedBarChart(
                 data = vm.mostPrescribed.toBarData(),
                 modifier = Modifier.padding(top = 12.dp),
+                onBarClick = { vm.openBrandDrilldown(it) },
             )
         }
 
@@ -144,6 +152,7 @@ fun AnalyticsScreen(
                 data = vm.companyShare.toDonutData(),
                 centreLabel = vm.companyShare.centreSoVLabel(),
                 modifier = Modifier.padding(top = 12.dp),
+                onSliceClick = { vm.openCompanyDrilldown(it) },
             )
         }
 
@@ -200,8 +209,247 @@ fun AnalyticsScreen(
             rows = vm.recentPrescriptions.toRecentRxRows(),
             onSelect = onSelectPrescription,
         )
+
+        // A Dialog composes into its own window, so it can sit at the bottom of
+        // the scrolling column without being clipped by it.
+        if (vm.drilldownLoading || vm.drilldown != null) {
+            DrilldownDialog(
+                drilldown = vm.drilldown,
+                filterLabel = vm.filters.drilldownCaption(),
+                onDismiss = vm::closeDrilldown,
+            )
+        }
     }
 }
+
+/** How the modal describes the window it is summarising. */
+private fun FilterState.drilldownCaption(): String = when {
+    days == null -> "all time"
+    district == null && territory == null && specialty == null && mrId == null ->
+        "last $days days"
+    else -> "last $days days, filtered"
+}
+
+// ═══════════════════════════════════ DRILL-DOWN ══════════════════════════════
+
+/**
+ * The drill-down modal — web `#drillModal`, opened by `openDrill` (index.html:2380).
+ *
+ * Sections mirror the web's body: two side-by-side Top Generics / Top Brands
+ * columns, then a full-width Top Prescribing Doctors list. The brand variant is
+ * the Doctor | Specialty | Chamber | Times table.
+ *
+ * The filter caption is passed in rather than assumed, because every number in
+ * here is scoped to the filter bar and a modal that looked global while showing
+ * filtered figures would be misleading.
+ */
+@Composable
+private fun DrilldownDialog(
+    drilldown: Drilldown?,
+    filterLabel: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MlxCard {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = when (drilldown) {
+                                    is Drilldown.Brand -> "Doctors prescribing ${drilldown.title}"
+                                    is Drilldown.Company -> drilldown.title
+                                    null -> "Drill-down"
+                                },
+                                style = MlxType.CardTitle.copy(fontWeight = FontWeight.SemiBold),
+                                color = Mlx.Text900,
+                            )
+                            Text(
+                                text = when (drilldown) {
+                                    is Drilldown.Company ->
+                                        "${drilldown.total} captured items in the current filter"
+                                    is Drilldown.Brand ->
+                                        "${drilldown.doctors.size} doctors in the current filter"
+                                    null -> "Loading…"
+                                } + " · $filterLabel",
+                                style = MlxType.Meta,
+                                color = Mlx.Text500,
+                            )
+                        }
+                        MlxIconButton(Icons.Filled.Close, "Close", onDismiss)
+                    }
+
+                    // Bounded and scrollable: a company's three lists plus the
+                    // header exceeds the screen on a phone.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 460.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        when (drilldown) {
+                            null -> Text(
+                                text = "Loading…",
+                                style = MlxType.BodySmall,
+                                color = Mlx.Text500,
+                                modifier = Modifier.padding(vertical = 16.dp),
+                            )
+                            is Drilldown.Company -> CompanyDrilldownBody(drilldown)
+                            is Drilldown.Brand -> BrandDrilldownBody(drilldown)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompanyDrilldownBody(d: Drilldown.Company) {
+    // Side by side, as the web's `gridTemplateColumns: "1fr 1fr"`.
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        DrilldownColumn("Top Generics", d.generics, Modifier.weight(1f))
+        DrilldownColumn("Top Brands", d.brands, Modifier.weight(1f))
+    }
+    Text(
+        text = "Top Prescribing Doctors",
+        style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold),
+        color = Mlx.Text900,
+    )
+    if (d.doctors.isEmpty()) {
+        EmptyDrilldown("No doctors captured for this company yet.")
+    } else {
+        d.doctors.forEach { DrilldownRankRow(it.name, it.count) }
+    }
+}
+
+@Composable
+private fun BrandDrilldownBody(d: Drilldown.Brand) {
+    if (d.doctors.isEmpty()) {
+        // The web's exact wording for this case.
+        EmptyDrilldown("No doctors found for this brand.")
+        return
+    }
+    // Doctor | Specialty | Chamber | Times — the web's four columns.
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text("Doctor", style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.weight(1.4f))
+        Text("Specialty", style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.weight(1f))
+        Text("Chamber", style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.weight(1f))
+        Text("Times", style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.weight(0.6f))
+    }
+    d.doctors.forEach { row ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = row.doctorName,
+                style = MlxType.BodySmall,
+                color = Mlx.Text900,
+                modifier = Modifier.weight(1.4f),
+            )
+            Text(
+                text = row.specialty,
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = row.chamber,
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = row.count.toString(),
+                style = MlxType.BodySmall,
+                color = Mlx.Text900,
+                modifier = Modifier.weight(0.6f),
+            )
+        }
+    }
+    // The web shows last_seen as the chamber-visit recency; surfaced here under the
+    // table so the four columns stay legible on a phone-width modal.
+    d.doctors.firstOrNull { it.lastSeen != null }?.lastSeen?.let { newest ->
+        Text(
+            text = "Most recent prescription: ${formatDrillDate(newest)}",
+            style = MlxType.MicroPill,
+            color = Mlx.Text400,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun DrilldownColumn(title: String, rows: List<DrillCountRow>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = Mlx.Text900,
+        )
+        if (rows.isEmpty()) {
+            EmptyDrilldown("None captured.")
+        } else {
+            rows.forEach { DrilldownRankRow(it.name, it.count) }
+        }
+    }
+}
+
+@Composable
+private fun DrilldownRankRow(name: String, count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = name,
+            style = MlxType.Meta,
+            color = Mlx.Text600,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(text = count.toString(), style = MlxType.Meta, color = Mlx.Text900)
+    }
+}
+
+@Composable
+private fun EmptyDrilldown(message: String) {
+    Text(
+        text = message,
+        style = MlxType.Meta,
+        color = Mlx.Text500,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
+}
+
+private fun formatDrillDate(epochMillis: Long): String =
+    java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+        .format(java.util.Date(epochMillis))
 
 @Composable
 private fun RowScope.Spacer1Cell() {
