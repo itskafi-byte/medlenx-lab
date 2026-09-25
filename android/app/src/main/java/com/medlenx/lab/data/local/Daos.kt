@@ -361,7 +361,13 @@ interface PrescriptionDao {
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
-            " GROUP BY name ORDER BY count DESC LIMIT :limit"
+            // The CASE is repeated rather than aliased: SQLite resolves an output
+            // alias in GROUP BY, but Room's compile-time validator parses the
+            // statement against the entity schema and may not, and there is no
+            // compiler here to find out. Spelled out, `name` is only ever an
+            // output label.
+            " GROUP BY CASE WHEN IFNULL(sm.generic, '') = '' THEN 'Unspecified' " +
+            "ELSE sm.generic END ORDER BY count DESC LIMIT :limit"
     )
     suspend fun companyGenerics(
         company: String,
@@ -380,7 +386,8 @@ interface PrescriptionDao {
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
-            " GROUP BY name ORDER BY count DESC LIMIT :limit"
+            " GROUP BY CASE WHEN IFNULL(sm.brand_name, '') = '' THEN 'Unspecified' " +
+            "ELSE sm.brand_name END ORDER BY count DESC LIMIT :limit"
     )
     suspend fun companyBrands(
         company: String,

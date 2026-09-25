@@ -41,19 +41,37 @@ guard: REFUSING - the working tree is not safe to commit
 ## Static checks — these replace compiling
 
 The user compiles, so anything catchable without a compiler must be caught here.
-All four are fast; run them together.
+All five are fast; run them together.
 
 ```bash
 python3 android/checks/guard.py      # tree safety / reset detection
 python3 android/checks/imports.py    # missing imports, duplicate members, composable-in-remember
 python3 android/checks/audit.py      # declaration counts, Room/Hilt wiring sanity
 python3 agent/roomcheck.py           # every @Query column resolves against its entity
+python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 ```
 - `imports.py` healthy: `imports: no findings` (7 checks: missing imports,
   duplicate members, orphaned `private set`, composable-in-`remember`, missing
   return, unresolved symbol, scope leak)
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
-  (9 entities, 60 queries)
+  (9 entities, 64 queries)
+- `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
+
+`roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
+call site to a column: roomcheck validates the SQL *inside* a `@Query` against the
+entity schema, and says nothing about whether Kotlin calls the function correctly.
+daocalls checks the argument list — count, and that named arguments exist — which
+is the single most likely compile error from adding a DAO method, since the user
+compiles and this sandbox cannot.
+
+daocalls deliberately does **not** check argument *types*; inferring Kotlin types
+well enough to compare them is a much larger job and would produce false findings.
+Its known shape limits: it treats `<` as a generic only when written tight
+(`List<Int>`) and as a comparison only when spaced (`it > 0`) — counting every `<`
+and `>` as brackets once unbalanced the depth and split one argument into two,
+which is how the `ScanRepository.insert` false positive arose. It also only
+accepts calls whose receiver ends in `Dao`, so `it.all { }` is not mistaken for
+`dao.all()`.
 
 All four resolve their input roots from their own file path, so they give the same
 answer from the repo root or from `android/`. This matters more than it sounds:
@@ -66,6 +84,14 @@ Self-test any of them before trusting a clean run:
 ```bash
 python3 agent/roomcheck.py   # then inject a typo in a @Query, re-run, confirm it is caught
 ```
+A self-test only counts if the fault actually lands. An injected fault that the
+script never wrote looks exactly like a clean run: a `python3 - <<EOF` heredoc that
+prints "fault injected" *unconditionally* reported a passing check while the file
+was still correct. Assert the replacement happened, and re-read the file after
+writing it, before believing either result.
+
+`daocalls.py` was verified against three real faults, each caught: a dropped
+argument, a misspelled named argument, and one argument too many.
 
 ```bash
 python3 agent/parity.py           # web -> android feature coverage
