@@ -247,12 +247,56 @@ def check_missing_imports():
     return findings
 
 
+
+def _fun_signature(lines, start_index, name_end):
+    """
+    A normalised `(param, types)` string for the `fun` whose name ends at
+    `name_end` on `lines[start_index]`.
+
+    Only the types matter for identity, but the names are kept too so that
+    `keyOf(name: String)` and `keyOf(entity: PrescriptionEntity)` do not collide
+    purely because both are one argument. Parameter names are part of neither
+    Kotlin's overload rule nor this one -- they are kept only so that two
+    same-arity functions without types still differ.
+    """
+    text = "\n".join(lines[start_index:start_index + 12])
+    open_at = text.find("(", name_end)
+    if open_at == -1:
+        return "<no-params>"
+    depth, i, n = 0, open_at, len(text)
+    while i < n:
+        c = text[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    raw = text[open_at + 1:i]
+    params = []
+    for part in re.split(r",(?![^<]*>)", raw):
+        part = part.strip()
+        if not part:
+            continue
+        # Drop the default value; `a: Int = 3` and `a: Int` are the same overload.
+        part = part.split("=")[0].strip()
+        params.append(re.sub(r"\s+", " ", part))
+    return "(" + ", ".join(params) + ")"
+
+
 def check_duplicate_members():
-    """Duplicate `fun`/`val`/`var` names declared directly in one class/interface.
+    """Duplicate `fun`/`val`/`var` *signatures* declared in one class/interface.
 
     Scope-sensitive on purpose: only declarations sitting at the container's own
     brace depth count. Local variables inside functions live at a deeper depth,
     so they are ignored -- counting them flagged dozens of false positives.
+
+    Compares the parameter list, not just the name. Overloads are legal Kotlin,
+    and `R.string.keyOf(attrs)` alongside `R.string.keyOf(entity)` is a real
+    convenience rather than a duplicate -- keying on the name alone reported it as
+    one. Two declarations are a duplicate only when their arity and text agree;
+    a genuine same-name-same-arity clash is still caught.
     """
     findings = []
     for dirpath, _, files in os.walk(ROOT):
@@ -265,11 +309,20 @@ def check_duplicate_members():
             depth = 0
             container = None  # (name, brace depth its members sit at)
             seen = defaultdict(list)
+            # line number -> normalised parameter list, filled as members are seen.
+            signatures: dict[int, str] = {}
 
             def flush():
                 for name, ls in seen.items():
-                    if len(ls) > 1 and container:
-                        findings.append((path, container[0], name, ls))
+                    # ls is a list of line numbers; a name can appear more than
+                    # once legitimately as an overload, so count how many times
+                    # each *signature* occurs rather than each name.
+                    sig_lines: dict[str, list[int]] = defaultdict(list)
+                    for line_no in ls:
+                        sig_lines[signatures.get(line_no, "")].append(line_no)
+                    for sig, hits in sig_lines.items():
+                        if len(hits) > 1 and container:
+                            findings.append((path, container[0], f"{name}{sig}", hits))
 
             for i, line in enumerate(lines, 1):
                 # leaving the container?
@@ -285,13 +338,20 @@ def check_duplicate_members():
                     flush()
                     container, seen = (m.group(1), depth + 1), defaultdict(list)
                 elif container and depth == container[1]:
-                    dm = re.search(r"\b(?:suspend\s+)?fun\s+(\w+)\s*[\(<]", line)
+                    dm = re.search(r"\b(?:suspend\s+)?fun\s+(\w+)\s*([\(<])", line)
                     if dm:
                         seen[dm.group(1)].append(i)
+                        signatures[i] = _fun_signature(lines, i - 1, dm.end(1))
                     else:
                         pm = re.search(r"\b(?:val|var)\s+(\w+)\s*[:=]", line)
                         if pm:
                             seen[pm.group(1)].append(i)
+                            # A property has no parameter list, so its signature is
+                            # its declared type -- two `val x: Int` and `val x: String`
+                            # in one class is also a clash, but two `val x` is not
+                            # distinguishable without more parsing, so type only.
+                            tm = re.search(r":\s*([\w.<>?]+)", line[pm.end():])
+                            signatures[i] = f":{tm.group(1)}" if tm else ""
                 depth += line.count("{") - line.count("}")
             flush()
     return findings

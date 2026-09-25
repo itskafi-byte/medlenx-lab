@@ -40,6 +40,7 @@ sealed class ScanProgress {
 class ScanRepository(
     private val vlClient: MedLenXVlClient,
     private val prescriptionDao: PrescriptionDao,
+    private val doctorDao: DoctorDao,
     private val queueDao: QueueDao,
     private val medexDao: MedexDao,
     private val catalogue: AssetCatalogue,
@@ -79,6 +80,38 @@ class ScanRepository(
      *   (`company_name != ''`) and mislabels the Live Scans feed. Empty is tolerated so
      *   the row still lands rather than the save failing.
      */
+    /**
+     * The [DoctorEntity] id this prescription belongs to, creating it if needed.
+     *
+     * Keyed by [DoctorIdentity], which is the same rule the v1->v2 migration
+     * backfills with — so a doctor who already exists from history resolves to
+     * that existing row rather than a second one.
+     *
+     * Null when the prescription carries nothing to identify a doctor by. The
+     * column is nullable and the drill-down groups the nulls together, which is
+     * what the web's own null `doctor_id` does.
+     *
+     * The read-then-insert is not atomic and does not need to be: `identity_key`
+     * is UNIQUE, so a racing insert is ignored rather than duplicated, and the
+     * fallback read then finds whichever one landed.
+     */
+    private suspend fun resolveDoctorId(prescription: PrescriptionEntity): Long? {
+        val key = DoctorIdentity.keyOf(prescription) ?: return null
+        doctorDao.idFor(key)?.let { return it }
+        val inserted = doctorDao.insertIgnoring(
+            DoctorEntity(
+                identityKey = key,
+                name = DoctorIdentity.displayName(prescription.doctorName),
+                specialty = prescription.doctorSpecialty,
+                chamber = prescription.chamber,
+                district = prescription.district,
+                upazila = prescription.upazila,
+                bmdcNo = prescription.doctorBmdcNo,
+            ),
+        )
+        return if (inserted != -1L) inserted else doctorDao.idFor(key)
+    }
+
     suspend fun saveVerified(
         prescription: PrescriptionEntity,
         result: VlScanResult,
@@ -91,6 +124,7 @@ class ScanRepository(
                 totalMedicines = result.medicines.size,
                 mrId = mrId,
                 createdAt = prescription.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
+                doctorId = resolveDoctorId(prescription),
             ),
         )
         val rows = result.medicines.mapIndexed { index, med ->

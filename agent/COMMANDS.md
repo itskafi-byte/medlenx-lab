@@ -49,6 +49,7 @@ python3 android/checks/imports.py    # missing imports, duplicate members, compo
 python3 android/checks/audit.py      # declaration counts, Room/Hilt wiring sanity
 python3 agent/roomcheck.py           # every @Query column resolves against its entity
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
+python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 ```
 - `imports.py` healthy: `imports: no findings` (7 checks: missing imports,
   duplicate members, orphaned `private set`, composable-in-`remember`, missing
@@ -56,6 +57,23 @@ python3 android/checks/daocalls.py   # every DAO call site matches its declarati
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
   (9 entities, 64 queries)
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
+- `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
+
+`migrationcheck.py` exists because Room's schema validation runs on the device at
+first open after an upgrade and throws `Migration didn't properly handle ...` on a
+mismatch — unreachable from this sandbox and fatal on the user's phone, which is
+the worst pairing of the two. `roomcheck.py` cannot cover it: it resolves column
+*names* and carries no type or nullability, so a migration with the right names,
+the wrong affinity and a stray NOT NULL passes there and crashes at open.
+
+It reads the DDL out of a Kotlin `execSQL("..." + "..." + ...)` chain by
+concatenating the literal *contents* first — the statement does not exist as
+contiguous text in the file, and parsing the raw source silently saw fragments
+while still reporting a clean run.
+
+Verified against six faults, each caught: a dropped NOT NULL, a wrong affinity, a
+UNIQUE index declared non-unique, an omitted column, an index name Room would not
+generate, and an ALTER adding the wrong type and nullability.
 
 `roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
 call site to a column: roomcheck validates the SQL *inside* a `@Query` against the

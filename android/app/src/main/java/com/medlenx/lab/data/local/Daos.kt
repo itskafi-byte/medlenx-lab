@@ -8,6 +8,28 @@ import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * The doctor identity table.
+ *
+ * Small and write-once-per-new-doctor: a scan resolves its doctor by
+ * [identityKey] and only inserts when nothing matches.
+ */
+@Dao
+interface DoctorDao {
+
+    @Query("SELECT COUNT(*) FROM doctors")
+    suspend fun count(): Int
+
+    @Query("SELECT id FROM doctors WHERE identity_key = :key LIMIT 1")
+    suspend fun idFor(key: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoring(doctor: DoctorEntity): Long
+
+    @Query("SELECT * FROM doctors ORDER BY name")
+    suspend fun all(): List<DoctorEntity>
+}
+
 @Dao
 interface MedexDao {
     @Query("SELECT COUNT(*) FROM medex_products")
@@ -450,23 +472,33 @@ interface PrescriptionDao {
     /**
      * Which doctors prescribed a brand — `get_brand_doctors` (database.py:1209).
      *
-     * Grouped by doctor name rather than the web's `doctor_id`: Android stores
-     * the doctor denormalised on the prescription (there is no doctors table to
-     * join), so the name is the only identity available. Two different doctors
-     * sharing a name collapse into one row, which the web — grouping by id —
-     * would not do.
+     * Grouped by `p.doctor_id`, the web's own key. This is the reason the
+     * `doctors` table exists: grouping by name merged two doctors who share one
+     * into a single row.
+     *
+     * Two details copied from the web deliberately rather than improved on:
+     *
+     * - `p.doctor_name` is selected alongside `GROUP BY p.doctor_id`, so it is a
+     *   bare column and SQLite returns an arbitrary row's value for the group.
+     *   The web does exactly this; the name shown is the one the doctor was
+     *   labelled with on whichever visit SQLite picked. Reading the name from the
+     *   joined `doctors` row would be tidier and would *not* be the same output.
+     * - NULL `doctor_id` groups together, because SQLite treats nulls as equal in
+     *   GROUP BY — so every unattributable prescription becomes one "Unknown"
+     *   row, which is what the web's null `doctor_id` does too.
      *
      * `lastSeen` is `MAX(p.created_at)`, the web's "Times" column.
      */
     @Query(
         "SELECT CASE WHEN IFNULL(p.doctor_name, '') = '' THEN 'Unknown' ELSE p.doctor_name END AS doctorName, " +
-            "CASE WHEN IFNULL(p.doctor_specialty, '') = '' THEN 'General' ELSE p.doctor_specialty END AS specialty, " +
-            "CASE WHEN IFNULL(p.chamber, '') = '' THEN 'N/A' ELSE p.chamber END AS chamber, " +
+            "CASE WHEN IFNULL(d.specialty, '') = '' THEN 'General' ELSE d.specialty END AS specialty, " +
+            "CASE WHEN IFNULL(d.chamber, '') = '' THEN 'N/A' ELSE d.chamber END AS chamber, " +
             "COUNT(*) AS count, MAX(p.created_at) AS lastSeen " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.brand_name = :brand AND p.created_at >= :since" + RX_FILTER_SQL +
-            " GROUP BY p.doctor_name ORDER BY count DESC LIMIT :limit"
+            " GROUP BY p.doctor_id ORDER BY count DESC LIMIT :limit"
     )
     suspend fun brandDoctors(
         brand: String,

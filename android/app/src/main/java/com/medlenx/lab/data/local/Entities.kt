@@ -37,6 +37,36 @@ data class MedexEntity(
 )
 
 /** One verified prescription scan. */
+/**
+ * A doctor, with the identity `prescriptions.doctor_id` points at.
+ *
+ * The web has this table; Android did not, because the doctor is denormalised
+ * onto the prescription and there was nothing to join. That worked until the
+ * brand drill-down needed to group prescriptions *by doctor* the way the web
+ * does: without a surrogate key the only available identity was the name, and
+ * two doctors sharing one collapsed into a single row.
+ *
+ * [identityKey] is the natural key — see [DoctorIdentity] for the rule and why it
+ * is computed in Kotlin rather than in SQL.
+ */
+@Entity(
+    tableName = "doctors",
+    indices = [
+        Index(value = ["identity_key"], unique = true),
+        Index("name"),
+    ],
+)
+data class DoctorEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "identity_key") val identityKey: String,
+    val name: String,
+    val specialty: String,
+    val chamber: String,
+    val district: String,
+    val upazila: String,
+    @ColumnInfo(name = "bmdc_no") val bmdcNo: String,
+)
+
 @Entity(
     tableName = "prescriptions",
     indices = [Index("created_at"), Index("mr_id"), Index("doctor_name")],
@@ -48,6 +78,16 @@ data class PrescriptionEntity(
     @ColumnInfo(name = "image_hash") val imageHash: String?,
     @ColumnInfo(name = "doctor_name") val doctorName: String,
     @ColumnInfo(name = "doctor_bmdc_no") val doctorBmdcNo: String,
+    /**
+     * The [DoctorEntity] this prescription is attributed to.
+     *
+     * Nullable, and not a `@ForeignKey`: the doctor is resolved on save and the
+     * column may be null for rows the v1→v2 migration could not attribute, so a
+     * constraint would reject them. The web's `LEFT JOIN doctors` tolerates the
+     * same gap, and the drill-down groups those rows together exactly as the web
+     * groups its own null `doctor_id`s.
+     */
+    @ColumnInfo(name = "doctor_id") val doctorId: Long? = null,
     @ColumnInfo(name = "doctor_specialty") val doctorSpecialty: String,
     val chamber: String,
     val district: String,
@@ -344,7 +384,7 @@ data class TopBrandRow(val brandName: String, val companyName: String?, val coun
 data class DrillCountRow(val name: String, val count: Int)
 
 /**
- * One doctor from the brand drill-down — `get_brand_doctors` (database.py:1210).
+ * One doctor from the brand drill-down — `get_brand_doctors` (database.py:1218).
  *
  * `lastSeen` is nullable because `MAX()` over an empty group is NULL even though
  * `created_at` is NOT NULL, and Room reads a nullable column type safely either

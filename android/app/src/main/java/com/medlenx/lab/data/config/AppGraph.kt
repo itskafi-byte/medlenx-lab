@@ -88,6 +88,7 @@ class AppGraph private constructor(
                 scanRepository = ScanRepository(
                     vlClient = vlClient,
                     prescriptionDao = db.prescriptionDao(),
+                    doctorDao = db.doctorDao(),
                     queueDao = db.queueDao(),
                     medexDao = db.medexDao(),
                     catalogue = catalogue,

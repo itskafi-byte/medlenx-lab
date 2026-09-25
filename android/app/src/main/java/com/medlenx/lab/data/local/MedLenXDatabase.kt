@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
+        DoctorEntity::class,
         MedexEntity::class,
         PrescriptionEntity::class,
         ScannedMedicineEntity::class,
@@ -17,11 +18,12 @@ import androidx.room.RoomDatabase
         DoctorVisitEntity::class,
         ErrorReportEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
 
+    abstract fun doctorDao(): DoctorDao
     abstract fun medexDao(): MedexDao
     abstract fun prescriptionDao(): PrescriptionDao
     abstract fun queueDao(): QueueDao
@@ -37,8 +39,13 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 MedLenXDatabase::class.java,
                 "medlenx.db",
             )
-                // Destructive migration is acceptable while the schema is still settling
-                // in Step 2; replace with real migrations before the first public release.
+                // Kept as the fallback for any *other* version change, but v1->v2
+                // is a real migration: see [Migrations.MIGRATION_1_2]. Room prefers
+                // a registered migration over the destructive path, so this only
+                // fires for a version it has no route for -- and a wipe is the
+                // right answer there, since the rest of the schema is derived data
+                // that the next scan rebuilds.
+                .addMigrations(Migrations.MIGRATION_1_2)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 .also { instance = it }
