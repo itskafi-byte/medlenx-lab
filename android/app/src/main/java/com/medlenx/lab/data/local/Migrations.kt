@@ -20,6 +20,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * [DoctorEntity] field by field, including the `INTEGER NOT NULL` on every
  * non-null Kotlin property and the index names, which Room derives from the
  * table and column.
+ *
+ * A shipped migration is never edited. Adding a column means adding a new
+ * `Migration(n, n+1)` and bumping the version, however much tidier it would be
+ * to fold the change into the statement that already created the table: a device
+ * that already ran the old revision keeps the old shape, and Room compares the
+ * schema it *has* against the entities it is handed. Editing the older statement
+ * would therefore break exactly the devices that upgraded in good faith. The
+ * checks in `android/checks/migrationcheck.py` replay the chain in order and hold
+ * the end result to the entities, so each statement is judged as the step it is
+ * rather than on its own.
  */
 object Migrations {
 

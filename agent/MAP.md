@@ -17,7 +17,7 @@ When you need the reference behaviour, read the Python file on the left.
 | `app/intelligence.py` | `data/repo/Intelligence.kt` | DGDA check, own-brand find, generic substitution, pitch note |
 | `app/rx_audit.py` | `data/repo/RxAudit.kt`, `data/repo/PHash.kt` | duplicate pHash, market share, CSV/clipboard |
 | `app/pharma_hub.py` | `data/repo/PharmaHub.kt`, `data/repo/NewsRepository.kt` | news, jobs, health days, browse |
-| `app/database.py` | `data/local/Daos.kt` + `Entities.kt` | 9 tables, 60 queries |
+| `app/database.py` | `data/local/Daos.kt` + `Entities.kt` | 10 tables, 70 queries |
 | `templates/index.html` | `ui/screens/**` | the UI being reproduced |
 
 ## Kotlin files by responsibility
@@ -36,9 +36,9 @@ When you need the reference behaviour, read the Python file on the left.
 | File | Lines | Role |
 |---|---|---|
 | `data/config/AppGraph.kt` | 110 | manual DI root |
-| `data/local/Entities.kt` | 327 | 9 `@Entity` + 17 projection rows. **Columns are snake_case via `@ColumnInfo`** |
-| `data/local/Daos.kt` | 651 | 5 DAOs, 60 `@Query`. Validated by `agent/roomcheck.py` |
-| `data/local/MedLenXDatabase.kt` | 47 | Room database. `fallbackToDestructiveMigration` — needs real migrations before release |
+| `data/local/Entities.kt` | 421 | 10 `@Entity` + 20 projection rows. **Columns are snake_case via `@ColumnInfo`** |
+| `data/local/Daos.kt` | 861 | 6 DAOs, 70 `@Query`. Validated by `agent/roomcheck.py` |
+| `data/local/MedLenXDatabase.kt` | 54 | Room database, `version = 3`. Real migrations (1→2 doctors, 2→3 `doctors.territory`); `fallbackToDestructiveMigration` stays registered for any version with no route |
 | `data/local/AssetCatalogue.kt` | 144 | imports `medex_full.json` into Room |
 | `data/local/Filters.kt` | 52 | filter state |
 | `data/remote/MedLenXVlClient.kt` | 286 | VL client |
