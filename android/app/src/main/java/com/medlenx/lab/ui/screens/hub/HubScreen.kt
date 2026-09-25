@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -14,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -38,8 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.data.model.DgdaAdjustedRow
+import com.medlenx.lab.data.model.DgdaBannedRow
+import com.medlenx.lab.data.model.DgdaPriceRow
 import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.NewsItem
@@ -72,7 +79,8 @@ import java.time.Month
  * Pharma Intelligence Hub.
  *
  * Web equivalent: `HubScreen` (App.tsx:1565-1590) — a header card, a segmented
- * five-tab strip, and one panel per tab.
+ * six-tab strip, and one panel per tab. The DGDA tab is the exception: it has
+ * no web counterpart and is built from the bundled dataset directly.
  *
  * Every value on screen comes from the bundled datasets, not from the Figma
  * mock. That mock invents most of its content: its health-day calendar lists
@@ -121,8 +129,212 @@ fun HubScreen(
             HubTab.News -> NewsTab(vm, onOpenJob)
             HubTab.Jobs -> JobsTab(vm, onOpenJob)
             HubTab.HealthDays -> HealthDaysTab(vm)
+            HubTab.Dgda -> DgdaTab(vm)
         }
     }
+}
+
+// ═══════════════════════════════════════ DGDA ═══════════════════════════════
+
+/**
+ * DGDA regulatory monitor: the banned, price-adjusted and gazette price lists.
+ *
+ * Android-only, and the one tab here with no web screen behind it — the backend
+ * exposes `/api/dgda/monitor` but no UI calls it, so this is laid out from the
+ * dataset shape instead of being ported. The data is the same bundled
+ * `dgda_prices.json` the compliance layer flags scans against, so what an
+ * officer reads here and what a prescription flags as banned cannot disagree.
+ */
+@Composable
+private fun DgdaTab(vm: HubViewModel) {
+    val d = vm.dgda()
+
+    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        MlxCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionHeader(
+                    title = "DGDA Regulatory Monitor",
+                    icon = Icons.Filled.Balance,
+                    modifier = Modifier.weight(1f),
+                )
+                if (d.gazette.isNotBlank()) {
+                    StatusPill(text = d.gazette, tone = PillTone.Slate)
+                }
+            }
+            Text(
+                text = listOfNotNull(
+                    d.source.takeIf { it.isNotBlank() },
+                    d.updatedAt.takeIf { it.isNotBlank() }?.let { "updated $it" },
+                ).joinToString(" • ").ifBlank { "Bundled regulatory dataset" },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+                modifier = Modifier.padding(top = MlxD.Space2, bottom = MlxD.Space3),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
+                MiniKpiTile("Banned", d.banned.size.toString(), Modifier.weight(1f))
+                MiniKpiTile("Price adjusted", d.priceAdjusted.size.toString(), Modifier.weight(1f))
+                MiniKpiTile("Gazette prices", d.prices.size.toString(), Modifier.weight(1f))
+            }
+        }
+
+        DgdaListCard(
+            title = "Banned items",
+            icon = Icons.Filled.Block,
+            count = d.banned.size,
+            emptyMessage = "No banned items in the bundled dataset.",
+        ) {
+            d.banned.forEach { DgdaBannedRow(it) }
+        }
+
+        DgdaListCard(
+            title = "Price adjusted",
+            icon = Icons.Filled.Paid,
+            count = d.priceAdjusted.size,
+            emptyMessage = "No price adjustments in the bundled dataset.",
+        ) {
+            d.priceAdjusted.forEach { DgdaAdjustedRow(it) }
+        }
+
+        DgdaListCard(
+            title = "Gazette prices",
+            icon = Icons.Filled.Medication,
+            count = d.prices.size,
+            emptyMessage = "No gazette price rows in the bundled dataset.",
+        ) {
+            d.prices.forEach { DgdaGazetteRow(it) }
+        }
+    }
+}
+
+/** One of the three sections, so an empty dataset still says so. */
+@Composable
+private fun DgdaListCard(
+    title: String,
+    icon: ImageVector,
+    count: Int,
+    emptyMessage: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    MlxCard {
+        SectionHeader(
+            title = title,
+            icon = icon,
+            subtitle = "$count ${if (count == 1) "entry" else "entries"}",
+        )
+        if (count == 0) {
+            MlxEmptyState(message = emptyMessage, icon = icon)
+        } else {
+            Column(
+                modifier = Modifier.padding(top = MlxD.Space3),
+                verticalArrangement = Arrangement.spacedBy(MlxD.Space3),
+                content = content,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DgdaBannedRow(row: DgdaBannedRow) {
+    val title = row.brand.ifBlank { row.generic }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MlxType.CardTitle, color = Mlx.Text900)
+            // The generic is dropped from the subtitle when it only repeats the
+            // brand, which is the common case in this file.
+            Text(
+                text = listOf(row.generic, row.reason)
+                    .filter { it.isNotBlank() && it != title }
+                    .joinToString(" • ")
+                    .ifBlank { "—" },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+            )
+        }
+        StatusPill(
+            text = "BANNED",
+            tone = PillTone.Red,
+            modifier = Modifier.padding(start = MlxD.Space2),
+        )
+    }
+}
+
+@Composable
+private fun DgdaAdjustedRow(row: DgdaAdjustedRow) {
+    val title = row.brand.ifBlank { row.generic }
+    // null on either side means "no change can be shown", not "no change".
+    val delta = if (row.oldMrp != null && row.newMrp != null) row.newMrp - row.oldMrp else null
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MlxType.CardTitle, color = Mlx.Text900)
+            Text(
+                text = listOf(row.generic, row.note)
+                    .filter { it.isNotBlank() && it != title }
+                    .joinToString(" • ")
+                    .ifBlank { "—" },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+            )
+        }
+        StatusPill(
+            text = "${bdt(row.oldMrp)} → ${bdt(row.newMrp)}",
+            tone = when {
+                delta == null || delta == 0.0 -> PillTone.Slate
+                delta > 0 -> PillTone.Red
+                else -> PillTone.Emerald
+            },
+            modifier = Modifier.padding(start = MlxD.Space2),
+        )
+    }
+}
+
+@Composable
+private fun DgdaGazetteRow(row: DgdaPriceRow) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.brand.ifBlank { row.generic.ifBlank { "—" } },
+                style = MlxType.CardTitle,
+                color = Mlx.Text900,
+            )
+            Text(
+                text = listOf(
+                    row.generic,
+                    row.company,
+                    listOf(row.strength, row.type).filter { it.isNotBlank() }
+                        .joinToString(" "),
+                ).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "—" },
+                style = MlxType.Meta,
+                color = Mlx.Text500,
+            )
+            if (row.pack.isNotBlank()) {
+                Text(text = row.pack, style = MlxType.MicroPill, color = Mlx.Text400)
+            }
+        }
+        StatusPill(
+            text = bdt(row.mrp),
+            tone = PillTone.Slate,
+            modifier = Modifier.padding(start = MlxD.Space2),
+        )
+    }
+}
+
+/** Prices in the app's existing BDT style (`DoctorPitchCard.mrpLabel`). */
+private fun bdt(v: Double?): String {
+    if (v == null) return "—"
+    return "${if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()} BDT"
 }
 
 // ═══════════════════════════════════════ NEWS ══════════════════════════════

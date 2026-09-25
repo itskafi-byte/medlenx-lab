@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.model.DgdaPrices
 import com.medlenx.lab.data.model.HealthCalendar
 import com.medlenx.lab.data.local.ScannedItemRow
 import com.medlenx.lab.data.model.MedexProduct
@@ -108,6 +109,15 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
             refreshNews()
         }
     }
+
+    /**
+     * The DGDA slice of the same [RegulatoryData] the TRIPS tab renders.
+     *
+     * Reads the one shared cache rather than loading again, so the monitor and
+     * the compliance flags raised on a scanned prescription always describe the
+     * same gazette.
+     */
+    fun dgda(): DgdaPrices = (tripsData ?: RegulatoryData.Empty).dgda
 
     fun calendar(): HealthCalendar = PharmaHub.healthDays(
         data = healthDays ?: HealthDays(),

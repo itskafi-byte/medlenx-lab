@@ -53,4 +53,11 @@ enum class HubTab(val label: String) {
     News("📰 Industry News"),
     Jobs("💼 Health & Pharma Jobs"),
     HealthDays("🗓️ Health Days"),
+
+    /**
+     * Android-only. The web hub has no DGDA tab: `/api/dgda/monitor` exists in
+     * the Python backend but no UI calls it, so this panel was built from the
+     * bundled dataset rather than ported from a screen.
+     */
+    Dgda("🛡️ DGDA Monitor"),
 }
