@@ -282,17 +282,118 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
     private val byBrand = LinkedHashMap<String, MutableList<MedexProduct>>()
     private var brandKeys: List<String> = emptyList()
 
+    /**
+     * Every indexed row, in catalogue order, carrying the two keys a company lookup
+     * needs pre-computed.
+     *
+     * This exists because [Intelligence.findOwnBrand] used to do the matching work
+     * itself, per call, over the whole 25K-row catalogue:
+     *
+     *     medexDb.filter { row -> sameCompany(row.company, ownCompany) && run {
+     *         val blob = normaliseKey(listOf(row.generic, row.ingredient, row.category)
+     *             .joinToString(" "))
+     *         blob.isNotEmpty() && (genericL in blob || blob in genericL)
+     *     } }
+     *
+     * That is a join + a normalisation for every row on every call. The audit drawer
+     * asks for a substitution for every item in the prescription, on the way to
+     * opening the drawer, so a 14-item prescription built ~350K of those strings -
+     * on the main thread, which is why the drawer sat on "Loading audit breakdown..."
+     * until it was killed. Both keys are pure functions of the row, so they are
+     * computed once, here.
+     */
+    private var rows: List<Candidate> = emptyList()
+
+    /** The distinct company keys in [rows], so a lookup does not derive them each time. */
+    private var companyKeys: List<String> = emptyList()
+
     init { build(entries) }
 
     fun build(entries: Iterable<MedexProduct>): MedexIndex {
         byBrand.clear()
         for (entry in entries) {
             val key = MedicineMatcher.normalizeBrand(entry.brandName)
+            // Rows with no usable brand are not indexed - they were already invisible
+            // to `all`, and [rows] is derived from the same map so it stays invisible
+            // to the company lookup too.
             if (key.isEmpty()) continue
             byBrand.getOrPut(key) { mutableListOf() }.add(entry)
         }
         brandKeys = byBrand.keys.toList()
+
+        // `all`'s order, which is NOT catalogue order: `byBrand.values.flatten()`
+        // groups each brand's variants behind the first time that brand was seen.
+        // [Intelligence.findOwnBrand] picks between equal-strength candidates with a
+        // stable sort, so the candidate ORDER decides which product wins - [rows] has
+        // to be built in exactly the sequence the old code filtered, or a substitution
+        // could change for no visible reason.
+        //
+        // `companyKey` is memoised over distinct company strings while building: the
+        // catalogue has a handful of hundred distinct manufacturer names and 25K rows.
+        val keyCache = HashMap<String, String>()
+        rows = byBrand.values.flatten().map { product ->
+            Candidate(
+                product = product,
+                companyKey = keyCache.getOrPut(product.company) {
+                    MedicineMatcher.companyKey(product.company)
+                },
+            )
+        }
+        companyKeys = rows.asSequence()
+            .map { it.companyKey }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
         return this
+    }
+
+    /**
+     * The rows [Intelligence.findOwnBrand] may consider for [companyKey], in
+     * catalogue order.
+     *
+     * [MedicineMatcher.sameCompany] is a loose test - equal keys, or either key a
+     * prefix of the other - so this cannot be a single map lookup. It selects the
+     * matching company keys (the catalogue has hundreds of distinct companies, not
+     * 25K) and keeps the rows whose key is one of them. The scan that remains is a
+     * `Set` lookup per row against pre-computed strings: no allocation, no
+     * normalisation, and the result is byte-for-byte the list the old filter built.
+     */
+    fun ownCandidates(companyKey: String): List<Candidate> {
+        if (companyKey.isEmpty()) return emptyList()
+        val wanted = buildSet {
+            for (key in companyKeys) {
+                if (key == companyKey || key.startsWith(companyKey) ||
+                    companyKey.startsWith(key)
+                ) {
+                    add(key)
+                }
+            }
+        }
+        if (wanted.isEmpty()) return emptyList()
+        return rows.filter { it.companyKey in wanted }
+    }
+
+    /**
+     * A catalogue row plus everything a company/generic match needs pre-computed.
+     *
+     * [blob] is the normalised `generic + ingredient + category` that
+     * [Intelligence.findOwnBrand] tests containment against.
+     */
+    class Candidate internal constructor(
+        val product: MedexProduct,
+        internal val companyKey: String,
+    ) {
+        /**
+         * `generic + ingredient + category`, normalised.
+         *
+         * Computed on access, and only for the rows that survive the company filter -
+         * that is the point of the index. The old code built this string for all 25K
+         * rows on every call.
+         */
+        internal val blob: String
+            get() = Intelligence.normaliseKey(
+                listOf(product.generic, product.ingredient, product.category).joinToString(" ")
+            )
     }
 
     val distinctBrands: Int get() = brandKeys.size
@@ -301,8 +402,9 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
     /**
      * Every indexed product, in catalogue order.
      *
-     * [Intelligence.findOwnBrand] has to scan by company rather than by brand,
-     * which the brand-keyed map cannot serve.
+     * The company-keyed work is served by [ownCandidates], not by scanning this; the
+     * list is here for the callers that want the whole catalogue (the Hub's browse
+     * list, the scan screen's variant picker).
      */
     val all: List<MedexProduct> get() = byBrand.values.flatten()
 

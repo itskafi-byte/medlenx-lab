@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -107,7 +108,14 @@ fun MlxTopBar(
             BrandTile(size = 32.dp)
         }
 
-        SearchField(query = query, onQueryChange = onQueryChange, modifier = Modifier.weight(1f))
+        // The weight is what keeps this usable: the row's other children are measured
+        // first and this one gets what is left, so a minimum width is its floor and the
+        // weight its share.
+        SearchField(
+            query = query,
+            onQueryChange = onQueryChange,
+            modifier = Modifier.weight(1f).widthIn(min = 110.dp),
+        )
 
         StatusChipRow(state = state)
 
@@ -220,10 +228,18 @@ private fun StatusChipRow(state: TopBarState) {
             )
         }
         // Full web string (templates/index.html:176), not Figma's shortened "Set company".
+        //
+        // Capped and single-line. A real company name - "Square Pharmaceuticals PLC" is
+        // 30 characters - made the pill as wide as it needed, and because a Row measures
+        // its non-weighted children first, the weighted search field beside it was left
+        // with nothing but its magnifier.
         StatusPill(
             text = state.companyName ?: "Set company in Settings",
             tone = PillTone.Dark,
             icon = Icons.Filled.Business,
+            modifier = Modifier.widthIn(max = 140.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         if (state.latencyMs != null) {
             StatusPill(

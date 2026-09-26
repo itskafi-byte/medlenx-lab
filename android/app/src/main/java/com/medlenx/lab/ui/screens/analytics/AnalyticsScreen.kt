@@ -678,8 +678,9 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow) {
                 color = Mlx.Text500,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
-            // Share of voice drives the bar colour: >=100 green, >=50 amber, else red.
-            ProgressTrack(progress = row.shareOfVoice / 100f)
+            // Flat emerald-500, the web's leaderboard bar (`index.html:2667`). The
+            // web's threshold colouring is on the "N% conv" text, not on the bar.
+            ProgressTrack(progress = row.shareOfVoice / 100f, fillColor = Mlx.Ok400)
         }
 
         Column(horizontalAlignment = Alignment.End) {

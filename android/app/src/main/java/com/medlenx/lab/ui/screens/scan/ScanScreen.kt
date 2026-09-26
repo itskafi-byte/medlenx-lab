@@ -568,7 +568,8 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
     if (state.phase == ScanPhase.Scanning) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(state.progressText.ifBlank { "Extracting with MedLenX VL..." }, style = MlxType.Meta)
-            ProgressTrack(progress = state.progress)
+            // Brand blue, matching the web's `#progressBar` (`bg-brand-600`).
+            ProgressTrack(progress = state.progress, fillColor = Mlx.Brand500)
         }
     }
 }

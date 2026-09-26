@@ -171,7 +171,21 @@ fun MiniKpiTile(
     }
 }
 
-/** 6dp track. Colour follows the web thresholds: emerald / amber / rose. */
+/**
+ * 6dp track.
+ *
+ * The fill is a flat colour: the web's bars do not change hue with their value. Its
+ * `#kpiMarketBar` is `bg-emerald-600`, its target-progress bar is the brand accent
+ * (`--brand-accent`, `#059669`), its scan-progress bar is `bg-brand-600` and its
+ * doctor-leaderboard bar is `bg-emerald-500` - and where the web *does* colour by
+ * threshold it colours the number beside the bar, not the bar (the target percentage
+ * text, and the leaderboard's "N% conv"). This used to invent thresholds
+ * (emerald at 100%, amber at 50%, rose below) and so painted a 14% Target Share bar
+ * pink under a green delta, and the scan bar rose at 15%.
+ *
+ * [fillColor] defaults to emerald-600, the web's brand accent; callers whose web
+ * counterpart is a different flat colour pass it (the scan bar is brand blue).
+ */
 @Composable
 fun ProgressTrack(
     progress: Float,
@@ -181,11 +195,7 @@ fun ProgressTrack(
     trackColor: Color = Mlx.Brand200,
 ) {
     val clamped = progress.coerceIn(0f, 1f)
-    val fill = fillColor ?: when {
-        clamped >= 1f -> Mlx.Ok500
-        clamped >= 0.5f -> Color(0xFFF59E0B)
-        else -> Color(0xFFFB7185)
-    }
+    val fill = fillColor ?: Mlx.Ok500
     Box(
         modifier = modifier
             .fillMaxWidth()

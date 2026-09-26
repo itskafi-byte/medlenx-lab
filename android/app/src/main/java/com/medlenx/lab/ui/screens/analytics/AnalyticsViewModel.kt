@@ -9,6 +9,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
@@ -21,11 +23,13 @@ import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
 import com.medlenx.lab.data.repo.GenericMatrix
 import com.medlenx.lab.data.repo.Intelligence
+import com.medlenx.lab.data.repo.MedexIndex
 import com.medlenx.lab.data.repo.MostPrescribed
 import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.ui.screens.rx.classBreakdownOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
@@ -153,25 +157,72 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     var breakdownError by mutableStateOf<String?>(null)
         private set
 
+    /** The in-flight audit load, so a second tap cannot leave two loads racing. */
+    private var auditLoadJob: Job? = null
+
     fun showBreakdown(row: RecentRxRow) {
+        // Tapping the same row twice, or two rows in quick succession, used to start a
+        // second load that raced the first: whichever finished last set `breakdown`, so
+        // the drawer could settle on the prescription the user tapped first. The older
+        // load is cancelled instead.
+        auditLoadJob?.cancel()
         breakdownLoading = true
         breakdownError = null
-        viewModelScope.launch {
-            val loaded = runCatching { loadDrawer(row.id) }.getOrNull()
-            breakdown = loaded
-            breakdownLoading = false
-            if (loaded == null) {
-                breakdownError = "Could not load the audit summary for ${row.doctor}'s " +
-                    "prescription. The items may not have been stored."
+        auditLoadJob = viewModelScope.launch {
+            try {
+                // Off the main thread. `loadDrawer` resolves a generic substitution for
+                // every item, and each one searches the 25K-row catalogue and the DGDA
+                // gazette; on `Dispatchers.Main` a 14-item prescription blocked the UI
+                // long enough to look like a hang.
+                val loaded = withContext(Dispatchers.Default) { loadDrawer(row.id) }
+                breakdown = loaded
+                if (loaded == null) {
+                    breakdownError = "Could not load the audit summary for ${row.doctor}'s " +
+                        "prescription. The items may not have been stored."
+                }
+            } catch (cancelled: CancellationException) {
+                // The drawer was dismissed, or another row was opened: this load's result
+                // is no longer wanted. Rethrown rather than swallowed, so the scope sees
+                // the cancellation - `runCatching` here would have caught it as a failure
+                // and gone on to publish a stale `breakdown`.
+                throw cancelled
+            } catch (failure: Throwable) {
+                breakdown = null
+                breakdownError = failure.message
+                    ?: "Could not load the audit summary for ${row.doctor}'s prescription."
+            } finally {
+                // Only if this is still the current load: a cancelled job must not clear
+                // the flag the load that replaced it has just set, and a failed one must
+                // never leave the drawer spinning on "Loading audit breakdown...".
+                if (auditLoadJob === currentCoroutineContext()[Job]) breakdownLoading = false
             }
         }
     }
 
     fun dismissBreakdown() {
+        auditLoadJob?.cancel()
+        auditLoadJob = null
         breakdown = null
         breakdownLoading = false
         breakdownError = null
     }
+
+    /**
+     * [block]'s result, or null if it failed - but a cancellation is rethrown.
+     *
+     * `runCatching` catches `Throwable`, which includes `CancellationException`, and a
+     * swallowed cancellation is not a failure: the coroutine keeps running, reports
+     * success to its parent, and its caller carries on as if the work had finished.
+     * Every failure-swallowing call in [loadDrawer] went through `runCatching`.
+     */
+    private suspend fun <T> failureAsNull(block: suspend () -> T): T? =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            null
+        }
 
     /**
      * Assembles the drawer payload.
@@ -188,8 +239,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private suspend fun loadDrawer(prescriptionId: Long): RxAuditDrawer? {
         val prescription = prescriptionDao.byId(prescriptionId) ?: return null
-        val rows = runCatching { prescriptionDao.medicinesFor(prescriptionId) }
-            .getOrDefault(emptyList())
+        val rows = failureAsNull { prescriptionDao.medicinesFor(prescriptionId) }
+            .orEmpty()
         val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
         val lines = rows.map { RxAudit.lineOf(it) }
 
@@ -198,14 +249,14 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         val portfolios = if (ownCompany.isBlank()) {
             List(lines.size) { null }
         } else {
-            val index = runCatching { app.graph.scanRepository.medexIndex() }.getOrNull()
+            val index = failureAsNull { app.graph.scanRepository.medexIndex() }
             val regulatory = app.graph.regulatoryRepository.data()
             lines.mapIndexed { i, line ->
                 val company = line.company.orEmpty()
                 if (line.generic.isBlank() || RxAudit.sameCompanyLoose(company, ownCompany)) {
                     null
                 } else {
-                    runCatching {
+                    failureAsNull {
                         Intelligence.genericSubstitution(
                             data = regulatory,
                             detectedBrand = line.brand,
@@ -215,9 +266,12 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                             detectedType = line.type,
                             detectedImageUrl = rows.getOrNull(i)?.imageUrl,
                             ownCompany = ownCompany,
-                            medexDb = index?.all.orEmpty(),
+                            // The index itself, not its flat row list: `MedexIndex`
+                            // carries the company keys and the normalised generic blobs
+                            // pre-computed, which is what makes this loop affordable.
+                            medex = index ?: MedexIndex(),
                         )
-                    }.getOrNull()
+                    }
                 }
             }
         }
@@ -233,7 +287,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             // web's classBreakdown does.
             slices = classBreakdownOf(rows.map { it.therapeuticClass }),
             duplicateOf = prescription.duplicateOf?.let { original ->
-                runCatching { prescriptionDao.byId(original) }.getOrNull()
+                failureAsNull { prescriptionDao.byId(original) }
             },
         )
     }

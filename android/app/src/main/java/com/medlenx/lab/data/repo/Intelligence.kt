@@ -138,21 +138,22 @@ object Intelligence {
     fun findOwnBrand(
         ownCompany: String,
         generic: String,
-        medexDb: List<MedexProduct>,
+        medex: MedexIndex,
         preferStrength: String = "",
     ): MedexProduct? {
         if (generic.isEmpty()) return null
-        if (MedicineMatcher.companyKey(ownCompany).isEmpty()) return null
+        val companyKey = MedicineMatcher.companyKey(ownCompany)
+        if (companyKey.isEmpty()) return null
         val genericL = normaliseKey(generic)
 
-        val candidates = medexDb.filter { row ->
-            MedicineMatcher.sameCompany(row.company, ownCompany) && run {
-                val blob = normaliseKey(
-                    listOf(row.generic, row.ingredient, row.category).joinToString(" ")
-                )
-                blob.isNotEmpty() && (genericL in blob || blob in genericL)
-            }
-        }
+        // Only the own company's rows are considered - 942 of the 25,105 for the
+        // largest manufacturer, instead of every row - and each candidate's normalised
+        // generic blob is built on access rather than ahead of the filter (see
+        // [MedexIndex.Candidate]). The containment test is unchanged, as is the
+        // candidate list and its order, so the product picked is the same one.
+        val candidates = medex.ownCandidates(companyKey)
+            .filter { it.blob.isNotEmpty() && (genericL in it.blob || it.blob in genericL) }
+            .map { it.product }
         if (candidates.isEmpty()) return null
 
         val exact = candidates.filter { normaliseKey(it.generic) == genericL }
@@ -162,8 +163,9 @@ object Intelligence {
         if (want.isNotEmpty()) {
             pool.firstOrNull { want in normaliseKey(it.strength) }?.let { return it }
         }
-        // Python's list.sort is stable, and so is sortedBy — equal-length
-        // strengths keep their catalogue order either way.
+        // Python's list.sort is stable, and so is sortedBy — equal-length strengths
+        // keep the candidate order, which is the catalogue's brand-flattened order
+        // (see [MedexIndex]), not raw catalogue order.
         return pool.sortedBy { it.strength.length }.first()
     }
 
@@ -183,7 +185,7 @@ object Intelligence {
         detectedType: String,
         detectedImageUrl: String?,
         ownCompany: String,
-        medexDb: List<MedexProduct>,
+        medex: MedexIndex,
     ): Substitution? {
         if (ownCompany.isEmpty()) return null
         if (detectedCompany.isNotEmpty() &&
@@ -194,7 +196,7 @@ object Intelligence {
         val generic = detectedGeneric.trim()
         if (generic.isEmpty()) return null
 
-        val own = findOwnBrand(ownCompany, generic, medexDb, preferStrength = detectedStrength)
+        val own = findOwnBrand(ownCompany, generic, medex, preferStrength = detectedStrength)
             ?: return null
 
         val detectedPrice = gazetteLookup(data.dgda, detectedBrand, generic)

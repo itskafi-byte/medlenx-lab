@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.model.ConfidenceBand
 import com.medlenx.lab.data.model.confidenceBand
@@ -60,6 +61,13 @@ fun StatusPill(
      */
     dotColor: Color? = null,
     style: TextStyle = com.medlenx.lab.ui.theme.MlxType.MicroPill,
+    /**
+     * Defaults match `Text`: as many lines as it needs, clipped. Only the top bar's
+     * company pill passes a limit, because it shares a row with the search field and
+     * an unconstrained pill there starves it - see `MlxTopBar.CompanyPill`.
+     */
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Row(
         modifier = modifier
@@ -84,7 +92,13 @@ fun StatusPill(
                 modifier = Modifier.size(12.dp),
             )
         }
-        Text(text = text, style = style, color = tone.fg)
+        Text(
+            text = text,
+            style = style,
+            color = tone.fg,
+            maxLines = maxLines,
+            overflow = overflow,
+        )
     }
 }
 

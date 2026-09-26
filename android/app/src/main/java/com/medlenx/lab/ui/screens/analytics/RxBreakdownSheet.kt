@@ -133,7 +133,15 @@ fun RxBreakdownSheet(
                     .fillMaxSize()
                     .padding(top = MlxD.Space5)
                     .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(Mlx.Screen),
+                    .background(Mlx.Screen)
+                    // The dialog goes edge-to-edge (`decorFitsSystemWindows = false`),
+                    // so nothing insets this panel for us: without the two calls the
+                    // title row sat under the status-bar clock and the footer's Export /
+                    // Copy buttons under the navigation bar. Applied after the
+                    // clip/background so the surface still paints to the window edges
+                    // and only the *content* is inset out of the bars' way.
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
             ) {
                 if (drawer == null) {
                     LoadingHeader(loading = loading, loadError = loadError, onDismiss = onDismiss)

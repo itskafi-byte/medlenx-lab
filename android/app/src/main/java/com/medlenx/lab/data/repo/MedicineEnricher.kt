@@ -100,7 +100,7 @@ object MedicineEnricher {
             detectedType = form,
             detectedImageUrl = pick?.image,
             ownCompany = ownCompany,
-            medexDb = index.all,
+            medex = index,
         )
 
         return EnrichedMedicine(
