@@ -798,13 +798,13 @@ private fun SubstitutionCard(
                 Icon(
                     imageVector = Icons.Filled.Campaign,
                     contentDescription = null,
-                    tint = Mlx.Brand600,
+                    tint = Mlx.Brand500,
                     modifier = Modifier.size(12.dp),
                 )
                 Text(
                     text = "SMART PITCH NOTE",
                     style = MlxType.RegulatoryPill.copy(letterSpacing = 0.08.em),
-                    color = Mlx.Brand600,
+                    color = Mlx.Brand500,
                 )
             }
             Text(
@@ -820,7 +820,7 @@ private fun SubstitutionCard(
                 PitchActionButton(
                     text = "Copy pitch",
                     icon = Icons.Filled.ContentCopy,
-                    background = Mlx.Brand600,
+                    background = Mlx.Brand500,
                     onClick = { onCopyPitch(substitution.pitch) },
                 )
                 PitchActionButton(
@@ -841,7 +841,7 @@ private fun ProductCell(
     own: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = MlxShape.Chip
     Column(
         modifier = modifier
             .background(if (own) Mlx.Ok50 else Mlx.Surface, shape)
