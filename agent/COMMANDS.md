@@ -51,10 +51,35 @@ python3 agent/roomcheck.py           # every @Query column resolves against its 
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 ```
-- `imports.py` healthy: `imports: no findings` (10 checks: missing imports,
+- `imports.py` healthy: `imports: no findings` (11 checks: missing imports,
   duplicate members, orphaned `private set`, orphaned KDoc,
   composable-in-`remember`, scope leak, missing icon import, unresolved symbol,
-  missing return, unknown theme token)
+  missing return, unknown theme token, missing cross-package import)
+
+The eleventh check is the one the compiler finally had to make for me. The build
+reported 30 errors from two files; five were the cause and the other 25 were
+cascades -- a type that cannot be resolved has no members, so `.copy(...)`,
+`.name` and `.id` fail on it too. Both existing symbol checks missed it:
+
+  * `check_missing_imports` works from a hand-written symbol -> import table, so a
+    symbol added after that table was written is not in it.
+  * `check_undefined_symbols` reports a name declared *nowhere*. These were
+    declared, just not anywhere that file could see. "Declared in the project" is
+    not the same as "resolvable here", and an import is exactly what decides it.
+
+So it indexes every capitalised top-level declaration with the package that
+declares it, then flags a use from a different package that has no import. It is
+verified against the compiler's own output: it reports those same six lines, and
+nothing else, on the tree that failed to build.
+
+Two things it must not flag, both found by running it: an **enum entry**, which is
+a declaration and a use at once (`None("No catalogue match")` reads exactly like a
+reference), and text inside a **raw string**. The second was a real bug in
+`mask_literals`, shared by every check: it did not know `"""`, so the first two
+quotes read as an empty literal and the rest of the prompt became code --
+`Bengali` in the VL prompt was reported as a missing import. Raw strings are now
+masked with their newlines kept, which also stopped a multi-line literal from
+collapsing onto one line and shifting every line number after it.
 
 `check_undefined_symbols` sees only the segment *before* a dot, so it resolves
 `MlxShape` and never the `Medium2` after it -- the same blind spot that let

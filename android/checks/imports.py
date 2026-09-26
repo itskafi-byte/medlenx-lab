@@ -26,6 +26,7 @@ Checks
    explicitly; only `= expr` bodies infer their result.
 10. Unknown theme token - `MlxShape.Medium2`. Check 8 sees only the segment
    before the dot, so the member after it is never resolved.
+11. Missing import for a project declaration used from another package.
 
 Run it from anywhere: the source root is derived from this file's own path. A
 previous revision used a relative root, so running it from the repo root walked a
@@ -164,11 +165,23 @@ def mask_literals(text: str) -> str:
     A template expression is Kotlin code: it can reference a real type, and it
     can contain further literals. So it is kept verbatim and scanned
     recursively, while the surrounding literal text is replaced by `""`.
+
+    Raw strings (`\"\"\"`) are handled first, and their content is replaced by
+    spaces *rather than removed*, keeping the newlines in place. Without that
+    branch the first two of the three opening quotes read as an empty literal and
+    everything after them was treated as code: `Bengali` inside the VL prompt in
+    MedLenXVlClient.kt was reported as a missing import, and because the masker
+    collapsed a multi-line literal onto one line, every line number after it was
+    wrong as well.
     """
     out = []
     i, n = 0, len(text)
     while i < n:
         c = text[i]
+        if c == '"' and text.startswith('"""', i):
+            masked, i = _mask_raw_string(text, i)
+            out.append(masked)
+            continue
         if c == '"' or c == "'":
             masked, i = _mask_one_literal(text, i)
             out.append(masked)
@@ -176,6 +189,33 @@ def mask_literals(text: str) -> str:
         out.append(c)
         i += 1
     return "".join(out)
+
+
+def _mask_raw_string(text: str, i: int):
+    """`i` is the first of the three opening quotes. (replacement, index past close)."""
+    n = len(text)
+    i += 3
+    parts = ['""']
+    while i < n:
+        if text.startswith('"""', i):
+            return "".join(parts), i + 3
+        c = text[i]
+        if c == "$" and i + 1 < n and text[i + 1] == "{":
+            inner, i = _mask_template(text, i + 2)
+            parts.append(inner)
+            continue
+        if c == "$" and i + 1 < n and (text[i + 1].isalpha() or text[i + 1] == "_"):
+            # `$name` is a property reference, kept for the same reason as above.
+            j = i + 1
+            while j < n and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            parts.append(text[i:j])
+            i = j
+            continue
+        # A raw string has no escapes, so a backslash is literal text.
+        parts.append("\n" if c == "\n" else " ")
+        i += 1
+    return "".join(parts), i
 
 
 def _mask_one_literal(text: str, i: int):
@@ -470,6 +510,181 @@ def check_theme_tokens():
                         (path, code[: m.start()].count("\n") + 1, obj, member,
                          sorted(members[obj]))
                     )
+    return findings
+
+
+# ── Declarations and imports, for resolving a cross-package reference ────────
+
+# A top-level declaration name, anchored to the start of a line -- so every use
+# must pass re.M, and a call that forgets it silently matches nothing at all.
+# `fun` demands `(` or `<` straight after the name, because without that an
+# *extension* receiver reads as a declaration: `private fun RowScope.Foo(` indexed
+# `RowScope` as a type declared in that file, and `private fun
+# FilterState.drilldownCaption()` made `FilterState` look locally declared in
+# AnalyticsScreen.kt -- hiding the missing import this check exists to find.
+_TOP_DECL = re.compile(
+    r"^[ \t]*"
+    r"(?:@\w+(?:\([^)]*\))?[ \t]*)*"
+    r"(?:(?:public|internal|private|abstract|open|sealed|data|enum|annotation|"
+    r"value|inline|suspend|operator|override|tailrec|external|const|lateinit)[ \t]+)*"
+    r"(?:class|interface|object|typealias|val|var)[ \t]+"
+    r"([A-Z]\w*)",
+    re.M,
+)
+# Any declaration at all, at any indentation: used only to decide whether a name
+# is resolvable *within* the file being read, so over-collecting is harmless.
+_ANY_DECL = re.compile(
+    r"\b(?:class|interface|object|typealias)\s+([A-Z]\w*)"
+    r"|\bfun\s+([A-Z]\w*)\s*[(<]"
+    r"|\b(?:val|var)\s+([A-Z]\w*)\s*[:=]"
+)
+_IMPORT = re.compile(r"^import\s+([\w.]+?)(?:\.\*)?(?:\s+as\s+(\w+))?\s*$", re.M)
+
+
+def _package_of(code: str) -> str:
+    m = re.search(r"^package\s+([\w.]+)", code, re.M)
+    return m.group(1) if m else ""
+
+
+def _enum_entry_names(code: str) -> set[str]:
+    """
+    The entry names of every `enum class` in the file.
+
+    An enum entry is a declaration and a use at the same time: in
+    `enum class MatchType { Exact("..."), None("...") }` the `None` is not a
+    reference to anything, but it reads exactly like one. Seven of the ten false
+    positives the check first produced were entries -- `Failed` in
+    CatalogueState, `None` in CompanyVerification, `Violet(Mlx.VioletBg, ...)`
+    in a pill tone enum, `HealthDays("...")` in HubTab.
+
+    Entries are the leading identifiers of the comma-separated pieces at depth 0
+    of the body, up to the `;` that separates them from the members. That handles
+    a one-line enum (`{ A, B, C }`) and a constructor-argument entry
+    (`None("No catalogue match"),`) alike.
+    """
+    names: set[str] = set()
+    for m in re.finditer(r"\benum\s+class\s+\w+[^{]*\{", code):
+        body, _ = _balanced_body(code, m.end() - 1)
+        # Entries end at the `;` that introduces the members, if there is one.
+        cut = body.find(";")
+        if cut != -1:
+            body = body[:cut]
+        for piece in body.split(","):
+            em = re.search(r"^[ \t]*([A-Z]\w*)", piece, re.M)
+            if em:
+                names.add(em.group(1))
+    return names
+
+
+def _balanced_body(text: str, open_idx: int) -> tuple[str, int]:
+    """Body between the `{` at open_idx and its match, plus the index past it."""
+    depth, i, in_str = 0, open_idx, False
+    while i < len(text):
+        c = text[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_idx + 1 : i], i + 1
+        i += 1
+    return text[open_idx + 1 :], len(text)
+
+
+def _project_decl_packages() -> dict[str, set[str]]:
+    """Capitalised top-level declaration name -> the packages declaring it."""
+    out: dict[str, set[str]] = defaultdict(set)
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
+            pkg = _package_of(code)
+            for m in _TOP_DECL.finditer(code):
+                name = m.group(1)
+                if name:
+                    out[name].add(pkg)
+    return out
+
+
+def check_missing_project_imports():
+    """
+    A project declaration used from another package without importing it.
+
+    This is the fault the compiler reported as 30 errors, of which 5 were the
+    cause: `DoctorDao`, `DoctorEntity` and `DoctorIdentity` referenced from
+    ScanRepository.kt, and `FilterState` / `DrillCountRow` from
+    AnalyticsScreen.kt. Every remaining error was a cascade from those -- a type
+    that cannot be resolved has no members, so `.copy(...)`, `.name` and `.id`
+    all fail on it too.
+
+    Nothing here caught it, and the reason is worth keeping:
+
+      * `check_missing_imports` works from a hand-written symbol -> import table,
+        so a symbol added after that table was written is simply not in it.
+      * `check_undefined_symbols` reports a name declared *nowhere* and imported
+        nowhere. These were declared -- just not anywhere this file could see.
+        Treating "declared in the project" as "resolvable here" is precisely the
+        question an import decides.
+
+    Deliberately not flagged:
+
+      * a name used qualified (`com.foo.Bar(...)`, `HubTab.HealthDays`) -- no
+        import is needed, and a segment after a dot is not a reference;
+      * a name declared anywhere in the same file, or in the same package;
+      * a name covered by a star import;
+      * lowercase names. A top-level `fun` or property with a lowercase name is
+        far more likely to be a member or local of the surrounding scope, and
+        the false positives would drown the finding.
+    """
+    declared = _project_decl_packages()
+    if not declared:
+        return []
+
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
+            pkg = _package_of(code)
+
+            imported, starred = set(), set()
+            for m in _IMPORT.finditer(code):
+                target = m.group(1)
+                if m.group(2):
+                    imported.add(m.group(2))
+                elif m.group(0).rstrip().endswith("*"):
+                    starred.add(target)
+                else:
+                    imported.add(target.split(".")[-1])
+
+            local = {g for m in _ANY_DECL.finditer(code) for g in m.groups() if g}
+            local |= _enum_entry_names(code)
+            local |= {name for name, pkgs in declared.items() if pkg in pkgs}
+
+            for m in re.finditer(r"(?<![.\w])([A-Z]\w*)", code):
+                name = m.group(1)
+                if name in local or name in imported:
+                    continue
+                pkgs = declared.get(name)
+                if not pkgs or all(p == pkg for p in pkgs):
+                    continue
+                if any(s == q or q.startswith(s + ".") for s in starred for q in pkgs):
+                    continue
+                findings.append(
+                    (path, code[: m.start()].count("\n") + 1, name, sorted(pkgs))
+                )
     return findings
 
 
@@ -1028,6 +1243,14 @@ def main() -> int:
         print("ORPHANED `private set`")
         for path, line, prev in orphan:
             print(f"  {path}:{line}  (preceded by: {prev!r})")
+        print()
+
+    stranded = check_missing_project_imports()
+    if stranded:
+        findings += len(stranded)
+        print("MISSING IMPORT - declared in the project, used from another package")
+        for path, line, name, pkgs in stranded:
+            print(f"  {path}:{line}  {name}  ->  import {min(pkgs, key=len)}.{name}")
         print()
 
     tokens = check_theme_tokens()

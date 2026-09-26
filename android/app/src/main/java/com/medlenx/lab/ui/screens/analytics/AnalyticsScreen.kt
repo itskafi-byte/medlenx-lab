@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.medlenx.lab.data.local.DrillCountRow
+import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.ConfidenceBadge
 import com.medlenx.lab.ui.components.DarkHero

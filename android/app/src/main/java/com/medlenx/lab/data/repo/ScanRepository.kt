@@ -1,6 +1,9 @@
 package com.medlenx.lab.data.repo
 
 import com.medlenx.lab.data.local.AssetCatalogue
+import com.medlenx.lab.data.local.DoctorDao
+import com.medlenx.lab.data.local.DoctorEntity
+import com.medlenx.lab.data.local.DoctorIdentity
 import com.medlenx.lab.data.local.MedexDao
 import com.medlenx.lab.data.local.PrescriptionDao
 import com.medlenx.lab.data.local.PrescriptionEntity
