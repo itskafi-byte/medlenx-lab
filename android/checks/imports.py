@@ -648,7 +648,14 @@ def check_missing_project_imports():
     """
     declared = _project_decl_packages()
     if not declared:
-        return []
+        # An empty index makes this check vacuous: it would walk every file,
+        # match every name against nothing, and report a clean tree. That is the
+        # failure mode this project keeps hitting (a check that runs, finds
+        # nothing, and passes because it looked at nothing), so it is raised as a
+        # fatal error rather than returned as an empty finding list.
+        raise RuntimeError(
+            "no project declarations indexed -- check ROOT and _TOP_DECL"
+        )
 
     findings = []
     for dirpath, _, files in os.walk(ROOT):
@@ -1245,7 +1252,11 @@ def main() -> int:
             print(f"  {path}:{line}  (preceded by: {prev!r})")
         print()
 
-    stranded = check_missing_project_imports()
+    try:
+        stranded = check_missing_project_imports()
+    except RuntimeError as exc:
+        print(f"imports: {exc}", file=sys.stderr)
+        return 1
     if stranded:
         findings += len(stranded)
         print("MISSING IMPORT - declared in the project, used from another package")
