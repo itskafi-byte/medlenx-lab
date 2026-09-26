@@ -239,7 +239,8 @@ private const val COMPANY_DRILL_COLUMN_ROWS = Drilldown.TOP_GENERIC_ROWS
 /** How the modal describes the window it is summarising. */
 private fun FilterState.drilldownCaption(): String = when {
     days == null -> "all time"
-    district == null && territory == null && specialty == null && mrId == null ->
+    district == null && territory == null && specialty == null && mrId == null &&
+        source == null ->
         "last $days days"
     else -> "last $days days, filtered"
 }

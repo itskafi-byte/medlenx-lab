@@ -37,9 +37,12 @@ import kotlinx.coroutines.launch
  * `get_dashboard_kpis`, `get_most_prescribed_medicines`, `get_company_share`
  * and `get_top_doctor_prescribers`.
  *
- * The global filter bar's district / territory / specialty / MR dimensions are
- * **not** applied yet — the FilterSheet that would set them is still unbuilt, so
- * every aggregate runs unfiltered over a 30-day window.
+ * Every aggregate runs through [FilterState] — the global filter bar's district /
+ * territory / specialty / MR / source dimensions and its day window, matching the
+ * web's `filterQuery()` and `_filter_sql` (`database.py:1408`). A null dimension
+ * contributes no clause; the day window sets the `since` bound, and the
+ * comparison period is the equally long window immediately before it
+ * (`prevStart = since - span`, :334).
  */
 class AnalyticsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -205,6 +208,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 territory = f.territory,
                 specialty = f.specialty,
                 mrId = f.mrId,
+                source = f.source,
             ),
         )
     }
@@ -235,24 +239,24 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         openDrilldown { f, since ->
             val generics = prescriptionDao.companyGenerics(
                 company, since, COMPANY_DRILL_LIMIT,
-                f.district, f.territory, f.specialty, f.mrId,
+                f.district, f.territory, f.specialty, f.mrId, f.source,
             )
             Drilldown.Company(
                 company = company,
                 // Both totals, so the dialog can show the true count and still
                 // explain where the web's smaller figure comes from.
                 totalItems = prescriptionDao.companyItemCount(
-                    company, since, f.district, f.territory, f.specialty, f.mrId,
+                    company, since, f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
                 topGenericItems = generics.sumOf { it.count },
                 generics = generics,
                 brands = prescriptionDao.companyBrands(
                     company, since, COMPANY_DRILL_LIMIT,
-                    f.district, f.territory, f.specialty, f.mrId,
+                    f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
                 doctors = prescriptionDao.companyDoctors(
                     company, since, COMPANY_DRILL_LIMIT,
-                    f.district, f.territory, f.specialty, f.mrId,
+                    f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
             )
         }
@@ -281,7 +285,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 brand = brand,
                 doctors = prescriptionDao.brandDoctors(
                     brand, since, BRAND_DOCTOR_LIMIT,
-                    f.district, f.territory, f.specialty, f.mrId,
+                    f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
             )
         }
@@ -335,34 +339,34 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     .split(" ").first()
                 val ownLike = "%$ownToken%"
 
-                val itemsTotal = prescriptionDao.itemCountSince(since, f.district, f.territory, f.specialty, f.mrId)
+                val itemsTotal = prescriptionDao.itemCountSince(since, f.district, f.territory, f.specialty, f.mrId, f.source)
                 kpis = AnalyticsMetrics.dashboardKpis(
-                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday(), f.district, f.territory, f.specialty, f.mrId),
-                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId),
-                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId),
-                    totalAll = prescriptionDao.prescriptionCountAll(f.district, f.territory, f.specialty, f.mrId),
-                    scansCur = prescriptionDao.prescriptionCountSince(since, f.district, f.territory, f.specialty, f.mrId),
-                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId),
+                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday(), f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalAll = prescriptionDao.prescriptionCountAll(f.district, f.territory, f.specialty, f.mrId, f.source),
+                    scansCur = prescriptionDao.prescriptionCountSince(since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     itemsTotal = itemsTotal,
-                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike, f.district, f.territory, f.specialty, f.mrId),
-                    prevItems = prescriptionDao.itemCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId),
-                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId),
-                    topBrand = prescriptionDao.topBrandRow(since, f.district, f.territory, f.specialty, f.mrId),
-                    activeDoctors = prescriptionDao.activeDoctorCount(since, f.district, f.territory, f.specialty, f.mrId),
-                    totalDoctors = prescriptionDao.allDoctorCount(f.district, f.territory, f.specialty, f.mrId),
+                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevItems = prescriptionDao.itemCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    topBrand = prescriptionDao.topBrandRow(since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    activeDoctors = prescriptionDao.activeDoctorCount(since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalDoctors = prescriptionDao.allDoctorCount(f.district, f.territory, f.specialty, f.mrId, f.source),
                     ownCompanyName = ownCompany,
                 )
 
                 mostPrescribed = AnalyticsMetrics.mostPrescribed(
-                    prescriptionDao.mostPrescribedRows(since = since, limit = 10, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId),
+                    prescriptionDao.mostPrescribedRows(since = since, limit = 10, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
                 companyShare = AnalyticsMetrics.companyShare(
-                    prescriptionDao.companyShareRows(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId),
+                    prescriptionDao.companyShareRows(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
                 genericMatrix = AnalyticsMetrics.genericBrandMatrix(
-                    prescriptionDao.genericMatrixRows(f.district, f.territory, f.specialty, f.mrId),
+                    prescriptionDao.genericMatrixRows(f.district, f.territory, f.specialty, f.mrId, f.source),
                 )
-                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId)
+                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
                 loadLeaderPageSync(since, ownLike)
 
@@ -388,6 +392,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 territory = f.territory,
                 specialty = f.specialty,
                 mrId = f.mrId,
+                source = f.source,
             ),
             total = leaderTotal,
             limit = pageSize,

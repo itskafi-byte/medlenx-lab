@@ -37,10 +37,10 @@ When you need the reference behaviour, read the Python file on the left.
 |---|---|---|
 | `data/config/AppGraph.kt` | 110 | manual DI root |
 | `data/local/Entities.kt` | 421 | 10 `@Entity` + 20 projection rows. **Columns are snake_case via `@ColumnInfo`** |
-| `data/local/Daos.kt` | 861 | 6 DAOs, 70 `@Query`. Validated by `agent/roomcheck.py` |
+| `data/local/Daos.kt` | 937 | 6 DAOs, 70 `@Query`. Validated by `agent/roomcheck.py` |
 | `data/local/MedLenXDatabase.kt` | 54 | Room database, `version = 3`. Real migrations (1→2 doctors, 2→3 `doctors.territory`); `fallbackToDestructiveMigration` stays registered for any version with no route |
 | `data/local/AssetCatalogue.kt` | 144 | imports `medex_full.json` into Room |
-| `data/local/Filters.kt` | 52 | filter state |
+| `data/local/Filters.kt` | 115 | filter state, `RX_FILTER_SQL` + `RX_FILTER_SQL_SNAPSHOT`, `SOURCE_OPTIONS` |
 | `data/remote/MedLenXVlClient.kt` | 286 | VL client |
 | `data/remote/ImagePrep.kt` | 92 | downscale to 1600px / JPEG 85 + EXIF rotation before upload |
 | `data/repo/MedicineMatcher.kt` | 431 | matching |

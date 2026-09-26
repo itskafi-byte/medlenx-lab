@@ -275,6 +275,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -289,6 +290,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query("SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
@@ -298,6 +300,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -312,6 +315,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -327,6 +331,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -344,6 +349,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -359,6 +365,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -376,6 +383,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): TopBrandRow?
 
     @Query(
@@ -389,6 +397,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     @Query(
@@ -401,6 +410,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     // ─── Drill-down (web: get_company_drilldown / get_brand_doctors) ───────────
@@ -432,6 +442,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     /** Top generics for one company — the web's `generics` array. */
@@ -458,6 +469,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<DrillCountRow>
 
     /** Top brands for one company — the web's `brands` array. */
@@ -479,6 +491,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<DrillCountRow>
 
     /**
@@ -505,6 +518,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<DrillCountRow>
 
     /**
@@ -546,6 +560,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<BrandDoctorRow>
 
     /**
@@ -555,13 +570,21 @@ interface PrescriptionDao {
      * directly; no converter is involved. Ordered newest-first so a truncated
      * export keeps the most recent work, matching the web's
      * `get_recent_scanned_medicines` ordering.
+     *
+     * The filter clauses are spelled out here instead of appending
+     * [RX_FILTER_SQL], because this is the one endpoint the web backs with the
+     * denormalised `recent_scanned_medicines` row rather than with a join.
+     * `get_recent_scanned_medicines` filters its own `district` / `territory` /
+     * `specialty` columns -- the values written at scan time -- so the specialty
+     * here is `p.doctor_specialty`, not the joined `d.specialty`. Filtering on the
+     * doctor's current profile would select rows whose printed specialty
+     * disagrees with the filter that selected them, and would export a scan as a
+     * specialty it did not record.
+     *
+     * `p.district`, `p.territory` and `p.mr_id` are already the captured values,
+     * so only the specialty differs from the shared fragment.
      */
     @Query(
-        // The export mirrors the backend's CSV, which reads
-        // `recent_scanned_medicines` -- the denormalised feed written at scan
-        // time -- so its `specialty` column is the captured value, not the joined
-        // one (main.py:840). Filtering it by the current profile would make the
-        // filtered rows and the printed specialty disagree.
         "SELECT p.created_at AS createdAt, p.mr_id AS mrId, p.doctor_name AS doctorName, " +
             "p.doctor_specialty AS doctorSpecialty, sm.brand_name AS brandName, " +
             "sm.generic AS generic, sm.company_name AS companyName, " +
@@ -571,8 +594,7 @@ interface PrescriptionDao {
             "p.upazila AS upazila, p.territory AS territory, p.id AS prescriptionId " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
-            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
-            "WHERE p.created_at >= :since" + RX_FILTER_SQL +
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL_SNAPSHOT +
             " ORDER BY p.created_at DESC, sm.id DESC LIMIT :limit"
     )
     suspend fun recentMedicineExportRows(
@@ -582,6 +604,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<RecentMedicineRow>
 
     /** Widget A: most prescribed brands. */
@@ -597,6 +620,7 @@ interface PrescriptionDao {
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY sm.brand_name, sm.company_name
         ORDER BY captureCount DESC
         LIMIT :limit
@@ -609,6 +633,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<MostPrescribedRow>
 
     /** Widget B: company share of voice, before the Others bucket is formed. */
@@ -626,6 +651,7 @@ interface PrescriptionDao {
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY sm.company_name
         ORDER BY count DESC
         """
@@ -636,6 +662,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<CompanyShareRow>
 
     /** Widget C: doctor conversion leaderboard, one page. */
@@ -655,6 +682,7 @@ interface PrescriptionDao {
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY p.doctor_id
         ORDER BY prescriptions DESC, totalMeds DESC
         LIMIT :limit OFFSET :offset
@@ -669,6 +697,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<DoctorLeaderRow2>
 
     /** Widget C: total matching doctors, for the pagination caption. */
@@ -686,6 +715,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): Int
 
     /**
@@ -735,6 +765,7 @@ interface PrescriptionDao {
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY d.specialty, sm.generic
         ORDER BY d.specialty, count DESC
         """
@@ -744,6 +775,7 @@ interface PrescriptionDao {
         territory: String?,
         specialty: String?,
         mrId: String?,
+        source: String?,
     ): List<GenericMatrixRow>
 
     /** `get_filter_options`: distinct values actually present in the data. */

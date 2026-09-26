@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
+import com.medlenx.lab.data.local.SOURCE_OPTIONS
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxButton
@@ -124,6 +125,12 @@ fun FilterSheet(
                 }
                 DropdownField("MR", "All MRs", options.mrIds, draft.mrId) {
                     draft = draft.copy(mrId = it)
+                }
+                // The web's fifth dropdown. Its options are fixed in the markup
+                // rather than read from the data, so they are fixed here too
+                // (data/local/Filters.kt, SOURCE_OPTIONS).
+                DropdownField("Prescription Source", "All Sources", SOURCE_OPTIONS, draft.source) {
+                    draft = draft.copy(source = it)
                 }
 
                 Spacer(Modifier.height(MlxD.Space3))

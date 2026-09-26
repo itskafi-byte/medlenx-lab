@@ -137,6 +137,44 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         """            "WHERE p.created_at >= :since AND IFNULL(doctor_nam, '') != ''" + RX_FILTER_SQL""",
         "not on [",
     ),
+    (
+        "a declared parameter the SQL never binds",
+        "roomcheck.py", DAOS,
+        """        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+        source: String?,
+    ): TopBrandRow?""",
+        """        since: Long,
+        district: String?,
+        territory: String?,
+        specialty: String?,
+        mrId: String?,
+        source: String?,
+        neverBound: String?,
+    ): TopBrandRow?""",
+        "never binds :neverBound",
+    ),
+    (
+        "an inlined filter fragment with one clause changed",
+        "roomcheck.py", DAOS,
+        """        WHERE sm.generic != '' AND IFNULL(d.specialty, '') != ''
+          AND (:district IS NULL OR :district = '' OR p.district = :district)""",
+        """        WHERE sm.generic != '' AND IFNULL(d.specialty, '') != ''
+          AND (:district IS NULL OR :district = '' OR p.upazila = :district)""",
+        # The reported `found:` line has to carry the drift itself, not just a count.
+        "p.upazila = :district",
+    ),
+    (
+        "an inlined filter fragment that lost its last clause",
+        "roomcheck.py", DAOS,
+        "          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)\n"
+        "        GROUP BY sm.brand_name, sm.company_name",
+        "        GROUP BY sm.brand_name, sm.company_name",
+        "filter fragment matches no known variant",
+    ),
     # ── migrationcheck.py ────────────────────────────────────────────────────
     (
         "an ALTER dropped from the chain",

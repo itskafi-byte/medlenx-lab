@@ -55,7 +55,7 @@ python3 android/checks/migrationcheck.py  # migration DDL vs the entities it cre
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 16 faults
+python3 android/checks/faulttest.py            # all 19 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 
@@ -120,9 +120,12 @@ silently loses its docs. It has happened three times here (`copyToClipboard`
 above `shareSummary`, `saveVerified` above `resolveDoctorId`, and `healthDays`
 above `healthDayDetail`), which makes it a check rather than a habit of reading
 upwards before every edit.
-- `roomcheck.py` healthy: `no problems found - every column and table resolves`
-  (10 entities, 70 queries, all 70 parsed in full)
+- `roomcheck.py` healthy: `no problems found - every column and table resolves`,
+  closing with a count line: `N bind parameter(s) checked for use, M statement(s)
+  checked against the filter fragment` (10 entities, 70 queries, all parsed in
+  full). The count line is there to be read: if it drops, a check went quiet.
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
+  (87 sites)
 - `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
 
 `migrationcheck.py` exists because Room's schema validation runs on the device at
@@ -180,7 +183,10 @@ It assembles each `@Query` argument before parsing it, and substitutes project
     (no `FROM` at all) and six more had no function name resolved. Now all 70
     parse in full. Same fault `migrationcheck.py` had, hiding the same way.
   * `RX_FILTER_SQL` is a `const val` appended by name, so the fragment has to be
-    substituted or it is invisible. Substituting it also means a query that
+    substituted or it is invisible. Substitution goes longest-name-first and on
+    word boundaries: `RX_FILTER_SQL` is a prefix of `RX_FILTER_SQL_SNAPSHOT`, and
+    a plain `str.replace` rewrote the snapshot constant into the joined-doctor
+    fragment with a stranded `_SNAPSHOT` left in the SQL for every check to judge. Substituting it also means a query that
     appends the fragment without joining `doctors` is caught directly, by the
     alias check below, instead of needing a second string-matching check to
     duplicate the knowledge and drift from it.
@@ -197,6 +203,42 @@ Two checks came out of writing the specialty filter:
     All three are now `COUNT(DISTINCT p.id)`.
 
 Both are fault-tested by injecting the fault and asserting it is reported.
+
+Two more came out of adding the prescription-source filter, and both are about a
+filter that compiles, runs, and does nothing:
+
+  * **An unbound parameter.** Every declared method parameter must appear as
+    `:name` in the assembled SQL. Room accepts a declaration whose parameter the
+    statement never uses; the parameter is simply dead. Seventeen queries append
+    the filter fragment by name and four repeat it as their own literal SQL. Adding
+    `:source` to the constant gave those seventeen a source clause and left the
+    four with a `source: String?` parameter nothing bound — a filter that reads
+    "Hospital" in the sheet and filters nothing, silently, with every check in the
+    repository reporting clean.
+  * **A fragment that drifted.** Every statement carrying a filter fragment is
+    compared, whitespace-normalised and in full, against every known variant.
+    Nothing else connects the constants to the literal copies inside four
+    `@Query` blocks, so a clause added to one and not the other is invisible
+    otherwise. The fragment is walked as a run of `(clause) AND (clause) …`
+    rather than cut between two markers, which is what lets a copy that lost its
+    last clause read as a shorter run instead of the same fragment.
+    `canonical_filter_fragments` raises rather than returning `{}` — with no
+    canonical text, every statement would compare clean.
+
+The count line `N bind parameter(s) checked for use, M statement(s) checked
+against K filter fragment(s)` exists so both announce how much they looked at.
+M is 21 and not 4 because the seventeen that append a constant are substituted
+before the comparison, so they are checked too.
+
+**There are two variants, and the check cannot tell them apart.** `RX_FILTER_SQL`
+takes specialty from the joined doctor; `RX_FILTER_SQL_SNAPSHOT` takes it from
+`p.doctor_specialty` and is used by `recentMedicineExportRows` alone, because
+`/api/export/recent-medicines.csv` is the one endpoint the web backs with the
+denormalised `recent_scanned_medicines` row (`database.py:1329`) rather than with
+a join. They differ *only* in that one qualifier, so a statement that picks the
+wrong variant matches the other one exactly and is not reported. What is reported
+is which statements use which variant — the count line names them — so a
+statement changing families shows up in the output without being a finding.
 
 `roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
 call site to a column: roomcheck validates the SQL *inside* a `@Query` against the

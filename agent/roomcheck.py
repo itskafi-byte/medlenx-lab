@@ -269,22 +269,210 @@ def parse_queries(src: str, constants: dict[str, str] | None = None) -> list[dic
             continue
         # The argument's own parens, not the next `"` -- that was the bug.
         sql = flatten_literals(src[open_idx + 1 : close_idx])
-        for name, value in (constants or {}).items():
-            if name in sql:
-                sql = sql.replace(name, value)
+        # Longest name first, and on word boundaries: `RX_FILTER_SQL` is a prefix
+        # of `RX_FILTER_SQL_SNAPSHOT`, and a plain `str.replace` rewrote the
+        # snapshot constant into the joined-doctor fragment with a stranded
+        # `_SNAPSHOT` left in the SQL -- which every check then judged.
+        for name, value in sorted((constants or {}).items(), key=lambda kv: -len(kv[0])):
+            if re.search(r"\b" + re.escape(name) + r"\b", sql):
+                sql = re.sub(
+                    r"\b" + re.escape(name) + r"\b", lambda _m, v=value: v, sql
+                )
         after = close_idx + 1
         tail = src[after : after + 600]
         fm = re.search(r"\bfun\s+(\w+)", tail)
         rm = re.search(r"\)\s*:\s*([A-Za-z_][\w.<>\[\],\s?]*)", tail)
+
+        # The method's own parameter list, for check_unused_parameters(). Found
+        # from the `fun` keyword rather than from the tail's first `(`, because
+        # the return type may itself carry parens.
+        params: list[str] = []
+        if fm:
+            popen = after + fm.end()
+            # fm ends just past the name, so the next `(` is the parameter list.
+            space = re.compile(r"\s*\(").match(src, popen)
+            if space:
+                pclose = match_paren(src, space.end() - 1)
+                if pclose != -1:
+                    params = [
+                        p.split(":", 1)[0].strip()
+                        for p in split_top_level(src[space.end() : pclose])
+                        if re.fullmatch(r"\w+", p.split(":", 1)[0].strip())
+                    ]
+
         out.append(
             {
                 "line": src[: m.start()].count("\n") + 1,
                 "sql": sql,
                 "fn": fm.group(1) if fm else "?",
                 "ret": rm.group(1).strip() if rm else "?",
+                "params": params,
             }
         )
     return out
+
+
+def split_top_level(text: str) -> list[str]:
+    """Split on commas that are not inside parens, angle brackets or a literal."""
+    parts: list[str] = []
+    depth = 0
+    in_str = False
+    buf: list[str] = []
+    for i, c in enumerate(text):
+        if in_str:
+            buf.append(c)
+            if c == "\\":
+                continue
+            if c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c in "(<[":
+            depth += 1
+        elif c in ")>]":
+            depth -= 1
+        elif c == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+            continue
+        buf.append(c)
+    tail = "".join(buf).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+# Every filter fragment starts with this clause. Each `RX_FILTER_SQL*` constant
+# is a run of parenthesised clauses joined by `AND`, so the fragment ends where
+# that run ends -- not at the end of the statement, which is why the old
+# `_FRAGMENT_END` marker was needed and why it cannot serve two variants that
+# differ in their last clause.
+_FRAGMENT_START = "(:district IS NULL"
+
+
+def _fragment_run(text: str, start: int) -> str:
+    """
+    The maximal run of `(clause) AND (clause) ...` beginning at `start`.
+
+    Walking the run rather than searching for a quoted end marker keeps the
+    extent right when the statement continues afterwards (`GROUP BY ... LIMIT`)
+    and when a copy has lost its last clause, which has to read as a shorter run
+    and not as the same fragment.
+    """
+    i = start
+    end = start
+    while i < len(text) and text[i] == "(":
+        depth = 0
+        j = i
+        while j < len(text):
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    end = j + 1
+                    break
+            j += 1
+        else:
+            break
+        nxt = re.match(r"\s+AND\s*\(", text[end:], re.I)
+        if not nxt:
+            break
+        i = end + nxt.end() - 1
+    return text[start:end]
+
+
+def canonical_filter_fragments(constants: dict[str, str]) -> dict[str, str]:
+    """
+    Every filter-fragment constant, by name, whitespace-normalised.
+
+    There are two: `RX_FILTER_SQL` (specialty from the joined doctor, used by
+    everything that joins `doctors`) and `RX_FILTER_SQL_SNAPSHOT` (specialty from
+    the prescription row, used by the one export the web backs with the
+    denormalised `recent_scanned_medicines` table). A statement must match one of
+    them exactly; a third variant added without being checked here would be
+    reported rather than silently exempted.
+
+    Raises rather than returning {} when nothing can be cut out: with no
+    canonical text to compare against, `check_filter_fragment` would report every
+    statement clean, which is the failure mode it exists to prevent.
+    """
+    found: dict[str, str] = {}
+    for name in sorted(constants):
+        if not name.startswith("RX_FILTER_SQL"):
+            continue
+        sql = constants[name]
+        if _FRAGMENT_START not in sql:
+            raise RuntimeError(
+                f"roomcheck: cannot locate the filter fragment inside {name} "
+                f"(looked for {_FRAGMENT_START!r}). check_filter_fragment would "
+                "have nothing to compare against."
+            )
+        run = _fragment_run(sql, sql.index(_FRAGMENT_START))
+        found[name] = " ".join(run.split())
+    if not found:
+        raise RuntimeError(
+            "roomcheck: no RX_FILTER_SQL* constant found, so no statement that "
+            "filters can be checked against one"
+        )
+    return found
+
+
+def match_filter_fragment(sql: str, canonicals: dict[str, str]) -> dict[str, str]:
+    """Variant name -> 'exact' | 'none' for each variant, for the usage report."""
+    if _FRAGMENT_START not in sql:
+        return {name: "none" for name in canonicals}
+    found = " ".join(_fragment_run(sql, sql.index(_FRAGMENT_START)).split())
+    return {name: ("exact" if found == canonical else "none")
+            for name, canonical in canonicals.items()}
+
+
+def check_filter_fragment(sql: str, canonicals: dict[str, str]) -> list[str]:
+    """
+    A statement whose filter fragment matches none of the known variants.
+
+    Seventeen queries append a fragment constant by name; the rest repeat the
+    clauses as literal SQL inside their own `@Query`. Nothing connects the
+    literals to the constant, so adding a clause to one and not the other leaves
+    the query compiling, running and returning rows -- it just quietly ignores
+    the new filter. That is exactly what happened when `:source` was added: 17
+    queries filtered by prescription source and 4 did not, and every check in the
+    repository passed on the result.
+
+    Matching is exact, whitespace aside, against every variant; when none matches
+    the found text is reported next to each variant so a one-clause change reads
+    as one line.
+    """
+    if _FRAGMENT_START not in sql:
+        return []
+    found = " ".join(_fragment_run(sql, sql.index(_FRAGMENT_START)).split())
+    for canonical in canonicals.values():
+        if found == canonical:
+            return []
+    lines = ["filter fragment matches no known variant", f"        found:    {found}"]
+    for name, canonical in canonicals.items():
+        lines.append(f"        {name}: {canonical}")
+    return ["\n".join(lines)]
+
+
+def check_unused_parameters(params: list[str], sql: str) -> list[str]:
+    """
+    A declared method parameter that the statement never binds.
+
+    Room accepts the declaration and runs the query; the parameter is simply
+    dead. When the parameter exists to carry a filter, the filter silently does
+    nothing -- the sheet says "Hospital", the SQL never narrowed, and the
+    dashboard shows every source at once with no error anywhere.
+
+    This is the failure mode that let four queries ship a `source` parameter
+    with no `:source` in their SQL.
+    """
+    problems = []
+    for name in params:
+        if not re.search(r":" + re.escape(name) + r"\b", sql):
+            problems.append(f"declares parameter '{name}' but the SQL never binds :{name}")
+    return problems
 
 
 def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str]]:
@@ -420,6 +608,14 @@ def main() -> int:
     print()
 
     problems: list[str] = []
+    canonicals = canonical_filter_fragments(constants)
+    fragment_sites = 0
+    params_checked = 0
+    # Which statements use which variant, so a statement silently switching to
+    # the snapshot fragment is named in the output rather than only changing a
+    # total. The two variants differ only in the specialty qualifier, so a
+    # mis-picked variant is not a drift the comparison can see.
+    variant_users: dict[str, list[str]] = {name: [] for name in canonicals}
     for q in queries:
         used_tables, cols, aliases, alias_to_table, qualified, _bare = analyse(q["sql"])
         unknown_tables = used_tables - set(tables)
@@ -453,6 +649,19 @@ def main() -> int:
         for p in check_unknown_alias(q["sql"], tables):
             problems.append(f"{q['fn']} (Daos.kt:{q['line']}) {p}")
 
+        if _FRAGMENT_START in q["sql"]:
+            fragment_sites += 1
+            for p in check_filter_fragment(q["sql"], canonicals):
+                problems.append(f"{q['fn']} (Daos.kt:{q['line']}) {p}")
+            for name, kind in match_filter_fragment(q["sql"], canonicals).items():
+                if kind == "none":
+                    continue
+                variant_users[name].append(q["fn"])
+
+        params_checked += len(q["params"])
+        for p in check_unused_parameters(q["params"], q["sql"]):
+            problems.append(f"{q['fn']} (Daos.kt:{q['line']}) {p}")
+
         base = re.sub(r"[<>,\[\]\s?]", "", q["ret"]).split(".")[-1]
         if base in projections:
             missing = [f for f in projections[base] if f not in cols and f not in aliases]
@@ -467,6 +676,13 @@ def main() -> int:
             print("   ", p)
     else:
         print("  no problems found - every column and table resolves")
+    print(f"  {params_checked} bind parameter(s) checked for use, "
+          f"{fragment_sites} statement(s) checked against "
+          f"{len(canonicals)} filter fragment(s)")
+    for name in sorted(variant_users):
+        users = variant_users[name]
+        shown = ", ".join(sorted(users)[:6]) + (", ..." if len(users) > 6 else "")
+        print(f"    {name:<26} {len(users):>3} statement(s)  {shown}")
     print()
     return 1 if problems else 0
 
