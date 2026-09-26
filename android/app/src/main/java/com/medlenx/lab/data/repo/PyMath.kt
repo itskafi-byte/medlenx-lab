@@ -35,6 +35,31 @@ object PyMath {
     fun fixed2(v: Double): String = String.format(Locale.US, "%.2f", v)
 
     /**
+     * `f"{x:.1f}"` — the percentages on the dashboards, the team screen and the exports.
+     * The web renders those with `toFixed(1)` (`index.html:4306`).
+     *
+     * `String.format(Locale.US, "%.1f")` rounds a tie away from zero; Python's `:.1f`
+     * takes it to even. That is the one place this is deliberately not a Python
+     * transcription: 24.5 formats as "25" here and as "24" in CPython, and JavaScript's
+     * `toFixed` agrees with this, not with CPython - which is what matters, because the
+     * string being mirrored is the one the web's browser draws.
+     */
+    fun fixed1(v: Double): String = String.format(Locale.US, "%.1f", v)
+
+    /** `f"{x:.0f}"`, with the same tie rule as [fixed1]. */
+    fun fixed0(v: Double): String = String.format(Locale.US, "%.0f", v)
+
+    /**
+     * `f"{lat:.4f}, {lng:.4f}"` for the scan's GPS pair.
+     *
+     * Locale.US for a reason a percentage does not have: on a comma-decimal device the
+     * default locale renders "23,8106, 90,4123", which is two coordinates and three
+     * commas, and nothing downstream can tell which is which.
+     */
+    fun fixedCoords(lat: Double, lng: Double): String =
+        String.format(Locale.US, "%.4f, %.4f", lat, lng)
+
+    /**
      * `f"{x}"` for a float.
      *
      * Kotlin's `Double.toString()` already matches Python for the values in these

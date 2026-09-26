@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxTextField
@@ -102,7 +103,7 @@ fun GeoStrip(
                             else -> "Pinned from ${src.label} · "
                         }
                     )
-                    append("%.4f, %.4f".format(state.lat, state.lng))
+                    append(PyMath.fixedCoords(state.lat, state.lng))
                     if (state.pinnedDistrict.isNotBlank()) append(" · ${state.pinnedDistrict}")
                     if (state.verdictReason.isNotBlank()) append(" · ${state.verdictReason}")
                 },

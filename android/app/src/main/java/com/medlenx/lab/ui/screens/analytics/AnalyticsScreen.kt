@@ -533,7 +533,10 @@ private fun EmptyDrilldown(message: String) {
 }
 
 private fun formatDrillDate(epochMillis: Long): String =
-    java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+    // Locale.US, like everything else the app prints: the screen's other copy is
+    // English ("Today", "Week"), and a bn-BD device would otherwise write "২৭ Sep 2026" -
+    // Bengali digits inside an English date.
+    java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US)
         .format(java.util.Date(epochMillis))
 
 @Composable

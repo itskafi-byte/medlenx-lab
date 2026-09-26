@@ -46,6 +46,7 @@ import com.medlenx.lab.data.local.DoctorVisitRow
 import com.medlenx.lab.data.local.OffTerritoryRow
 import com.medlenx.lab.data.repo.BrandProgress
 import com.medlenx.lab.data.repo.GeoRegion
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.data.repo.RsmTrends
 import com.medlenx.lab.data.repo.ScanPoint
 import com.medlenx.lab.ui.components.FlowRowCompat
@@ -65,6 +66,7 @@ import com.medlenx.lab.ui.theme.MlxType
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * `TeamMap`: territory penetration heatmap.
@@ -140,7 +142,7 @@ fun TeamMapSection(
         }
         Spacer(Modifier.height(MlxD.Space2))
         Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
-            MiniKpiTile("Market penetration", "${"%.0f".format(penetration)}%", Modifier.weight(1f))
+            MiniKpiTile("Market penetration", "${PyMath.fixed0(penetration)}%", Modifier.weight(1f))
             MiniKpiTile("Own vs Comp-heavy", "$ownHeavy / $compHeavy", Modifier.weight(1f))
         }
 
@@ -350,7 +352,7 @@ fun TeamLeaderboardSection(
                     )
                 }
                 Text(
-                    text = "${if (wow >= 0) "▲" else "▼"} ${"%.1f".format(kotlin.math.abs(wow))}% WoW",
+                    text = "${if (wow >= 0) "▲" else "▼"} ${PyMath.fixed1(kotlin.math.abs(wow))}% WoW",
                     style = MlxType.BodySmall,
                     fontWeight = FontWeight.SemiBold,
                     color = if (wow >= 0) Mlx.Ok500 else Mlx.Danger,
@@ -370,7 +372,7 @@ fun TeamLeaderboardSection(
                 )
                 Spacer(Modifier.width(MlxD.Space2))
                 Text(
-                    text = "${"%.1f".format(sov)}%",
+                    text = "${PyMath.fixed1(sov)}%",
                     style = MlxType.Delta,
                     fontWeight = FontWeight.Bold,
                     color = Mlx.Text900,
@@ -455,7 +457,7 @@ fun TeamTargetsSection(
                         )
                         Spacer(Modifier.width(MlxD.Space2))
                         Text(
-                            text = "${"%.1f".format(b.percent)}%",
+                            text = "${PyMath.fixed1(b.percent)}%",
                             style = MlxType.Footnote,
                             color = Mlx.Text400,
                         )
@@ -516,7 +518,7 @@ fun TeamTargetsSection(
                         )
                         Spacer(Modifier.width(MlxD.Space2))
                         Text(
-                            text = "${t.visits} / ${t.monthlyTarget} · ${"%.0f".format(pct)}%",
+                            text = "${t.visits} / ${t.monthlyTarget} · ${PyMath.fixed0(pct)}%",
                             style = MlxType.BodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = if (t.visits >= t.monthlyTarget) Mlx.OkDeep else Mlx.Text600,
@@ -682,7 +684,8 @@ fun TeamOffTerritorySection(flags: List<OffTerritoryRow>) {
 }
 
 private val stampFormat: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
+        .withZone(ZoneId.systemDefault())
 
 private fun formatStamp(epochMillis: Long): String =
     stampFormat.format(Instant.ofEpochMilli(epochMillis))

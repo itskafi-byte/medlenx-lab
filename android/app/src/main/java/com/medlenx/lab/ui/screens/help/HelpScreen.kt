@@ -39,6 +39,7 @@ import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxType
+import java.util.Locale
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -341,7 +342,8 @@ fun HelpScreen(
 }
 
 private val queueStampFormat: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
+        .withZone(ZoneId.systemDefault())
 
 private fun formatQueueStamp(epochMillis: Long): String =
     queueStampFormat.format(Instant.ofEpochMilli(epochMillis))

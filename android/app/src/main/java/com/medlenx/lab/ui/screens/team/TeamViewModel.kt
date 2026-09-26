@@ -25,6 +25,7 @@ import com.medlenx.lab.data.repo.TeamMetrics
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -184,7 +185,11 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 // 30 days, so it gets its own boundary.
                 val monthStart = LocalDate.now().withDayOfMonth(1)
                     .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                val month = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
+                // Locale.US: this string is printed ("Remaining 40 · 2026-09"), and the
+                // formatter's DecimalStyle would otherwise take Bengali digits from the
+                // default locale.
+                val month = LocalDate.now()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM", Locale.US))
                 targetProgress = TeamMetrics.targetProgress(
                     targets = app.graph.profileDao.observeTargets().first()
                         .map { BrandTarget(it.brand, it.target) },

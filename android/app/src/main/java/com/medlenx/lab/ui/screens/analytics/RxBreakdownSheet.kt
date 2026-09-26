@@ -968,4 +968,4 @@ private fun EmptyItems() {
  * coupling a screen to the export module's formatting.
  */
 private fun scannedStamp(epochMillis: Long): String =
-    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(epochMillis))
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(epochMillis))

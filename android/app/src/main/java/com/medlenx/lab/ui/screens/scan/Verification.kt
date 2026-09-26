@@ -52,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.model.ConfidenceBand
 import com.medlenx.lab.data.model.confidenceBand
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
@@ -901,7 +902,7 @@ fun VerifyGpsSection(
         }
 
         val coords = gps.latitude?.let { lat ->
-            gps.longitude?.let { lng -> String.format("%.4f, %.4f", lat, lng) }
+            gps.longitude?.let { lng -> PyMath.fixedCoords(lat, lng) }
         }
         Row(
             modifier = Modifier

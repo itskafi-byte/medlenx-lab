@@ -7,9 +7,11 @@ import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
 import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.data.repo.MostPrescribed
+import com.medlenx.lab.data.repo.PyMath
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -19,7 +21,7 @@ import kotlin.math.abs
  */
 
 private fun pct(delta: Double): String =
-    "${if (delta >= 0) "" else "-"}${"%.1f".format(abs(delta))}%"
+    "${if (delta >= 0) "" else "-"}${PyMath.fixed1(abs(delta))}%"
 
 fun DashboardKpis.toKpiData(): List<KpiDatum> {
     val rx = totalPrescriptions
@@ -41,10 +43,10 @@ fun DashboardKpis.toKpiData(): List<KpiDatum> {
         ),
         KpiDatum(
             label = "Target Share",
-            value = "${"%.1f".format(marketShare.percentage)}%",
+            value = "${PyMath.fixed1(marketShare.percentage)}%",
             // A difference of two percentages, not a percent change.
             delta = "${if (marketShare.deltaPercent >= 0) "+" else ""}" +
-                "${"%.1f".format(marketShare.deltaPercent)} pts",
+                "${PyMath.fixed1(marketShare.deltaPercent)} pts",
             deltaUp = marketShare.deltaPercent >= 0,
             track = marketShare.percentage.toInt().coerceIn(0, 100),
         ),
@@ -103,9 +105,9 @@ fun List<CompanySlice>.centreSoV(ownCompany: String): Pair<String, String> {
         !it.isOthers && ownCompany.isNotBlank() &&
             MedicineMatcher.sameCompany(it.company, ownCompany)
     }
-    if (own != null) return "Own SoV" to "${"%.1f".format(own.percentage)}%"
+    if (own != null) return "Own SoV" to "${PyMath.fixed1(own.percentage)}%"
     val top = firstOrNull { !it.isOthers } ?: return "SoV" to "—"
-    return "Top SoV" to "${"%.1f".format(top.percentage)}%"
+    return "Top SoV" to "${PyMath.fixed1(top.percentage)}%"
 }
 
 fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =
@@ -150,7 +152,8 @@ fun List<LiveScanFeedRow>.toLiveScanRows(): List<LiveScanRow> = map { r ->
 }
 
 private val rxStamp: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
+        .withZone(ZoneId.systemDefault())
 
 fun List<PrescriptionEntity>.toRecentRxRows(): List<RecentRxRow> = map { p ->
     RecentRxRow(

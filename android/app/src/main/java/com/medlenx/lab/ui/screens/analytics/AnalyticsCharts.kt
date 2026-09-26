@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.repo.MedicineMatcher
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.StatusPill
 import com.medlenx.lab.ui.theme.Mlx
@@ -150,7 +151,7 @@ fun MostPrescribedBarChart(
                         color = Mlx.Text900,
                     )
                     Text(
-                        text = "${"%.1f".format(datum.sharePercent)}%",
+                        text = "${PyMath.fixed1(datum.sharePercent)}%",
                         style = MlxType.MicroPill,
                         color = Mlx.Text400,
                     )
@@ -271,7 +272,7 @@ fun ShareOfVoiceDonut(
                     Text(
                         // The web's tooltip reads "company: 14.3% (2 items)"; with no
                         // hover, the legend row is where that belongs.
-                        text = "${datum.count} (${"%.1f".format(datum.sharePercent)}%)",
+                        text = "${datum.count} (${PyMath.fixed1(datum.sharePercent)}%)",
                         style = MlxType.Meta,
                         color = Mlx.Text900,
                         modifier = Modifier.padding(start = 4.dp),

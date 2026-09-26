@@ -7,6 +7,7 @@ import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.model.Substitution
 import com.medlenx.lab.data.repo.DoctorTiering
 import com.medlenx.lab.data.repo.PyCsv
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.data.repo.StewardshipSummary
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -170,7 +171,7 @@ object ExportDocuments {
                     items.toString(),
                     ownItems.toString(),
                     competitorItems.toString(),
-                    "${"%.0f".format(sov)}%",
+                    "${PyMath.fixed0(sov)}%",
                 ),
             ),
             weights = List(6) { 1f },
@@ -191,7 +192,7 @@ object ExportDocuments {
                 d.items.toString(),
                 d.ownItems.toString(),
                 d.competitorItems.toString(),
-                "${"%.0f".format(d.sov)}%",
+                "${PyMath.fixed0(d.sov)}%",
                 // The web's ninth column is WoW growth, which the RSM trends series
                 // supplies. Android's per-doctor series has no such column, so the
                 // tier — which the screen already computes — takes the slot rather
@@ -229,7 +230,7 @@ object ExportDocuments {
                         totals.items.toString(),
                         totals.abxItems.toString(),
                         totals.broadItems.toString(),
-                        "${"%.1f".format(totals.abxSharePct)}%",
+                        "${PyMath.fixed1(totals.abxSharePct)}%",
                     ),
                 ),
                 weights = List(6) { 1f },
@@ -378,7 +379,9 @@ object ExportDocuments {
     /** The web's `Chamber_Summary_{yyyymmddHHMM}.pdf`. */
     fun chamberSummaryFileName(generatedAt: Long = System.currentTimeMillis()): String =
         "Chamber_Summary_" +
-            SimpleDateFormat("yyyyMMddHHmm", Locale.getDefault()).format(Date(generatedAt)) +
+            // Locale.US for the filename: a bn-BD device would write Bengali digits into
+            // a file name meant to be sorted, mailed and filed.
+            SimpleDateFormat("yyyyMMddHHmm", Locale.US).format(Date(generatedAt)) +
             ".pdf"
 
     /**
@@ -464,8 +467,8 @@ object ExportDocuments {
     }
 
     private fun stamp(epochMillis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(epochMillis))
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(epochMillis))
 
     private fun isoStamp(epochMillis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date(epochMillis))
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date(epochMillis))
 }

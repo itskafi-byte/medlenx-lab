@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.repo.DoctorTier
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.data.repo.StewardshipDoctor
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.FlowRowCompat
@@ -182,7 +183,7 @@ private fun TeamHero(
         Spacer(Modifier.height(MlxD.Space2))
         Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
             HeroKpi("Own items", ownItems.toString(), Modifier.weight(1f))
-            HeroKpi("Own SoV", "${"%.0f".format(sov)}%", Modifier.weight(1f))
+            HeroKpi("Own SoV", "${PyMath.fixed0(sov)}%", Modifier.weight(1f))
         }
         Spacer(Modifier.height(MlxD.Space3))
         Text(
@@ -358,7 +359,7 @@ private fun TierDoctorCard(d: DoctorTier) {
         Spacer(Modifier.height(MlxD.Space3))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${"%.1f".format(d.sov)}%",
+                text = "${PyMath.fixed1(d.sov)}%",
                 style = MlxType.Delta,
                 fontWeight = FontWeight.Bold,
                 color = Mlx.Text900,
@@ -381,7 +382,7 @@ private fun TeamStewardshipSection(doctors: List<StewardshipDoctor>, abxSharePct
             iconTint = Mlx.Danger,
         )
         StatusPill(
-            text = "${"%.1f".format(abxSharePct)}% ABX share",
+            text = "${PyMath.fixed1(abxSharePct)}% ABX share",
             tone = shareTone(abxSharePct),
             modifier = Modifier.padding(bottom = MlxD.Space2),
         )
@@ -458,7 +459,7 @@ private fun StewardshipChamberCard(c: StewardshipDoctor) {
             )
             Spacer(Modifier.width(MlxD.Space2))
             Text(
-                text = "${"%.1f".format(c.abxSharePct)}%",
+                text = "${PyMath.fixed1(c.abxSharePct)}%",
                 style = MlxType.Footnote,
                 color = Mlx.Text400,
             )
