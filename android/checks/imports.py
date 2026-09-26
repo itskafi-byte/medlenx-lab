@@ -26,7 +26,11 @@ Checks
    explicitly; only `= expr` bodies infer their result.
 10. Unknown theme token - `MlxShape.Medium2`. Check 8 sees only the segment
    before the dot, so the member after it is never resolved.
-11. Missing import for a project declaration used from another package.
+11. Missing import for a project declaration used from another package, by name
+    (`ClinicalStrip(`) or through a receiver (`xs.toBarData()`); a `private`
+    top-level declaration is not importable and is not offered as a target.
+12. Misplaced unit extension - `13.sp` / `0.2.em` with no `androidx.compose.ui.unit`
+    import. Same shape as 7: an extension property that cannot resolve otherwise.
 
 Run it from anywhere: the source root is derived from this file's own path. A
 previous revision used a relative root, so running it from the repo root walked a
@@ -531,13 +535,33 @@ def check_theme_tokens():
 # `RowScope` as a type declared in that file, and `private fun
 # FilterState.drilldownCaption()` made `FilterState` look locally declared in
 # AnalyticsScreen.kt -- hiding the missing import this check exists to find.
+# Top-level declarations, in any case of name.
+#
+# `fun` was absent from this alternation and the name had to be capitalised, so
+# every top-level function in the project was invisible to
+# `check_missing_project_imports` - including all four functions
+# `RxAuditParts.kt` exists to export, and every lowercase helper
+# (`copyToClipboard`, `needsAuditFollowUp`, `classBreakdownOf`). That is how
+# `ClinicalStrip(` reached the user's compiler with no import in the drawer: the
+# check whose whole job is this fault could not see the declaration to miss.
+# Capitalised-only is the right restriction on the *reporting* side (see that
+# function) and was the wrong one for the index.
 _TOP_DECL = re.compile(
-    r"^[ \t]*"
+    # Column 0, not `^[ \t]*`: with leading whitespace allowed this matched every
+    # indented `val` too, so a parameter or a local property became a "top-level
+    # declaration in another package" - 1240 of them, and the check then asked for
+    # imports of `context`, `rxId` and `substitution`. A nested declaration is
+    # reached through its parent, which is itself at column 0, and an indented
+    # member is not importable at all.
+    r"^(?!\s)"
     r"(?:@\w+(?:\([^)]*\))?[ \t]*)*"
-    r"(?:(?:public|internal|private|abstract|open|sealed|data|enum|annotation|"
+    r"(?:(public|internal|private|abstract|open|sealed|data|enum|annotation|"
     r"value|inline|suspend|operator|override|tailrec|external|const|lateinit)[ \t]+)*"
-    r"(?:class|interface|object|typealias|val|var)[ \t]+"
-    r"([A-Z]\w*)",
+    r"(?:(?:class|interface|object|typealias)[ \t]+([A-Z]\w*)"
+    r"|(?:val|var)[ \t]+([A-Za-z_]\w*)"
+    r"|fun[ \t]+(?:<[^>]*>[ \t]*)?"
+    r"([\w.]+(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>[ \t]*)?[ \t]*\.[ \t]*)?"
+    r"([A-Za-z_]\w*))",
     re.M,
 )
 # Any declaration at all, at any indentation: used only to decide whether a name
@@ -608,9 +632,22 @@ def _balanced_body(text: str, open_idx: int) -> tuple[str, int]:
     return text[open_idx + 1 :], len(text)
 
 
-def _project_decl_packages() -> dict[str, set[str]]:
-    """Capitalised top-level declaration name -> the packages declaring it."""
+def _project_decl_packages() -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """
+    Top-level declaration name -> the packages declaring it.
+
+    Returns `(declarations, extensions)`.
+
+    `declarations` maps every importable top-level name to the packages that
+    declare it. `extensions` is the subset reached through a receiver -
+    `fun List<X>.toBarData()` - because a use of those looks like `xs.toBarData()`
+    and the reference is the *name after the dot*, which the plain scan skips (a
+    segment after a dot is normally a member, not a reference). Missing the
+    extension imports is how `em` was missed in spirit: an import that the file
+    needs and does not have.
+    """
     out: dict[str, set[str]] = defaultdict(set)
+    extensions: dict[str, set[str]] = defaultdict(set)
     for dirpath, _, files in os.walk(ROOT):
         for fn in sorted(files):
             if not fn.endswith(".kt"):
@@ -619,10 +656,20 @@ def _project_decl_packages() -> dict[str, set[str]]:
             code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
             pkg = _package_of(code)
             for m in _TOP_DECL.finditer(code):
-                name = m.group(1)
+                # group(1) is the last modifier; a `private` top-level
+                # declaration is file-scoped, so no other file can import it and
+                # it must not be offered as an import target.
+                if m.group(1) == "private":
+                    continue
+                receiver, name = m.group(4), m.group(5)
+                for g in m.groups()[1:3]:
+                    if g:
+                        out[g].add(pkg)
                 if name:
                     out[name].add(pkg)
-    return out
+                    if receiver:
+                        extensions[name].add(pkg)
+    return out, extensions
 
 
 def check_missing_project_imports():
@@ -648,14 +695,18 @@ def check_missing_project_imports():
     Deliberately not flagged:
 
       * a name used qualified (`com.foo.Bar(...)`, `HubTab.HealthDays`) -- no
-        import is needed, and a segment after a dot is not a reference;
+        import is needed, and a segment after a dot is not a reference. The one
+        exception is the project's own extension functions (`xs.toBarData()`),
+        which do need an import and are covered by a second pass;
+      * an extension *property* (`x.someVal`). The receiver is a dot either way,
+        so nothing distinguishes it from a member property without types.
       * a name declared anywhere in the same file, or in the same package;
       * a name covered by a star import;
       * lowercase names. A top-level `fun` or property with a lowercase name is
         far more likely to be a member or local of the surrounding scope, and
         the false positives would drown the finding.
     """
-    declared = _project_decl_packages()
+    declared, extensions = _project_decl_packages()
     if not declared:
         # An empty index makes this check vacuous: it would walk every file,
         # match every name against nothing, and report a clean tree. That is the
@@ -689,18 +740,47 @@ def check_missing_project_imports():
             local |= _enum_entry_names(code)
             local |= {name for name, pkgs in declared.items() if pkg in pkgs}
 
-            for m in re.finditer(r"(?<![.\w])([A-Z]\w*)", code):
-                name = m.group(1)
-                if name in local or name in imported:
-                    continue
+            def needs_import(name: str):
+                """The packages to import from, or None if the name is visible."""
+                # A built-in always resolves; a same-named project declaration
+                # cannot shadow it into an import error, and `fun List<X>.f()` is
+                # how this project writes its mapping helpers, which would
+                # otherwise index `List` as a declaration in analytics.
+                if name in local or name in imported or name in AUTO_IMPORTED:
+                    return None
                 pkgs = declared.get(name)
                 if not pkgs or all(p == pkg for p in pkgs):
-                    continue
+                    return None
                 if any(s == q or q.startswith(s + ".") for s in starred for q in pkgs):
+                    return None
+                return pkgs
+
+            for m in re.finditer(r"(?<![.\w])([A-Za-z_]\w*)", code):
+                pkgs = needs_import(m.group(1))
+                if pkgs:
+                    findings.append(
+                        (path, code[: m.start()].count("\n") + 1, m.group(1),
+                         sorted(pkgs))
+                    )
+
+            # An extension is called on a receiver, so its name is the segment
+            # after the dot and the scan above deliberately ignores those (a
+            # qualified reference needs no import). Missing extension imports are
+            # real compile errors, so they get their own pass, restricted to the
+            # names the project actually declares as extensions. A member function
+            # that happens to share one of those names is a false positive this
+            # cannot rule out without resolved types, which is why the list is
+            # kept as narrow as the regex allows.
+            for m in re.finditer(r"\.([A-Za-z_]\w*)[ \t]*[(<]", code):
+                name = m.group(1)
+                if name not in extensions:
                     continue
-                findings.append(
-                    (path, code[: m.start()].count("\n") + 1, name, sorted(pkgs))
-                )
+                pkgs = needs_import(name)
+                if pkgs:
+                    findings.append(
+                        (path, code[: m.start()].count("\n") + 1, name,
+                         sorted(pkgs))
+                    )
     return findings
 
 
@@ -1048,11 +1128,19 @@ def check_undefined_symbols():
     still looked fine in review. It was caught by reading the diff, which is luck,
     not process.
 
-    Kotlin resolves a capitalised name four ways: it is declared in this file or
-    elsewhere in the project, it comes in through an import, it is auto-imported
-    from kotlin.* / java.lang.*, or build tooling generated it into the
-    applicationId package (BuildConfig, R). Anything else is unresolved and will
-    not compile.
+    Kotlin resolves a capitalised name four ways: it is declared in this file, in
+    the same *package*, it comes in through an import, it is auto-imported from
+    kotlin.* / java.lang.*, or build tooling generated it into the applicationId
+    package (BuildConfig, R). Anything else is unresolved and will not compile.
+
+    "In the same package" is load-bearing and used to be "somewhere in the
+    project", which is not a thing Kotlin does. That version reported nothing for
+    `ClinicalStrip(` in the audit drawer - the strip is `public` in
+    `ui.screens.rx`, the drawer is in `ui.screens.analytics`, and no import was
+    written - because the name was declared somewhere. It compiled as
+    `e: Unresolved reference 'ClinicalStrip'` on the user's machine instead.
+    `file_imported_names` already merges the same-package siblings, so the
+    project-wide set must not also be consulted here.
 
     That fourth case is the honest limit of this check: it reads source, so a
     generated class is invisible to it and has to be named in GENERATED_SYMBOLS.
@@ -1094,8 +1182,7 @@ def check_undefined_symbols():
                     if len(name) == 1:
                         continue        # a generic parameter: T, E, R, K, V
                     if (
-                        name in declared
-                        or name in visible
+                        name in visible
                         or name in AUTO_IMPORTED
                         or name in GENERATED_SYMBOLS
                     ):
@@ -1171,6 +1258,56 @@ def check_icon_imports():
                     continue
                 line = code[: m.start()].count("\n") + 1
                 findings.append((path, line, f"Icons.{family}.{icon}", f"{package}.{icon}"))
+    return findings
+
+
+# The `androidx.compose.ui.unit` extensions this project writes dimensions and
+# text sizes with: `4.dp`, `13.sp`, `0.2.em`. Only the three the codebase
+# actually uses - a name that is not in the package would make the *suggested*
+# import wrong, and the point of the finding is the exact import to add.
+UNIT_EXTENSIONS = {
+    "dp": "androidx.compose.ui.unit.dp",
+    "sp": "androidx.compose.ui.unit.sp",
+    "em": "androidx.compose.ui.unit.em",
+}
+
+
+def check_unit_imports():
+    """`13.sp` with no `import androidx.compose.ui.unit.sp`.
+
+    The user's fourth compile error in this round: `e: Unresolved reference 'em'`
+    at RxBreakdownSheet.kt:753, a `letterSpacing = 0.2.em` whose import was never
+    written. Nothing here could see it - the name is lowercase, it comes from a
+    library rather than the project, and it sits after a dot, where a reference
+    normally means a member.
+
+    The rule is exact, like the icon one: these are extension *properties* on
+    `Int`/`Float` in `androidx.compose.ui.unit`, so `0.2.em` cannot resolve
+    without that import (or a wildcard of that package). A number followed by the
+    name is what makes it a use rather than a variable of the same name.
+    """
+    findings = []
+    use = re.compile(
+        r"(?<![\w.])\d+(?:\.\d+)?[fFdD]?[ \t]*\.("
+        + "|".join(UNIT_EXTENSIONS)
+        + r")\b"
+    )
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = mask_literals(strip_comments(open(path, encoding="utf-8").read()))
+            imports = set()
+            for m in re.finditer(r"^import\s+([\w.*]+)", code, re.M):
+                imports.add(m.group(1))
+            for m in use.finditer(code):
+                unit = m.group(1)
+                package = UNIT_EXTENSIONS[unit]
+                if f"{package}" in imports or "androidx.compose.ui.unit.*" in imports:
+                    continue
+                line = code[: m.start()].count("\n") + 1
+                findings.append((path, line, m.group(0), package))
     return findings
 
 
@@ -1317,10 +1454,21 @@ def main() -> int:
             print(f"  {path}:{line}  {ref}  ->  needs: import {imp}")
         print()
 
+    units = check_unit_imports()
+    if units:
+        findings += len(units)
+        print("MISSING UNIT IMPORT - a dimension with no `androidx.compose.ui.unit` import")
+        for path, line, ref, imp in units:
+            print(f"  {path}:{line}  {ref}  ->  needs: import {imp}")
+        print()
+
     undef = check_undefined_symbols()
     if undef:
         findings += len(undef)
-        print("UNRESOLVED SYMBOL - used but declared nowhere and imported nowhere")
+        print(
+            "UNRESOLVED SYMBOL - neither declared in this file's package nor "
+            "imported"
+        )
         for path, line, name in undef:
             print(f"  {path}:{line}  {name}")
         print()

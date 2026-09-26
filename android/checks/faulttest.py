@@ -271,6 +271,43 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "row.dosageFormX",
         "row.dosageFormX",
     ),
+    # ── imports.py, the cross-package pass ───────────────────────────────────
+    (
+        # The user's third compile error, verbatim: `e: Unresolved reference
+        # 'ClinicalStrip'` at the drawer's call site. The function is `public` in
+        # ui.screens.rx, the drawer is in ui.screens.analytics, no import was
+        # written - and the check stayed silent, because _TOP_DECL indexed only
+        # types and properties (never `fun`) and a name declared *anywhere* in
+        # the project was accepted as resolvable here.
+        "a cross-package function used with no import",
+        "imports.py", DRAWER,
+        "import com.medlenx.lab.ui.screens.rx.ClinicalStrip\n",
+        "",
+        "ClinicalStrip",
+    ),
+    (
+        # The same fault for an extension function: the reference is the segment
+        # after the dot, and the plain scan skips those on purpose (a qualified
+        # reference needs no import). It takes a second, narrow pass over the
+        # names the project declares with a receiver.
+        "a cross-package extension used with no import",
+        "imports.py",
+        "android/app/src/main/java/com/medlenx/lab/ui/screens/hub/HubViewModel.kt",
+        "import com.medlenx.lab.data.repo.toProduct\n",
+        "",
+        "toProduct",
+    ),
+    (
+        # The user's fourth compile error: `e: Unresolved reference 'em'` at
+        # RxBreakdownSheet.kt:753, the `letterSpacing = 0.08.em` of the drawer's
+        # search field. An extension property on Int in androidx.compose.ui.unit,
+        # used after a dot, and lowercase - invisible to every other rule here.
+        "a unit extension used without its import",
+        "imports.py", DRAWER,
+        "import androidx.compose.ui.unit.em\n",
+        "",
+        "0.08.em",
+    ),
 ]
 
 
