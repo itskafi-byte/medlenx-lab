@@ -52,7 +52,15 @@ object MedicineMatcher {
     /** Bangla digits, which appear throughout the MedEx dump. */
     private val BN_DIGITS = "০১২৩৪৫৬৭৮৯"
 
-    /** Corporate suffixes that carry no identity ("Square Pharmaceuticals Ltd."). */
+    /**
+     * The corporate suffix that may hang off the end of a name: the words in
+     * [COMPANY_NOISE]'s vocabulary that appear *after* a company's own name rather than
+     * inside it. Used by [companyKey]'s noise-only fallback.
+     */
+    private val TRAILING_SUFFIX = setOf(
+        "ltd", "limited", "plc", "inc", "co", "company", "bd", "bangladesh",
+    )
+
     private val COMPANY_NOISE = Regex(
         "\\b(ltd|limited|plc|inc|co|company|pharmaceuticals?|pharma|laboratories|" +
             "labs?|industries|healthcare|health\\s*care|bd|bangladesh)\\b",
@@ -150,19 +158,40 @@ object MedicineMatcher {
         return ""
     }
 
-    /** Loose key so 'Square Pharmaceuticals Ltd.' == 'Square Pharmaceuticals PLC'. */
+    /**
+     * The company's identity, as a string: 'Square Pharmaceuticals Ltd.' and
+     * 'Square Pharmaceuticals PLC' share one key, and nothing else does.
+     *
+     * Corporate noise comes off first. A name made *entirely* of noise
+     * ("Healthcare Pharmaceuticals Ltd." is healthcare + pharmaceuticals + ltd) keeps its
+     * words instead of collapsing to the empty key, because a key nobody shares is a
+     * company that can never be matched as your own - but the trailing corporate suffix
+     * still comes off that fallback, so "Healthcare Pharmaceuticals Ltd." and
+     * "Healthcare Pharmaceuticals" resolve to one key.
+     *
+     * **This is deliberately stricter than the web.** `company_key`
+     * (`medicine_matcher.py:318`) returns the same string, but its caller treats a
+     * *prefix* as equality, which merges companies that merely start alike - "Globe
+     * Pharmaceuticals" with "Globex Pharmaceuticals", "Square Pharmaceuticals" with
+     * "Square Toiletries", "Sun Pharmaceutical" with "Sunman-Birdem". Fourteen such pairs
+     * exist in the shipped catalogue, and every one of them can put another company's
+     * rows in the rep's own-portfolio share. See
+     * `agent/findings/2026-09-27-company-matcher-merges.md`.
+     */
     fun companyKey(name: String?): String {
         if (name.isNullOrBlank()) return ""
         val folded = asciiFold(name).lowercase()
         var key = NON_ALNUM.replace(COMPANY_NOISE.replace(folded, " "), " ")
             .split(WHITESPACE).filter { it.isNotEmpty() }.joinToString(" ")
         if (key.isEmpty()) {
-            // Corporate-noise-only name ("Healthcare Pharmaceuticals Ltd." is
-            // healthcare + pharmaceuticals + ltd), so stripping noise left nothing.
-            // Fall back to the normalised raw name so the key stays stable and
-            // comparable instead of silently disabling own-company matching.
-            key = NON_ALNUM.replace(folded, " ").split(WHITESPACE)
-                .filter { it.isNotEmpty() }.joinToString(" ")
+            val raw = NON_ALNUM.replace(folded, " ").split(WHITESPACE)
+                .filter { it.isNotEmpty() }
+            // Drop the corporate suffix from the end, never the last remaining word: the
+            // suffix is what changes between spellings of one company, the words before
+            // it are the company.
+            var end = raw.size
+            while (end > 1 && raw[end - 1] in TRAILING_SUFFIX) end--
+            key = raw.take(end).joinToString(" ")
         }
         return key
     }
@@ -199,12 +228,18 @@ object MedicineMatcher {
         else OwnCompany(DEFAULT_OWN_COMPANY, false)
     }
 
-    /** True when two company strings refer to the same manufacturer. */
+    /**
+     * True when two company strings refer to the same manufacturer.
+     *
+     * Key equality. The web also accepts "either key is a prefix of the other", which is
+     * how "Health" would be "Healthcare" - see [companyKey] for why that is not carried
+     * over.
+     */
     fun sameCompany(a: String?, b: String?): Boolean {
         val ka = companyKey(a)
         val kb = companyKey(b)
         if (ka.isEmpty() || kb.isEmpty()) return false
-        return ka == kb || ka.startsWith(kb) || kb.startsWith(ka)
+        return ka == kb
     }
 
     /**
@@ -383,26 +418,16 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
      * The rows [Intelligence.findOwnBrand] may consider for [companyKey], in
      * catalogue order.
      *
-     * [MedicineMatcher.sameCompany] is a loose test - equal keys, or either key a
-     * prefix of the other - so this cannot be a single map lookup. It selects the
-     * matching company keys (the catalogue has hundreds of distinct companies, not
-     * 25K) and keeps the rows whose key is one of them. The scan that remains is a
-     * `Set` lookup per row against pre-computed strings: no allocation, no
-     * normalisation, and the result is byte-for-byte the list the old filter built.
+     * [MedicineMatcher.sameCompany] is key equality, so this is exactly the rows whose
+     * company key *is* this key - one pass over the pre-computed keys, no normalisation.
+     * It was a prefix match while the company comparison was one; the candidate set has
+     * to narrow with the comparison, or [Intelligence.findOwnBrand] would still consider
+     * a neighbour company's products for a pick that [MedicineMatcher.sameCompany] then
+     * refuses to call the rep's own.
      */
     fun ownCandidates(companyKey: String): List<Candidate> {
         if (companyKey.isEmpty()) return emptyList()
-        val wanted = buildSet {
-            for (key in companyKeys) {
-                if (key == companyKey || key.startsWith(companyKey) ||
-                    companyKey.startsWith(key)
-                ) {
-                    add(key)
-                }
-            }
-        }
-        if (wanted.isEmpty()) return emptyList()
-        return rows.filter { it.companyKey in wanted }
+        return rows.filter { it.companyKey == companyKey }
     }
 
     /**
