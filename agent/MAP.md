@@ -64,7 +64,7 @@ When you need the reference behaviour, read the Python file on the left.
 | `ui/screens/scan/MedicineCard.kt` | 939 | editable card, ROI box, suggestions, "N other matches" picker, substitution card |
 | `ui/screens/scan/PrescriptionImageViewer.kt` | 228 | fullscreen viewer (the zoom escape hatch) |
 | `ui/screens/analytics/AnalyticsScreen.kt` | 1038 | KPIs, charts, filters, drill-downs |
-| `ui/screens/analytics/RxBreakdownSheet.kt` | 951 | the Prescription Audit Summary drawer: header, search + filter pills, clinical strip, item table, portfolio row, share footer. `RxAuditDrawer` (its payload) is in `AnalyticsData.kt` |
+| `ui/screens/analytics/RxBreakdownSheet.kt` | 953 | the Prescription Audit Summary drawer: header, search + filter pills, clinical strip, item table, portfolio row, share footer. `RxAuditDrawer` (its payload) is in `AnalyticsData.kt` |
 | `ui/screens/rx/RxAuditScreen.kt` | 459, `RxAuditParts.kt` 349, `DoctorPitchCard.kt` 479 | Rx audit screen; `RxAuditParts.kt` holds `ClassSlice`/`ClinicalStrip`/`PillButton`/`MarketShareCard`, shared with the drawer |
 | `ui/screens/hub/HubScreen.kt` | 1152 | drug index, news, jobs, health days, TRIPS |
 | `ui/screens/team/TeamScreen.kt` | 461, `TeamSections.kt` 654 | RSM command |

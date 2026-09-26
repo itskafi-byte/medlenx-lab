@@ -24,7 +24,7 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Certificate
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.model.Substitution
@@ -65,6 +66,7 @@ import com.medlenx.lab.ui.components.StatusPill
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.screens.rx.MarketShareCard
+import com.medlenx.lab.ui.screens.rx.ClinicalStrip
 import com.medlenx.lab.ui.screens.rx.RxAuditFilter
 import com.medlenx.lab.ui.screens.rx.PillButton
 import com.medlenx.lab.ui.theme.MlxShape
@@ -668,7 +670,7 @@ private fun ItemRow(
                     StatusPill(
                         text = "NEML Listed",
                         tone = PillTone.Blue,
-                        icon = Icons.Filled.Certificate,
+                        icon = Icons.Filled.Check,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
