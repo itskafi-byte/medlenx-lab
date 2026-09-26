@@ -78,6 +78,14 @@ number in a report nothing else agrees with.
 so the review card could copy without a fourth hand-rolled `setPrimaryClip`.
 HubScreen still has its own inline copy for the campaign script and was left alone.
 
+**The palette names are offset from Tailwind by one in the blue family.** `Mlx.Brand500`
+is `0xFF2563EB`, which is blue-**600**, and `Brand600` is `0xFF1D4ED8`, which is
+blue-**700**. Reading a token name as its Tailwind step put this card's Copy-pitch
+button and Smart-pitch header one step too dark (`40d985b`). Check the hex before
+matching a colour across the two codebases. The rest line up exactly once read that
+way: `Brand200` is slate-200, `Ok500` is emerald-600, `Ok600` is emerald-700,
+`Blue100`/`Blue200`/`BlueBg` are blue-100/blue-200/blue-50.
+
 *Still absent from the review card:* the web also renders the DGDA flag after the
 substitution card (`index.html:1966`). `EnrichedMedicine.dgdaAlert` is computed
 during enrichment and, like the two fields above, is dropped by `toCardData()` -
