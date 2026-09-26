@@ -160,18 +160,27 @@ interface PrescriptionDao {
         """
         SELECT p.id AS prescriptionId,
                p.doctor_name AS doctorName,
-               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(d.specialty, '') AS specialty,
                IFNULL(p.district, '') AS district,
                sm.generic AS generic,
                sm.brand_name AS brandName
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
         WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
         """
     )
     suspend fun stewardshipRows(since: Long): List<StewardshipRow>
 
-    /** `find_off_territory_audits`: geofence failures, newest first. */
+    /**
+     * `find_off_territory_audits`: geofence failures, newest first.
+     *
+     * Reads `doctor_specialty` off the prescription row, and so does the backend
+     * (`database.py:1782`). This is the one place the web displays the captured
+     * value rather than the joined one, and it is deliberate here too: the audit
+     * is a record of a scan as it happened, and showing a specialty later
+     * corrected on the doctor's profile would misreport what was recorded.
+     */
     @Query(
         """
         SELECT id, created_at AS createdAt, mr_id AS mrId,
@@ -254,8 +263,11 @@ interface PrescriptionDao {
     // ---- Analytics aggregates ------------------------------------------
 
     @Query(
-        "SELECT COUNT(DISTINCT id) FROM prescriptions p WHERE p.created_at >= :since" +
-            RX_FILTER_SQL
+        // `p.id`, not `id`: joining `doctors` puts a second `id` in scope and
+        // SQLite rejects an unqualified one as ambiguous.
+        "SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
+            "WHERE p.created_at >= :since" + RX_FILTER_SQL
     )
     suspend fun prescriptionCountSince(
         since: Long,
@@ -266,7 +278,8 @@ interface PrescriptionDao {
     ): Int
 
     @Query(
-        "SELECT COUNT(DISTINCT id) FROM prescriptions p " +
+        "SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
     suspend fun prescriptionCountBetween(
@@ -278,7 +291,8 @@ interface PrescriptionDao {
         mrId: String?,
     ): Int
 
-    @Query("SELECT COUNT(DISTINCT id) FROM prescriptions p WHERE 1=1" + RX_FILTER_SQL)
+    @Query("SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id WHERE 1=1" + RX_FILTER_SQL)
     suspend fun prescriptionCountAll(
         district: String?,
         territory: String?,
@@ -289,6 +303,7 @@ interface PrescriptionDao {
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :since" + RX_FILTER_SQL
     )
     suspend fun itemCountSince(
@@ -302,6 +317,7 @@ interface PrescriptionDao {
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name LIKE :ownLike AND p.created_at >= :since" + RX_FILTER_SQL
     )
     suspend fun ownItemCountSince(
@@ -316,6 +332,7 @@ interface PrescriptionDao {
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name LIKE :ownLike " +
             "AND p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
@@ -332,6 +349,7 @@ interface PrescriptionDao {
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
     suspend fun itemCountBetween(
@@ -347,6 +365,7 @@ interface PrescriptionDao {
         "SELECT sm.brand_name AS brandName, sm.company_name AS companyName, COUNT(*) AS count " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE IFNULL(sm.brand_name, '') != '' AND p.created_at >= :since " +
             RX_FILTER_SQL +
             " GROUP BY sm.brand_name ORDER BY count DESC LIMIT 1"
@@ -361,6 +380,7 @@ interface PrescriptionDao {
 
     @Query(
         "SELECT COUNT(DISTINCT p.doctor_name) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL
     )
     suspend fun activeDoctorCount(
@@ -373,6 +393,7 @@ interface PrescriptionDao {
 
     @Query(
         "SELECT COUNT(DISTINCT p.doctor_name) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL
     )
     suspend fun allDoctorCount(
@@ -401,6 +422,7 @@ interface PrescriptionDao {
     @Query(
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL
     )
     suspend fun companyItemCount(
@@ -418,6 +440,7 @@ interface PrescriptionDao {
             "COUNT(*) AS count " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
             // The CASE is repeated rather than aliased: SQLite resolves an output
             // alias in GROUP BY, but Room's compile-time validator parses the
@@ -443,6 +466,7 @@ interface PrescriptionDao {
             "COUNT(*) AS count " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since" + RX_FILTER_SQL +
             " GROUP BY CASE WHEN IFNULL(sm.brand_name, '') = '' THEN 'Unspecified' " +
             "ELSE sm.brand_name END ORDER BY count DESC LIMIT :limit"
@@ -468,6 +492,7 @@ interface PrescriptionDao {
         "SELECT p.doctor_name AS name, COUNT(*) AS count " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE sm.company_name = :company AND p.created_at >= :since " +
             "AND IFNULL(p.doctor_name, '') != ''" + RX_FILTER_SQL +
             " GROUP BY p.doctor_name ORDER BY count DESC LIMIT :limit"
@@ -532,6 +557,11 @@ interface PrescriptionDao {
      * `get_recent_scanned_medicines` ordering.
      */
     @Query(
+        // The export mirrors the backend's CSV, which reads
+        // `recent_scanned_medicines` -- the denormalised feed written at scan
+        // time -- so its `specialty` column is the captured value, not the joined
+        // one (main.py:840). Filtering it by the current profile would make the
+        // filtered rows and the printed specialty disagree.
         "SELECT p.created_at AS createdAt, p.mr_id AS mrId, p.doctor_name AS doctorName, " +
             "p.doctor_specialty AS doctorSpecialty, sm.brand_name AS brandName, " +
             "sm.generic AS generic, sm.company_name AS companyName, " +
@@ -541,6 +571,7 @@ interface PrescriptionDao {
             "p.upazila AS upazila, p.territory AS territory, p.id AS prescriptionId " +
             "FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :since" + RX_FILTER_SQL +
             " ORDER BY p.created_at DESC, sm.id DESC LIMIT :limit"
     )
@@ -560,10 +591,11 @@ interface PrescriptionDao {
                sm.company_name AS companyName, COUNT(*) AS captureCount
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
         WHERE p.created_at >= :since
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
-          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY sm.brand_name, sm.company_name
         ORDER BY captureCount DESC
@@ -585,13 +617,14 @@ interface PrescriptionDao {
         SELECT sm.company_name AS companyName, COUNT(*) AS count
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        LEFT JOIN doctors d ON p.doctor_id = d.id
         WHERE IFNULL(sm.company_name, '') != ''
           AND sm.company_name NOT LIKE '%Unknown%'
           AND sm.company_name NOT LIKE '%Live search failed%'
           AND p.created_at >= :since
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
-          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY sm.company_name
         ORDER BY count DESC
@@ -620,7 +653,7 @@ interface PrescriptionDao {
         WHERE p.created_at >= :since
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
-          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
         GROUP BY p.doctor_id
         ORDER BY prescriptions DESC, totalMeds DESC
@@ -644,6 +677,7 @@ interface PrescriptionDao {
         // the same (database.py:1116). Counting by name would disagree with the
         // rows whenever two doctors share one.
         "SELECT COUNT(*) FROM (SELECT p.doctor_id FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
             "WHERE p.created_at >= :since" + RX_FILTER_SQL + " GROUP BY p.doctor_id)"
     )
     suspend fun doctorLeaderTotal(
@@ -654,7 +688,13 @@ interface PrescriptionDao {
         mrId: String?,
     ): Int
 
-    /** The Live Recent Scans feed: newest scanned item first, with its Rx context. */
+    /**
+     * The Live Recent Scans feed: newest scanned item first, with its Rx context.
+     *
+     * `doctor_specialty` is the prescription's own value, matching the backend's
+     * feed, which reads the denormalised `recent_scanned_medicines` row written
+     * at scan time (`database.py:1329`). The feed reports what was captured.
+     */
     @Query(
         """
         SELECT p.created_at AS createdAt,
@@ -676,23 +716,27 @@ interface PrescriptionDao {
     /**
      * Widget D: generic counts per specialty, `get_generic_brand_matrix`.
      *
-     * The backend joins a `doctors` table for the specialty; Android carries it on
-     * the prescription row.
+     * Specialty comes from the joined doctor in all four places the backend reads
+     * it (`database.py:1233`): the selected column, the non-blank test, the
+     * `GROUP BY` and the `ORDER BY`. This used to read the prescription's own
+     * `doctor_specialty`, which is the value captured at scan time and does not
+     * move when a doctor's specialty is corrected.
      */
     @Query(
         """
-        SELECT IFNULL(p.doctor_specialty, '') AS specialty,
+        SELECT IFNULL(d.specialty, '') AS specialty,
                sm.generic AS generic,
                COUNT(*) AS count
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE sm.generic != '' AND IFNULL(p.doctor_specialty, '') != ''
+        LEFT JOIN doctors d ON p.doctor_id = d.id
+        WHERE sm.generic != '' AND IFNULL(d.specialty, '') != ''
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
-          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
-        GROUP BY p.doctor_specialty, sm.generic
-        ORDER BY p.doctor_specialty, count DESC
+        GROUP BY d.specialty, sm.generic
+        ORDER BY d.specialty, count DESC
         """
     )
     suspend fun genericMatrixRows(
@@ -715,9 +759,16 @@ interface PrescriptionDao {
     )
     suspend fun filterTerritories(): List<String>
 
+    /**
+     * `get_filter_options` (database.py:1393) reads the specialty options from
+     * `doctors`, not from the prescriptions, so the dropdown offers exactly the
+     * values the filter can match. Listing them from `prescriptions` instead
+     * would offer a specialty that no longer exists on any doctor, and selecting
+     * it would return nothing.
+     */
     @Query(
-        "SELECT DISTINCT doctor_specialty FROM prescriptions " +
-            "WHERE IFNULL(doctor_specialty, '') != '' ORDER BY doctor_specialty"
+        "SELECT DISTINCT specialty FROM doctors " +
+            "WHERE IFNULL(specialty, '') != '' ORDER BY specialty"
     )
     suspend fun filterSpecialties(): List<String>
 

@@ -101,7 +101,7 @@ above `shareSummary`, `saveVerified` above `resolveDoctorId`, and `healthDays`
 above `healthDayDetail`), which makes it a check rather than a habit of reading
 upwards before every edit.
 - `roomcheck.py` healthy: `no problems found - every column and table resolves`
-  (10 entities, 70 queries)
+  (10 entities, 70 queries, all 70 parsed in full)
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
 - `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
 
@@ -148,6 +148,35 @@ because `territory` existed on `prescriptions` — the qualifier was decoration,
 a column written against the wrong table was invisible. Unqualified columns are
 still judged against the union, deliberately: SQLite binds those at run time
 against any joined table, so rejecting one that a sibling owns is a false alarm.
+
+It assembles each `@Query` argument before parsing it, and substitutes project
+`const val`s by name. Both matter, and both were silent failures:
+
+  * A `@Query` argument is a chain of adjacent literals, so the statement exists
+    nowhere in the file as contiguous text. The old parser stopped at the first
+    closing quote: `prescriptionCountBetween` was validated as
+    `SELECT COUNT(DISTINCT p.id) FROM prescriptions p ` with its JOIN, its WHERE
+    and its filter fragment missing. Six queries were parsed as bare SELECT lists
+    (no `FROM` at all) and six more had no function name resolved. Now all 70
+    parse in full. Same fault `migrationcheck.py` had, hiding the same way.
+  * `RX_FILTER_SQL` is a `const val` appended by name, so the fragment has to be
+    substituted or it is invisible. Substituting it also means a query that
+    appends the fragment without joining `doctors` is caught directly, by the
+    alias check below, instead of needing a second string-matching check to
+    duplicate the knowledge and drift from it.
+
+Two checks came out of writing the specialty filter:
+
+  * **Unknown table alias.** `d.specialty` needs a `doctors` join; without one
+    SQLite reports `no such column` at run time, and only on the path that reads
+    a specialty — so the query works for everyone until someone opens the filter.
+  * **Ambiguous unqualified column.** A bare column that exists on more than one
+    joined table is a run-time `ambiguous column name` error that Room cannot see.
+    This is not hypothetical: joining `doctors` put a second `id` in scope next to
+    `prescriptions.id`, and three `COUNT(DISTINCT id)` statements became ambiguous.
+    All three are now `COUNT(DISTINCT p.id)`.
+
+Both are fault-tested by injecting the fault and asserting it is reported.
 
 `roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
 call site to a column: roomcheck validates the SQL *inside* a `@Query` against the

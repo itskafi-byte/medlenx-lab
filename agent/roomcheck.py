@@ -147,19 +147,132 @@ def parse_projections(src: str) -> dict[str, list[str]]:
     return out
 
 
-def parse_queries(src: str) -> list[dict]:
+def flatten_literals(text: str) -> str:
+    """
+    Concatenate the contents of every string literal in `text`.
+
+    A `@Query` argument in Kotlin is a chain of adjacent literals --
+    `"SELECT ... " + "FROM x " + "WHERE ..."` -- so the statement does not exist
+    anywhere in the file as contiguous text. Parsing the raw source therefore sees
+    fragments, and the old version of this function took only the *first* one:
+    `prescriptionCountBetween` was validated as
+    `SELECT COUNT(DISTINCT p.id) FROM prescriptions p ` with its JOIN, its WHERE
+    and its filter fragment all missing. Seventeen queries were parsed that way.
+
+    This is the same fault `migrationcheck.py` had, and it hides the same way: the
+    check runs, finds nothing wrong with the part it read, and reports a clean
+    tree that was never examined.
+
+    Dropping the `+` tokens is right rather than lossy: they are Kotlin syntax and
+    the driver never sees them. What survives a constant reference like
+    `+ RX_FILTER_SQL` is the name, which [project_sql_constants] substitutes.
+    """
+    parts: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end == -1 else end
+            parts.append(text[i + 3 : end])
+            i = end + 3
+            continue
+        if c == '"':
+            j = i + 1
+            buf = []
+            while j < n:
+                if text[j] == "\\":
+                    buf.append(text[j + 1] if j + 1 < n else "")
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    break
+                buf.append(text[j])
+                j += 1
+            parts.append("".join(buf))
+            i = j + 1
+            continue
+        # An identifier *between* literals is a constant reference -- the
+        # `RX_FILTER_SQL` in `"..." + RX_FILTER_SQL`. Dropping it along with the
+        # `+` left the statement looking complete while its filter clause was
+        # absent, which is the worst of both: the text ends at a valid-looking
+        # point and the substitution below never finds a name to replace.
+        ident = re.match(r"[A-Za-z_]\w*", text[i:])
+        if ident:
+            parts.append(" " + ident.group(0) + " ")
+            i += len(ident.group(0))
+            continue
+        i += 1
+    return "".join(parts)
+
+
+def project_sql_constants(root: str) -> dict[str, str]:
+    """
+    Every `const val` in the tree whose value is a string, by name.
+
+    `RX_FILTER_SQL` is a `const val` holding the shared WHERE fragment, and
+    queries append it by name. Without substituting its value the fragment is
+    invisible to every check in this file, including the one that decides whether
+    a query joins the table the fragment references.
+    """
+    out: dict[str, str] = {}
+    for dirpath, _, files in os.walk(root):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            text = strip_comments(open(path, encoding="utf-8").read())
+            for m in re.finditer(r"const\s+val\s+(\w+)\s*(?::[^=]*)?=", text):
+                name = m.group(1)
+                value = flatten_literals(_const_initialiser(text, m.end()))
+                # Only string-valued constants are worth substituting. An `Int`
+                # or a resource id flattens to an empty string, and registering
+                # those as `''` would let a name that happens to appear in SQL be
+                # replaced by nothing.
+                if value.strip():
+                    out[name] = value
+    return out
+
+
+def _const_initialiser(text: str, start: int) -> str:
+    """
+    The initialiser source from just past its `=`, joining continuation lines.
+
+    A multi-line `const val` is a chain of literals across several lines, and
+    taking only the first line is not a small loss: `RX_FILTER_SQL` declares its
+    district clause first and its specialty clause last, so a one-line read
+    substituted a fragment that had no specialty in it at all -- and the checks
+    depending on that clause stayed blind while reporting a clean tree.
+    """
+    i, n = start, len(text)
+    buf: list[str] = []
+    while i < n:
+        eol = text.find("\n", i)
+        eol = n if eol == -1 else eol
+        line = text[i:eol]
+        buf.append(line)
+        stripped = line.rstrip()
+        # `const val X =` with the value on the next line, or a `+` continuation.
+        if stripped.endswith("+") or (len(buf) == 1 and not stripped):
+            i = eol + 1
+            continue
+        break
+    return "\n".join(buf)
+
+
+def parse_queries(src: str, constants: dict[str, str] | None = None) -> list[dict]:
     out = []
-    for m in re.finditer(r'@Query\s*\(\s*("""|")', src):
-        quote = m.group(1)
-        start = m.end()
-        if quote == '"""':
-            end = src.find('"""', start)
-            sql = src[start:end]
-            after = end + 3
-        else:
-            end = src.find('"', start)
-            sql = src[start:end]
-            after = end + 1
+    for m in re.finditer(r"@Query\s*\(", src):
+        open_idx = m.end() - 1
+        close_idx = match_paren(src, open_idx)
+        if close_idx == -1:
+            continue
+        # The argument's own parens, not the next `"` -- that was the bug.
+        sql = flatten_literals(src[open_idx + 1 : close_idx])
+        for name, value in (constants or {}).items():
+            if name in sql:
+                sql = sql.replace(name, value)
+        after = close_idx + 1
         tail = src[after : after + 600]
         fm = re.search(r"\bfun\s+(\w+)", tail)
         rm = re.search(r"\)\s*:\s*([A-Za-z_][\w.<>\[\],\s?]*)", tail)
@@ -174,8 +287,8 @@ def parse_queries(src: str) -> list[dict]:
     return out
 
 
-def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]]]:
-    """(tables, column identifiers, output aliases, alias->table, alias->columns)."""
+def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str]]:
+    """(tables, column identifiers, output aliases, alias->table, alias->columns, bare columns)."""
     sql_nc = re.sub(r"'[^']*'", " ", sql)
     sql_nc = re.sub(r"\?\d*|:\w+", " ", sql_nc)
 
@@ -207,6 +320,17 @@ def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dic
             continue
         qualified.setdefault(m.group(1), set()).add(m.group(2))
 
+    # Columns written *without* a qualifier. A bare name is resolved by SQLite at
+    # run time against every table in scope, and if two of them have a column by
+    # that name the statement fails with "ambiguous column name" -- at run time,
+    # on the device. Adding the `doctors` join to these queries put a second `id`
+    # in scope and turned three `COUNT(DISTINCT id)` into exactly that.
+    bare: set[str] = set()
+    for m in re.finditer(r"(?<![\w.])([A-Za-z_]\w*)", sql_nc):
+        if m.group(1).lower() in SQL_STOP or m.group(1).isdigit():
+            continue
+        bare.add(m.group(1))
+
     cols: set[str] = set()
     for m in re.finditer(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)|\b([A-Za-z_]\w*)\b", sql_nc):
         ident = m.group(2) or m.group(3)
@@ -216,7 +340,65 @@ def analyse(sql: str) -> tuple[set[str], set[str], set[str], dict[str, str], dic
     # table names and aliases are not columns
     cols -= tables
     cols -= table_aliases
-    return tables, cols, aliases, alias_to_table, qualified
+    return tables, cols, aliases, alias_to_table, qualified, bare
+
+
+def check_ambiguous_columns(sql: str, tables: dict[str, set[str]]) -> list[str]:
+    """
+    A column written without a qualifier that exists on more than one joined table.
+
+    SQLite resolves a bare column against every table in scope and raises
+    "ambiguous column name: x" when two of them have it. Nothing about that is
+    visible to Room's compile-time validator, which is looking at the schema
+    rather than at the resolution, and nothing about it is visible to a build:
+    it is a runtime error on the path that executes the query.
+
+    This is not hypothetical. Adding the `doctors` join to the dashboard queries
+    put a second `id` in scope next to `prescriptions.id`, and three
+    `COUNT(DISTINCT id)` statements silently became ambiguous.
+    """
+    used, _cols, _aliases, _alias_to_table, _qualified, bare = analyse(sql)
+    in_scope = [t for t in used if t in tables]
+    if len(in_scope) < 2:
+        return []
+    problems = []
+    for c in sorted(bare):
+        owners = [t for t in in_scope if c in tables[t]]
+        if len(owners) > 1:
+            problems.append(
+                f"column '{c}' is not qualified but exists on {', '.join(sorted(owners))}"
+            )
+    return problems
+
+
+def check_unknown_alias(sql: str, tables: dict[str, set[str]]) -> list[str]:
+    """
+    A column written through an alias that no table in the statement declares.
+
+    `d.specialty` is only meaningful if the statement joins `doctors` as `d`.
+    Without the join SQLite reports `no such column: d.specialty` at run time --
+    and only on the code path that reads the specialty, so a query missing its
+    join works for every user until one of them opens the filter sheet.
+
+    This is what closes the loop on `RX_FILTER_SQL`: because the fragment is
+    substituted into the statement before parsing, a query that appends it
+    without joining `doctors` is reported here rather than needing a second,
+    string-matching check that could drift from the fragment.
+    """
+    used, _cols, _aliases, alias_to_table, qualified, _bare = analyse(sql)
+    in_scope = set(t for t in used if t in tables)
+    problems = []
+    for alias in sorted(qualified):
+        if alias in alias_to_table:
+            continue
+        # A schema-qualified name (`main.table`) is not a table alias.
+        if alias.lower() in ("main", "temp", "sqlite_master"):
+            continue
+        problems.append(
+            f"'{alias}.' is used as a table alias but the statement declares no "
+            f"table `{alias}`"
+        )
+    return problems
 
 
 def main() -> int:
@@ -225,7 +407,8 @@ def main() -> int:
 
     tables, owners = parse_entities(e_src)
     projections = parse_projections(e_src)
-    queries = parse_queries(d_src)
+    constants = project_sql_constants(os.path.dirname(_REPO))
+    queries = parse_queries(d_src, constants)
     all_cols = set().union(*tables.values()) if tables else set()
 
     print("=" * 72)
@@ -238,7 +421,7 @@ def main() -> int:
 
     problems: list[str] = []
     for q in queries:
-        used_tables, cols, aliases, alias_to_table, qualified = analyse(q["sql"])
+        used_tables, cols, aliases, alias_to_table, qualified, _bare = analyse(q["sql"])
         unknown_tables = used_tables - set(tables)
         for t in sorted(unknown_tables):
             problems.append(f"{q['fn']} (Daos.kt:{q['line']}) unknown table '{t}'")
@@ -263,6 +446,12 @@ def main() -> int:
                     f"{q['fn']} (Daos.kt:{q['line']}) column '{c}' is not on "
                     f"table '{target}' (written as {alias}.{c})"
                 )
+
+        for p in check_ambiguous_columns(q["sql"], tables):
+            problems.append(f"{q['fn']} (Daos.kt:{q['line']}) {p}")
+
+        for p in check_unknown_alias(q["sql"], tables):
+            problems.append(f"{q['fn']} (Daos.kt:{q['line']}) {p}")
 
         base = re.sub(r"[<>,\[\]\s?]", "", q["ret"]).split(".")[-1]
         if base in projections:
