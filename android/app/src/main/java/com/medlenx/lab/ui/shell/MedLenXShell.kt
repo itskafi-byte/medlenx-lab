@@ -31,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.medlenx.lab.data.config.AppGraph
+import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.ui.components.copyToClipboard
@@ -418,6 +419,14 @@ fun MedLenXShell(
                                     doctorName = s.doctor.name,
                                     doctorSpecialty = s.doctor.specialty,
                                     substitution = sub,
+                                    compliance = PitchCompliance(
+                                        nemlListed = med.neml?.listed == true,
+                                        nemlMolecule = med.neml?.molecule
+                                            ?.ifBlank { med.genericName }.orEmpty(),
+                                        nemlClass = med.neml?.therapeuticClass.orEmpty(),
+                                        dgdaFlagged = med.dgdaAlert?.flagged == true,
+                                        dgdaReason = med.dgdaAlert?.reason.orEmpty(),
+                                    ),
                                 )
                             } else {
                                 // No silent no-op: say why there is nothing to pitch.
@@ -484,6 +493,7 @@ fun MedLenXShell(
                         rxId = target.rxId,
                         doctorName = target.doctorName,
                         substitution = sub,
+                        compliance = target.compliance,
                         bioequivalenceNote = notes.bioequiv + "\n" + notes.dosageAdvantage,
                         onClose = { pitchTarget = null },
                         onDownloadPdf = {
@@ -493,6 +503,7 @@ fun MedLenXShell(
                                     doctorName = target.doctorName,
                                     doctorSpecialty = target.doctorSpecialty,
                                     substitution = sub,
+                                    compliance = target.compliance,
                                     // Same string the card is given, so the exported PDF
                                     // and the screen it came from read identically.
                                     bioequivalenceNote = notes.bioequiv + "\n" + notes.dosageAdvantage,
@@ -567,13 +578,14 @@ fun MedLenXShell(
                 },
                 onCopyList = { text -> copyToClipboard(context, text, "Rx items") },
                 onCopyPitch = { pitch -> copyToClipboard(context, pitch, "Pitch note") },
-                onPitchCard = { sub ->
+                onPitchCard = { sub, compliance ->
                     val p = analyticsVm.breakdown?.prescription
                     pitchTarget = PitchTarget(
                         rxId = p?.rxNo ?: "Saved Rx",
                         doctorName = p?.doctorName.orEmpty(),
                         doctorSpecialty = p?.doctorSpecialty.orEmpty(),
                         substitution = sub,
+                        compliance = compliance,
                     )
                 },
                 // The web's "Verify against Medex" opens the Drug Index tab of the Pharma

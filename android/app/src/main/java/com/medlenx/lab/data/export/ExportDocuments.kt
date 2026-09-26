@@ -3,6 +3,7 @@ package com.medlenx.lab.data.export
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.RecentMedicineRow
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.model.Substitution
 import com.medlenx.lab.data.repo.DoctorTiering
 import com.medlenx.lab.data.repo.PyCsv
@@ -31,6 +32,7 @@ object ExportDocuments {
         doctorName: String,
         doctorSpecialty: String,
         substitution: Substitution,
+        compliance: PitchCompliance,
         bioequivalenceNote: String,
         generatedAt: Long = System.currentTimeMillis(),
     ): ByteArray {
@@ -70,13 +72,30 @@ object ExportDocuments {
             weights = listOf(1.15f, 2.5f, 2.5f),
         )
 
-        // The web's version of this section lists the item's NEML and DGDA
-        // findings, which come from the audit item it is built server-side. A
-        // [Substitution] carries no regulatory fields, so rather than restate
-        // standing the card already shows as pills — or assert a compliance fact
-        // this call site cannot check — the section carries only the price
-        // position, which is derived from the two catalogue rows.
+        // The web's version of this section lists the item's NEML and DGDA findings
+        // (`main.py:1175`), each one only when its flag is set. It could not be
+        // ported before because a [Substitution] carries no regulatory fields, and
+        // this section used to say so rather than assert a compliance fact the call
+        // site could not check; [PitchCompliance] now travels with the substitution,
+        // so the bullets are the web's. Its third bullet, "Pricing unverified", tests
+        // the DGDA gazette MRP, which this app does not carry.
         w.heading("Compliance & evidence")
+        if (compliance.nemlListed) {
+            w.bullet(
+                "NEML Listed" +
+                    compliance.nemlMolecule.takeIf { it.isNotBlank() }
+                        ?.let { " — $it" }.orEmpty() +
+                    compliance.nemlClass.takeIf { it.isNotBlank() }
+                        ?.let { " ($it)" }.orEmpty(),
+            )
+        }
+        if (compliance.dgdaFlagged) {
+            w.bullet(
+                "DGDA Price Alert" +
+                    compliance.dgdaReason.takeIf { it.isNotBlank() }
+                        ?.let { " — $it" }.orEmpty(),
+            )
+        }
         w.bullet(
             "Price position: " + substitution.unitDifferenceLabel.ifBlank {
                 formatPercent(substitution.unitDifference)

@@ -92,7 +92,10 @@ object RxAudit {
         confidencePercent = confidencePercentOf(med.confidence),
         imageUrl = med.imageUrl,
         nemlListed = med.neml?.listed == true,
-        nemlMolecule = med.neml?.molecule.orEmpty(),
+        // `m.neml.molecule||m.generic` on the web: the NEML entry is keyed by
+        // molecule, so a listed row with no reported molecule falls back to the
+        // generic the scan did read.
+        nemlMolecule = med.neml?.molecule?.ifBlank { med.genericName }.orEmpty(),
         // The web's item carries `dgda_price_alert.flagged`; the ported alert carries
         // the same verdict plus the sentence explaining it (`main.py:963`).
         dgdaFlagged = med.dgdaAlert?.flagged == true,

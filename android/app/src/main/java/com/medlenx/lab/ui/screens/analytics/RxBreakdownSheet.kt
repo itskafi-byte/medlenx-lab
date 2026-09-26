@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.model.Substitution
 import com.medlenx.lab.data.model.needsAuditFollowUp
 import com.medlenx.lab.data.repo.RxAudit
@@ -108,7 +109,7 @@ fun RxBreakdownSheet(
     onExportCsv: (String) -> Unit,
     onCopyList: (String) -> Unit,
     onCopyPitch: (String) -> Unit,
-    onPitchCard: (Substitution) -> Unit,
+    onPitchCard: (Substitution, PitchCompliance) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -261,7 +262,7 @@ private fun DrawerBody(
     onExportCsv: (String) -> Unit,
     onCopyList: (String) -> Unit,
     onCopyPitch: (String) -> Unit,
-    onPitchCard: (Substitution) -> Unit,
+    onPitchCard: (Substitution, PitchCompliance) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
 ) {
     // Plain `remember`, not `rememberSaveable`: an enum and a Set<Int> are not types
@@ -456,7 +457,7 @@ private fun ItemTable(
     visible: List<Int>,
     expanded: Set<Int>,
     onTogglePortfolio: (Int) -> Unit,
-    onPitchCard: (Substitution) -> Unit,
+    onPitchCard: (Substitution, PitchCompliance) -> Unit,
     onCopyPitch: (String) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
 ) {
@@ -541,7 +542,7 @@ private fun ItemRow(
     portfolio: Substitution?,
     expanded: Boolean,
     onTogglePortfolio: () -> Unit,
-    onPitchCard: (Substitution) -> Unit,
+    onPitchCard: (Substitution, PitchCompliance) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
 ) {
     val followUp = needsAuditFollowUp(line.confidencePercent)
@@ -632,7 +633,22 @@ private fun ItemRow(
                             // The audit screen already ported fa-id-card as Badge; the
                             // two screens show the same button, so they share the glyph.
                             icon = Icons.Filled.Badge,
-                            onClick = { onPitchCard(portfolio) },
+                            // The card gates its compliance badges on the flags, so
+                            // the row's own values travel with the substitution. A
+                            // saved row does not store the NEML molecule's class, so
+                            // the PDF leaves the parenthetical off rather than borrow
+                            // the medicine's unrelated therapeutic class.
+                            onClick = {
+                                onPitchCard(
+                                    portfolio,
+                                    PitchCompliance(
+                                        nemlListed = line.nemlListed,
+                                        nemlMolecule = line.nemlMolecule,
+                                        dgdaFlagged = line.dgdaFlagged,
+                                        dgdaReason = line.dgdaReason,
+                                    ),
+                                )
+                            },
                         )
                     }
                 }

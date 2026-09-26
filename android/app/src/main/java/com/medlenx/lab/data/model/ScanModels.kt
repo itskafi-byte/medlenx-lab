@@ -166,6 +166,25 @@ data class Substitution(
     val pitch: String,
 )
 
+/**
+ * The regulatory badges the pitch card may carry, for the medicine being displaced.
+ *
+ * The web's pitch modal reads them off the audit item it was opened from (`m.neml`,
+ * `m.dgda_price_alert`, `index.html:3034`) and renders each badge only when its flag
+ * is set; its PDF does the same (`main.py:1175`). A [Substitution] carries no
+ * regulatory fields, so Android's card had nothing to test and asserted both badges
+ * unconditionally - telling a rep, on a card they present in the chamber, that a real
+ * medicine is NEML-listed and DGDA-flagged whether or not it is.
+ */
+data class PitchCompliance(
+    val nemlListed: Boolean = false,
+    val nemlMolecule: String = "",
+    /** The NEML molecule's class. Blank for a saved row, which does not store it. */
+    val nemlClass: String = "",
+    val dgdaFlagged: Boolean = false,
+    val dgdaReason: String = "",
+)
+
 /** Doctor block plus the cascading location the officer confirms. */
 data class VerifiedDoctor(
     val name: String,

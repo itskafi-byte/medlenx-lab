@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.model.Substitution
 import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.PillTone
@@ -65,6 +66,7 @@ data class PitchTarget(
     val doctorName: String,
     val doctorSpecialty: String,
     val substitution: Substitution,
+    val compliance: PitchCompliance = PitchCompliance(),
 )
 
 /**
@@ -95,6 +97,7 @@ fun DoctorPitchCard(
     rxId: String,
     doctorName: String,
     substitution: Substitution,
+    compliance: PitchCompliance,
     bioequivalenceNote: String,
     onClose: () -> Unit,
     onDownloadPdf: () -> Unit,
@@ -140,14 +143,30 @@ fun DoctorPitchCard(
                 )
 
                 Column(modifier = Modifier.padding(MlxD.Space4)) {
-                    // Compliance pills carried over from the medicine being displaced.
+                    // Compliance pills carried over from the medicine being displaced -
+                    // each one gated on its flag, because these are claims about a real
+                    // medicine and the web renders them conditionally (`index.html:3034`).
+                    // The NEML text carries the molecule the web appends and the tone is
+                    // the web's blue, the same blue as the audit drawer's row badge.
                     FlowRowCompat(horizontalSpacing = 4.dp, verticalSpacing = 4.dp) {
-                        RegulatoryPill(text = "NEML Listed", tone = PillTone.Emerald, icon = Icons.Filled.Check)
-                        RegulatoryPill(
-                            text = "DGDA Price Alert",
-                            tone = PillTone.RedSoft,
-                            icon = Icons.Filled.Block,
-                        )
+                        if (compliance.nemlListed) {
+                            RegulatoryPill(
+                                text = if (compliance.nemlMolecule.isBlank()) {
+                                    "NEML Listed"
+                                } else {
+                                    "NEML Listed · ${compliance.nemlMolecule}"
+                                },
+                                tone = PillTone.Blue,
+                                icon = Icons.Filled.Check,
+                            )
+                        }
+                        if (compliance.dgdaFlagged) {
+                            RegulatoryPill(
+                                text = "DGDA Price Alert",
+                                tone = PillTone.RedSoft,
+                                icon = Icons.Filled.Block,
+                            )
+                        }
                     }
 
                     CompareTable(competitor = competitor, own = own)
