@@ -90,13 +90,22 @@ reading the stored flag would put the strict comparison in the row badge and the
 one in the footer below it, and they would disagree on "Square Pharmaceuticals" vs
 "Square Pharmaceuticals Ltd.".
 
-**The table scrolls sideways.** Four columns do not fit a phone. The web already gives
-its table `min-w-[560px]` inside an `overflow-x-auto`, so a horizontally scrolled table
-is what it shows on a phone too; reflowing each row into a card would be a different
-screen from the one the web and the Figma export describe. Because there is no `<table>`
-to size the cells, `TABLE_WIDTH` states the width and the header, every row, the
-expander and the empty state all use it - inside a `horizontalScroll` the constraints are
-unbounded, so anything relying on `fillMaxWidth` there collapses instead of filling.
+**The item list is cards, not a table** (rebuilt in the charts-and-cards round). The
+web's four columns (`min-w-[560px]` inside an `overflow-x-auto`) are a phone's horizontal
+scroll showing about one column at a time, and the first version of this drawer ported
+that table literally. It is now one card per medicine: brand + strength with the
+confidence badge on the card's header line, the `type • dosage` footnote under it, then
+Generic Composition and Pharmaceutical side by side behind a label where the `<th>` used
+to name the column, then every regulatory badge in one wrap, then the pitch actions.
+`TABLE_WIDTH` and the four column constants went with the header row, as did the
+`horizontalScroll` - and the card that used to wrap the whole table, since an outer card
+around a stack of cards is a box around boxes. The empty state keeps a card of its own,
+which is where the web puts it (inside the table's white `rounded-xl` container).
+
+The rewrite was audited for loss rather than eyeballed: every `Icons.Filled.*`, every
+`line.*` field, every `Mlx.*`/`MlxType.*`/`PillTone.*` token, both callbacks and all
+seven user-visible strings were diffed against `git show HEAD:` that file, and the only
+names that changed are `ItemRow`→`ItemCard` and `PortfolioRow`→`PortfolioCard`.
 
 **Four shared parts came out of `RxAuditScreen`** (`ui/screens/rx/RxAuditParts.kt`):
 `ClassSlice` + `classBreakdown`, `ClinicalStrip`, `PillButton` and `MarketShareCard`.
@@ -116,6 +125,13 @@ the substitution now.
 work), and the `title=` tooltips on the NEML / DGDA / TRIPS badges - `dgdaReason` is
 carried on the line for it, but Android has no tooltip and the detail needs a long-press
 affordance to land somewhere.
+
+*Not ported, and not deliberately:* the web's brand footnote is
+`[m.type || m.form, m.dosage_normalized]` (`index.html:2951`), so a row with no `type`
+still shows the dosage form. `ScannedMedicineEntity` stores `dosage_form`
+(`Entities.kt:120`), but `RxAuditLine` has no such field and the drawer's `@Query` does
+not select it, so the footnote starts at `dosage` whenever `type` is empty. Small and
+real; left out of the cards round because it is a DAO + model change, not a layout one.
 
 ### Parity directive, module 2 — generic substitution in the review stream
 
@@ -151,6 +167,33 @@ during enrichment and, like the two fields above, is dropped by `toCardData()` -
 flagged, not folded in, because module 2 was the substitution card.
 
 ## Recently fixed (committed, unverified)
+
+- **The Gemini directive's first three sections** — the audit-drawer freeze, the chart
+  colours/aggregation, and the drawer's mobile cards. Verified against the web app
+  before any code was touched, and three of the directive's claims turned out to be
+  inventions rather than web behaviour: the 20-colour palette, the top-8 "Others" rule
+  (the web folds under `min_percent=3.0`) and a donut centre label. The user chose the
+  fixed 20-colour array, web behaviour everywhere else, printed counts instead of hover,
+  and correctness first.
+
+  **The freeze** (`350007e`). `loadDrawer` ran its own catalogue scan on the main thread
+  - 25,105 rows walked per item, with the `generic+ingredient+category` blob rebuilt
+  each time. `MedexIndex` now pre-computes its company keys, exposes `ownCandidates`,
+  and the load runs under `withContext(Dispatchers.Default)`. A rule-for-rule mirror
+  over the real catalogue: 126/126 lookups identical, 9.2 s → 242 ms. The same round:
+  `runCatching` was swallowing the `CancellationException` that a re-tap depends on (now
+  `failureAsNull`), the drawer `Dialog` had no window insets (status bar over the
+  header), `ProgressTrack` coloured by thresholds the web does not have, and the top-bar
+  search lost its width to the company pill.
+
+  **The charts** (`918827e`). Chart A is horizontal, which is what the web draws
+  (`indexAxis:'y'`), with the manufacturer, count and share printed on the row because a
+  touch screen has no tooltip to hover. The donut colours by company: the own company is
+  pinned to emerald and skipped in the palette, "Others" takes the web's slate, and the
+  legend prints the web's tooltip text (`12 (24.0%)`). Arcs are drawn from item counts
+  rather than from a rounded percentage. The centre is two lines and names what it
+  shows - "Own SoV" when the own company is a slice, "Top SoV" when it is not - where
+  the old label read the first slice and captioned a competitor's share "SoV".
 
 - **The four compile errors from the user's local build** (`dcd75dd`), every one of
   them in the audit drawer the module-3 round wrote:

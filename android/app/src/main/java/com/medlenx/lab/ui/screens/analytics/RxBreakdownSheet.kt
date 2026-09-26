@@ -3,7 +3,6 @@ package com.medlenx.lab.ui.screens.analytics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -337,19 +335,19 @@ private fun DrawerBody(
                 modifier = Modifier.padding(bottom = MlxD.Space3),
             )
 
-            MlxCard(padding = 0.dp) {
-                ItemTable(
-                    drawer = drawer,
-                    visible = visible,
-                    expanded = expanded,
-                    onTogglePortfolio = { i ->
-                        expanded = if (i in expanded) expanded - i else expanded + i
-                    },
-                    onPitchCard = onPitchCard,
-                    onCopyPitch = onCopyPitch,
-                    onVerifyAgainstMedex = onVerifyAgainstMedex,
-                )
-            }
+            // No wrapper card: every medicine is a card of its own now, so an outer
+            // one would only put a white box around a stack of white boxes.
+            ItemCards(
+                drawer = drawer,
+                visible = visible,
+                expanded = expanded,
+                onTogglePortfolio = { i ->
+                    expanded = if (i in expanded) expanded - i else expanded + i
+                },
+                onPitchCard = onPitchCard,
+                onCopyPitch = onCopyPitch,
+                onVerifyAgainstMedex = onVerifyAgainstMedex,
+            )
         }
 
         // Footer: market share + the two export actions. Outside the scroll so it stays
@@ -440,27 +438,24 @@ private fun SearchAndFilters(
         }
     }
 }
-
-// ------------------------------------------------------------ items table ----
-
-private val BRAND_COL = 190.dp
-private val GENERIC_COL = 165.dp
-private val PHARMA_COL = 145.dp
-private val CONF_COL = 72.dp
+// ------------------------------------------------------------- item cards ----
 
 /**
- * The table's full width, so the header, every row and the expanded portfolio row all
- * end at the same edge.
+ * The item list, as one card per medicine.
  *
- * The web gets this from a real `<table>`; here the width has to be stated. It also has
- * to be finite: the table sits inside a `horizontalScroll`, which offers its children
- * unbounded width, so anything relying on `fillMaxWidth` inside it would collapse to
- * nothing rather than fill the row.
+ * The web draws this as a four-column `<table>` inside `overflow-x-auto` with a
+ * `min-w-[560px]`, which on a phone is a horizontal scroll of a table whose third of a
+ * screen shows about one column at a time. The same data as stacked cards: the header
+ * line, then the two fields that were columns, then every badge in one wrap, then the
+ * pitch actions.
+ *
+ * Nothing is dropped in the fold - the web's four columns (brand, generic, company,
+ * confidence) all survive, and the two that lost their column header say what they are
+ * instead. The orange wash on a low-confidence read was `bg-orange-50/70` behind the
+ * whole `<tr>`; it is now the card's own background.
  */
-private val TABLE_WIDTH = BRAND_COL + GENERIC_COL + PHARMA_COL + CONF_COL + MlxD.Space2 * 2
-
 @Composable
-private fun ItemTable(
+private fun ItemCards(
     drawer: RxAuditDrawer,
     visible: List<Int>,
     expanded: Set<Int>,
@@ -469,20 +464,20 @@ private fun ItemTable(
     onCopyPitch: (String) -> Unit,
     onVerifyAgainstMedex: () -> Unit,
 ) {
-    // One scroll state for the header and every row, so the columns stay in line. The
-    // web gets this for free from a real <table>; the price of not having one is that
-    // the shared state has to be explicit.
-    val scroll = rememberScrollState()
-
-    Column(modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)) {
-        TableHeader()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MlxD.Space2),
+    ) {
         if (visible.isEmpty()) {
-            EmptyItems()
+            // Still inside a card: on the web the empty state sits inside the white
+            // `rounded-xl border` container with the table, and it should not become
+            // bare text on the sheet just because the rows did.
+            MlxCard { EmptyItems() }
             return@Column
         }
         visible.forEach { i ->
             val line = drawer.lines[i]
-            ItemRow(
+            ItemCard(
                 line = line,
                 own = drawer.ownCompany.isNotBlank() &&
                     RxAudit.sameCompanyLoose(line.company, drawer.ownCompany),
@@ -492,9 +487,11 @@ private fun ItemTable(
                 onPitchCard = onPitchCard,
                 onVerifyAgainstMedex = onVerifyAgainstMedex,
             )
+            // The web injects the portfolio detail as a second `<tr>` under its item;
+            // here it follows the card it belongs to, in the same violet.
             if (i in expanded) {
                 drawer.portfolios.getOrNull(i)?.let { sub ->
-                    PortfolioRow(
+                    PortfolioCard(
                         substitution = sub,
                         fallbackBrand = line.brand,
                         ownCompany = drawer.ownCompany,
@@ -506,45 +503,19 @@ private fun ItemTable(
     }
 }
 
-@Composable
-private fun TableHeader() {
-    Row(
-        modifier = Modifier
-            .width(TABLE_WIDTH)
-            .background(Mlx.Surface)
-            .padding(vertical = MlxD.Space2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        HeaderCell("Medicine Brand", BRAND_COL)
-        HeaderCell("Generic Composition", GENERIC_COL)
-        HeaderCell("Pharmaceutical", PHARMA_COL)
-        HeaderCell("Conf.", CONF_COL, alignEnd = true)
-    }
-}
-
-@Composable
-private fun HeaderCell(text: String, width: androidx.compose.ui.unit.Dp, alignEnd: Boolean = false) {
-    Text(
-        text = text,
-        style = MlxType.Footnote.copy(fontWeight = FontWeight.SemiBold),
-        color = Mlx.Text500,
-        textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
-        maxLines = 1,
-        modifier = Modifier
-            .width(width)
-            .padding(horizontal = MlxD.Space2),
-    )
-}
-
 /**
- * One item row. Brand / generic / manufacturer / confidence, in the web's four columns.
+ * One medicine, as a card.
  *
- * The row's own overlay is the orange wash: the web paints `bg-orange-50/70` behind the
- * whole `<tr>` when the read is below 80%, which is a different question from how the
- * confidence badge is coloured - see the note on [RxBreakdownSheet].
+ * Line 1 is the brand and strength with the confidence badge at the end - the web's
+ * brand and Conf. columns are the two ends of the same row, and on a phone they read as
+ * a card header. Line 2 is the web's `type • dosage` footnote.
+ *
+ * The own-company overlay is unchanged: `bg-orange-50/70` behind the whole row when the
+ * read is below 80%, which is a different question from how the confidence badge is
+ * coloured - see the note on [RxBreakdownSheet].
  */
 @Composable
-private fun ItemRow(
+private fun ItemCard(
     line: RxAuditLine,
     own: Boolean,
     portfolio: Substitution?,
@@ -554,36 +525,34 @@ private fun ItemRow(
     onVerifyAgainstMedex: () -> Unit,
 ) {
     val followUp = needsAuditFollowUp(line.confidencePercent)
-    Column(
-        modifier = Modifier
-            .width(TABLE_WIDTH)
-            .background(if (followUp) Mlx.GuessBg.copy(alpha = 0.70f) else Color.Transparent)
-            .padding(vertical = MlxD.Space2)
-            .padding(horizontal = MlxD.Space2),
+
+    MlxCard(
+        background = if (followUp) Mlx.GuessBg.copy(alpha = 0.70f) else Mlx.Surface,
+        borderColor = if (followUp) Mlx.GuessBorder else Mlx.Brand200,
+        padding = MlxD.Space3,
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            // ── Medicine brand ────────────────────────────────────────────────
-            Column(modifier = Modifier.width(BRAND_COL)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    MedicineThumb(
-                        name = line.brand,
-                        imageUrl = line.imageUrl,
-                        size = 28.dp,
-                    )
-                    Text(
-                        text = listOf(line.brand, line.strength)
-                            .filter { it.isNotBlank() }
-                            .joinToString(" ")
-                            .ifBlank { "Unknown Brand" },
-                        style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (line.brand.isBlank()) Mlx.Text400 else Mlx.Text900,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+        // ── Card header: brand + strength, confidence at the end ─────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+        ) {
+            MedicineThumb(
+                name = line.brand,
+                imageUrl = line.imageUrl,
+                size = 32.dp,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = listOf(line.brand, line.strength)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                        .ifBlank { "Unknown Brand" },
+                    style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (line.brand.isBlank()) Mlx.Text400 else Mlx.Text900,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 val detail = listOf(line.type, line.dosage)
                     .filter { it.isNotBlank() }
                     .joinToString(" • ")
@@ -596,124 +565,29 @@ private fun ItemRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                FlowRowCompat(
-                    modifier = Modifier.padding(top = 2.dp),
-                    horizontalSpacing = 4.dp,
-                    verticalSpacing = 4.dp,
-                ) {
-                    if (line.dgdaFlagged) {
-                        StatusPill(
-                            text = "DGDA Price Alert",
-                            tone = PillTone.Red,
-                            icon = Icons.Filled.Block,
-                        )
-                    }
-                    if (line.isAntibiotic) {
-                        StatusPill(
-                            text = if (line.broadSpectrum) "ABX ★" else "ABX",
-                            tone = if (line.broadSpectrum) PillTone.RedSoft else PillTone.Amber,
-                            icon = Icons.Filled.Biotech,
-                        )
-                    }
-                    line.therapeuticClass?.takeIf { it.isNotBlank() }?.let { cls ->
-                        StatusPill(text = cls, tone = PillTone.Slate)
-                    }
-                }
-                // Own Portfolio Match + Generate Doctor Pitch Card. Both only exist
-                // when the item has a portfolio match, which is the web's
-                // `m.portfolio_match && m.portfolio_match.own_brand` guard.
-                if (portfolio != null) {
-                    FlowRowCompat(
-                        modifier = Modifier.padding(top = 4.dp),
-                        horizontalSpacing = 4.dp,
-                        verticalSpacing = 4.dp,
-                    ) {
-                        PillButton(
-                            text = "Own Portfolio Match: ${portfolio.ownBrand.brandName}" +
-                                if (expanded) " ▲" else "",
-                            filled = false,
-                            icon = Icons.Filled.AutoAwesome,
-                            onClick = onTogglePortfolio,
-                        )
-                        PillButton(
-                            text = "Generate Doctor Pitch Card",
-                            filled = true,
-                            // The audit screen already ported fa-id-card as Badge; the
-                            // two screens show the same button, so they share the glyph.
-                            icon = Icons.Filled.Badge,
-                            // The card gates its compliance badges on the flags, so
-                            // the row's own values travel with the substitution. A
-                            // saved row does not store the NEML molecule's class, so
-                            // the PDF leaves the parenthetical off rather than borrow
-                            // the medicine's unrelated therapeutic class.
-                            onClick = {
-                                onPitchCard(
-                                    portfolio,
-                                    PitchCompliance(
-                                        nemlListed = line.nemlListed,
-                                        nemlMolecule = line.nemlMolecule,
-                                        dgdaFlagged = line.dgdaFlagged,
-                                        dgdaReason = line.dgdaReason,
-                                    ),
-                                )
-                            },
-                        )
-                    }
-                }
-                if (followUp) {
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable(onClick = onVerifyAgainstMedex),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.HelpOutline,
-                            contentDescription = null,
-                            tint = Mlx.GuessText,
-                            modifier = Modifier.size(11.dp),
-                        )
-                        Text(
-                            text = "Verify against Medex",
-                            style = MlxType.Footnote.copy(fontWeight = FontWeight.SemiBold),
-                            color = Mlx.GuessText,
-                        )
-                    }
-                }
             }
+            ConfidenceBadge(percent = line.confidencePercent)
+        }
 
-            // ── Generic composition ──────────────────────────────────────────
-            Column(modifier = Modifier.width(GENERIC_COL).padding(horizontal = MlxD.Space2)) {
+        // ── Generic composition / Pharmaceutical ─────────────────────────────────
+        // Side by side as they were in the table, half the card each; the label above
+        // each one replaces the `<th>` that used to name the column.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = MlxD.Space2),
+            horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                FieldLabel("Generic Composition")
                 Text(
                     text = line.generic.ifBlank { "—" },
                     style = MlxType.BodySmall,
                     color = if (line.generic.isBlank()) Mlx.Text400 else Mlx.Text600,
                 )
-                if (line.nemlListed) {
-                    StatusPill(
-                        text = "NEML Listed",
-                        tone = PillTone.Blue,
-                        icon = Icons.Filled.Check,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                if (line.tripsWatch) {
-                    StatusPill(
-                        text = "TRIPS Watch",
-                        tone = PillTone.Amber,
-                        icon = Icons.Filled.Public,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
             }
-
-            // ── Pharmaceutical ───────────────────────────────────────────────
-            Row(
-                modifier = Modifier.width(PHARMA_COL).padding(horizontal = MlxD.Space2),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
+                FieldLabel("Pharmaceutical")
                 if (line.company.isNullOrBlank()) {
                     Text(
                         text = "Unknown Brand",
@@ -721,45 +595,164 @@ private fun ItemRow(
                         color = Mlx.Text400,
                     )
                 } else {
-                    Text(
-                        text = line.company,
-                        style = MlxType.BodySmall.copy(
-                            fontWeight = if (own) FontWeight.Bold else FontWeight.Normal,
-                        ),
-                        color = if (own) Mlx.VioletText else Mlx.Text700,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (own) {
-                        Icon(
-                            imageVector = Icons.Filled.Home,
-                            contentDescription = "Your company",
-                            tint = Mlx.VioletText,
-                            modifier = Modifier.size(10.dp).padding(top = 3.dp),
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = line.company,
+                            style = MlxType.BodySmall.copy(
+                                fontWeight = if (own) FontWeight.Bold else FontWeight.Normal,
+                            ),
+                            color = if (own) Mlx.VioletText else Mlx.Text700,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (own) {
+                            Icon(
+                                imageVector = Icons.Filled.Home,
+                                contentDescription = "Your company",
+                                tint = Mlx.VioletText,
+                                modifier = Modifier.size(10.dp).padding(top = 3.dp),
+                            )
+                        }
                     }
                 }
             }
+        }
 
-            // ── Confidence ───────────────────────────────────────────────────
-            Box(modifier = Modifier.width(CONF_COL), contentAlignment = Alignment.TopEnd) {
-                ConfidenceBadge(percent = line.confidencePercent)
+        // ── Every badge in one wrap ───────────────────────────────────────────────
+        // They were split across the brand and generic columns on the web (DGDA, ABX
+        // and the class under the brand; NEML and TRIPS under the generic). With no
+        // columns left there is nothing to split them by, and they are all answering
+        // the same question about the same medicine - so one FlowRow, web order.
+        FlowRowCompat(
+            modifier = Modifier.padding(top = MlxD.Space2),
+            horizontalSpacing = 4.dp,
+            verticalSpacing = 4.dp,
+        ) {
+            if (line.dgdaFlagged) {
+                StatusPill(
+                    text = "DGDA Price Alert",
+                    tone = PillTone.Red,
+                    icon = Icons.Filled.Block,
+                )
+            }
+            if (line.isAntibiotic) {
+                StatusPill(
+                    text = if (line.broadSpectrum) "ABX ★" else "ABX",
+                    tone = if (line.broadSpectrum) PillTone.RedSoft else PillTone.Amber,
+                    icon = Icons.Filled.Biotech,
+                )
+            }
+            line.therapeuticClass?.takeIf { it.isNotBlank() }?.let { cls ->
+                StatusPill(text = cls, tone = PillTone.Slate)
+            }
+            if (line.nemlListed) {
+                StatusPill(
+                    text = "NEML Listed",
+                    tone = PillTone.Blue,
+                    icon = Icons.Filled.Check,
+                )
+            }
+            if (line.tripsWatch) {
+                StatusPill(
+                    text = "TRIPS Watch",
+                    tone = PillTone.Amber,
+                    icon = Icons.Filled.Public,
+                )
+            }
+        }
+
+        // ── Own Portfolio Match + Generate Doctor Pitch Card ─────────────────────
+        // Both only exist when the item has a portfolio match, which is the web's
+        // `m.portfolio_match && m.portfolio_match.own_brand` guard.
+        if (portfolio != null) {
+            FlowRowCompat(
+                modifier = Modifier.padding(top = MlxD.Space2),
+                horizontalSpacing = 4.dp,
+                verticalSpacing = 4.dp,
+            ) {
+                PillButton(
+                    text = "Own Portfolio Match: ${portfolio.ownBrand.brandName}" +
+                        if (expanded) " ▲" else "",
+                    filled = false,
+                    icon = Icons.Filled.AutoAwesome,
+                    onClick = onTogglePortfolio,
+                )
+                PillButton(
+                    text = "Generate Doctor Pitch Card",
+                    filled = true,
+                    // The audit screen already ported fa-id-card as Badge; the two
+                    // screens show the same button, so they share the glyph.
+                    icon = Icons.Filled.Badge,
+                    // The card gates its compliance badges on the flags, so the row's
+                    // own values travel with the substitution. A saved row does not
+                    // store the NEML molecule's class, so the PDF leaves the
+                    // parenthetical off rather than borrow the medicine's unrelated
+                    // therapeutic class.
+                    onClick = {
+                        onPitchCard(
+                            portfolio,
+                            PitchCompliance(
+                                nemlListed = line.nemlListed,
+                                nemlMolecule = line.nemlMolecule,
+                                dgdaFlagged = line.dgdaFlagged,
+                                dgdaReason = line.dgdaReason,
+                            ),
+                        )
+                    },
+                )
+            }
+        }
+
+        if (followUp) {
+            Row(
+                modifier = Modifier
+                    .padding(top = MlxD.Space2)
+                    .clickable(onClick = onVerifyAgainstMedex),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.HelpOutline,
+                    contentDescription = null,
+                    tint = Mlx.GuessText,
+                    modifier = Modifier.size(11.dp),
+                )
+                Text(
+                    text = "Verify against Medex",
+                    style = MlxType.Footnote.copy(fontWeight = FontWeight.SemiBold),
+                    color = Mlx.GuessText,
+                )
             }
         }
     }
 }
 
+/** The `<th>` each card field lost: the web's column headings, as a field label. */
+@Composable
+private fun FieldLabel(text: String) {
+    Text(
+        text = text,
+        style = MlxType.RegulatoryPill.copy(letterSpacing = 0.06.em),
+        color = Mlx.Text400,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(bottom = 2.dp),
+    )
+}
 /**
- * The expanded "Own Portfolio Match" row under an item.
+ * The expanded "Own Portfolio Match" block under an item.
  *
  * Competitor chip → own-brand chip with the circular arrow between them, the per-unit
- * price delta, and the pitch script in italics. The web injects this as a second `<tr>`
- * with `colspan=4`; here it is simply the next composable in the same scrolled column,
- * which is why it inherits the horizontal scroll and stays lined up with its parent row.
+ * price delta, and the pitch script. The web injects this as a second `<tr>` with
+ * `colspan=4`; here it is the next card in the same list, full width like the card it
+ * belongs to rather than a fixed table width it no longer shares.
  */
 @Composable
-private fun PortfolioRow(
+private fun PortfolioCard(
     substitution: Substitution,
     fallbackBrand: String,
     ownCompany: String,
@@ -770,8 +763,10 @@ private fun PortfolioRow(
 
     Column(
         modifier = Modifier
-            .width(TABLE_WIDTH)
+            .fillMaxWidth()
+            .clip(MlxShape.Medium)
             .background(Mlx.VioletBg.copy(alpha = 0.50f))
+            .border(1.dp, Mlx.VioletBorder, MlxShape.Medium)
             .padding(horizontal = MlxD.Space3, vertical = MlxD.Space2),
     ) {
         Text(
@@ -939,7 +934,7 @@ private fun DuplicateNote(drawer: RxAuditDrawer) {
 private fun EmptyItems() {
     Column(
         modifier = Modifier
-            .width(TABLE_WIDTH)
+            .fillMaxWidth()
             .padding(vertical = MlxD.Space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
