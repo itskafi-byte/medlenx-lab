@@ -527,6 +527,10 @@ def check_erasure_clashes():
         and reporting it twice helps nobody;
       * a declaration carrying `@JvmName`, which renames the JVM method and removes
         the clash (the standard cure);
+      * a `typealias` that erases onto another type used in a sibling overload
+        (`fun f(id: DoctorId)` against `fun f(id: String)`), because the alias is one
+        text and its expansion is another. There is no `typealias` and no value class
+        anywhere in this tree today, so the hole is empty rather than merely small;
       * properties. Their getters take no parameters, so they can only clash with a
         no-argument function named `getX` - vanishingly rare, and modelling it would
         mean guessing at accessor names for a `val` that is private.
