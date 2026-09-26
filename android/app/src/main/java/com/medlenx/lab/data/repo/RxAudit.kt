@@ -69,17 +69,24 @@ object RxAudit {
         )
     }
 
-    /**
-     * Live-scan overload, for the Rx Audit screen's unsaved read.
-     *
-     * Kept as a thin adapter rather than a second implementation: the drawer audits
-     * *saved* rows and the screen audits the in-memory ones, and if each had its own
-     * share arithmetic the two would eventually disagree about the same prescription.
-     */
-    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): RxMarketShare =
-        buildMarketShare(medicines.map { lineOf(it) }, ownCompany)
-
     // ----------------------------------------------------- row model -----
+
+    /**
+     * Maps a whole live scan onto the drawer's row shape.
+     *
+     * The audit arithmetic - market share, the CSV payload, the clipboard list - is
+     * written once, against [RxAuditLine], because the drawer audits *saved* rows and
+     * the Rx Audit screen audits in-memory ones; a second implementation would sooner
+     * or later disagree with this one about the same prescription. The adapters that
+     * used to do this mapping were `List<EnrichedMedicine>` *overloads* of those three
+     * functions, which is legal Kotlin and not legal bytecode: `List<A>` and `List<B>`
+     * have one erased JVM signature between them, so each pair drew a
+     * `Platform declaration clash ... same JVM signature` error - and only once every
+     * frontend error in the same build was fixed, because a failed frontend never
+     * reaches the backend that emits that diagnostic.
+     */
+    fun linesOf(medicines: List<EnrichedMedicine>): List<RxAuditLine> =
+        medicines.map { lineOf(it) }
 
     /** Maps an in-memory scan row onto the audit shape. */
     fun lineOf(med: EnrichedMedicine): RxAuditLine = RxAuditLine(
@@ -208,14 +215,6 @@ object RxAudit {
     ): String =
         "Rx #$rxNo • ${doctorName.takeIf { it.isNotBlank() } ?: "Unknown"} • " +
             "$count medicines • MR ${mrId?.takeIf { it.isNotBlank() } ?: "-"}"
-
-    /** Live-scan overload, for the Rx Audit screen's unsaved read. */
-    fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
-        itemsToCsv(medicines.map { lineOf(it) }, ownCompany)
-
-    /** Live-scan overload, for the Rx Audit screen's unsaved read. */
-    fun itemsToClipboard(medicines: List<EnrichedMedicine>, header: String = ""): String =
-        itemsToClipboard(medicines.map { lineOf(it) }, header)
 
     // -------------------------------------------------------- internals ----
 

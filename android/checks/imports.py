@@ -31,6 +31,9 @@ Checks
     top-level declaration is not importable and is not offered as a target.
 12. Misplaced unit extension - `13.sp` / `0.2.em` with no `androidx.compose.ui.unit`
     import. Same shape as 7: an extension property that cannot resolve otherwise.
+13. Platform declaration clash - two members of one type whose parameter lists erase
+    to the same JVM signature (`List<A>` against `List<B>`). Legal Kotlin, and the
+    backend rejects it after the frontend has already passed.
 
 Run it from anywhere: the source root is derived from this file's own path. A
 previous revision used a relative root, so running it from the repo root walked a
@@ -346,6 +349,77 @@ def _fun_signature(lines, start_index, name_end):
     return "(" + ", ".join(params) + ")"
 
 
+# An optional receiver on a `fun`: `fun List<X>.bar()`. The receiver is a leading
+# JVM parameter, so it has to be part of any signature comparison, and the name is
+# not the first word after `fun`.
+_FUN_DECL = re.compile(
+    r"\b(suspend\s+)?fun\s+(?:<[^>]*>\s*)?"
+    r"(?:([\w.<>,?\[\] ]+?)\s*\.\s*)?(\w+)\s*([\(<])"
+)
+
+
+# The pseudo-container every top-level declaration belongs to.
+_FILE_SCOPE = "<file>"
+
+
+def _container_members(path: str, code: str):
+    """
+    Every member declared at a container's own brace depth.
+
+    Yields `(container, name, line_no, signature, receiver, is_suspend)`.
+
+    Shared by the duplicate-member check and the erasure check so that both agree on
+    what a member is and where one container ends and the next begins. Only
+    declarations sitting at the container's own depth count: locals inside a function
+    body live deeper, and counting them flagged dozens of false positives.
+
+    The *file* is a container too, at depth 0: two top-level functions in one file
+    share a JVM class and clash exactly like two members of one object do, and the
+    first version of this traversal - which opened a container only on a
+    `class`/`interface`/`object` line - could not see them.
+    """
+    lines = code.split("\n")
+    depth = 0
+    container = (_FILE_SCOPE, 0)  # (name, brace depth its members sit at)
+    for i, line in enumerate(lines, 1):
+        if depth < container[1]:
+            container = (_FILE_SCOPE, 0)
+        m = re.match(
+            r"\s*(?:private |internal |abstract |sealed |data |open |final |"
+            r"enum |value |annotation )*(?:class|interface|object)\s+(\w+)",
+            line,
+        )
+        if m:
+            container = (m.group(1), depth + 1)
+        elif container and depth == container[1]:
+            dm = _FUN_DECL.search(line)
+            if dm:
+                yield (
+                    container[0],
+                    dm.group(3),
+                    i,
+                    _fun_signature(lines, i - 1, dm.end(3)),
+                    (dm.group(2) or "").strip(),
+                    bool(dm.group(1)),
+                )
+            else:
+                pm = re.search(r"\b(?:val|var)\s+(\w+)\s*[:=]", line)
+                if pm:
+                    # A property has no parameter list, so its signature is its
+                    # declared type.
+                    tm = re.search(r":\s*([\w.<>?]+)", line[pm.end():])
+                    yield (
+                        container[0],
+                        pm.group(1),
+                        i,
+                        f":{tm.group(1)}" if tm else "",
+                        "",
+                        False,
+                    )
+        depth += line.count("{") - line.count("}")
+
+
+
 def check_duplicate_members():
     """Duplicate `fun`/`val`/`var` *signatures* declared in one class/interface.
 
@@ -366,55 +440,120 @@ def check_duplicate_members():
                 continue
             path = os.path.join(dirpath, fn)
             code = strip_comments(open(path, encoding="utf-8").read())
+            groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+            for container, name, line_no, sig, _recv, _sus in _container_members(path, code):
+                # Types only. At file level a `data class Foo(val id: Long, ...)`
+                # keeps its constructor parameters at depth 0 when it has no body
+                # braces, so its properties would read as top-level declarations and
+                # collide with every other entity's. The erasure check does use the
+                # file container, because a *function* cannot appear in a parameter
+                # list and two top-level functions do share a JVM class.
+                if container == _FILE_SCOPE:
+                    continue
+                groups[(container, name, sig)].append(line_no)
+            for (container, name, sig), hits in groups.items():
+                if len(hits) > 1:
+                    findings.append((path, container, f"{name}{sig}", hits))
+    return findings
+
+
+# The Kotlin primitives whose JVM signature changes when the type becomes nullable:
+# `Int` is `I`, `Int?` is `Ljava/lang/Integer;`. Every other type boxes to the same
+# class either way, so its `?` is erased.
+_PRIMITIVES = {
+    "Int", "Long", "Short", "Byte", "Double", "Float", "Char", "Boolean",
+    "UInt", "ULong", "UShort", "UByte",
+}
+_GENERIC = re.compile(r"<[^<>]*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>[^<>]*)*>")
+
+
+def _erase_type(type_text: str) -> str:
+    """
+    A parameter type as the JVM sees it.
+
+    `List<EnrichedMedicine>` and `List<RxAuditLine>` are both `Ljava/util/List;` -
+    that is the whole point of this function. `Array<X>` keeps its element type
+    because a JVM array signature does (`[I` against `[Ljava/lang/String;`), and a
+    nullable primitive keeps its `?` because boxing changes the signature too.
+    """
+    t = _GENERIC.sub("", type_text).replace(" ", "")
+    t = re.sub(r"^(?:kotlin|java\.lang)\.", "", t)
+    if t.startswith("Array") and "<" in type_text:
+        inner = _GENERIC.search(type_text)
+        return "Array:" + _erase_type(type_text[inner.start() + 1:inner.end() - 1])
+    if t.endswith("?"):
+        base = t[:-1]
+        return base + "?" if base in _PRIMITIVES else base
+    return t
+
+
+def _erase_signature(sig: str, receiver: str = "") -> str:
+    """`(a: List<X>, b: String?)` -> `(List,String)`."""
+    parts = []
+    if receiver:
+        parts.append(_erase_type(receiver))
+    inner = sig.strip()
+    if inner.startswith("("):
+        inner = inner[1:-1]
+    for part in re.split(r",(?![^<]*>)", inner):
+        part = part.strip()
+        if not part:
+            continue
+        head, _, type_text = part.partition(":")
+        parts.append(_erase_type(type_text if type_text else head))
+    return "(" + ",".join(parts) + ")"
+
+
+def check_erasure_clashes():
+    """
+    Two members of one type with the same name and the same *erased* parameter list.
+
+    The compiler reports these as `Platform declaration clash: The following
+    declarations have the same JVM signature`, and until now nothing here could see
+    them, because the code is legal Kotlin right up until the bytecode is generated:
+
+        fun buildMarketShare(medicines: List<EnrichedMedicine>, own: String)
+        fun buildMarketShare(lines: List<RxAuditLine>, own: String)
+
+    Both erase to `(Ljava/util/List;Ljava/lang/String;)`. The frontend accepts the
+    overload - `List<A>` and `List<B>` are different types to the type checker - and
+    the JVM backend rejects it, which also means a run that fails earlier (an
+    unresolved reference, say) never reaches the diagnostic at all. That is how the
+    pair above reached the user's build: the previous round's four frontend errors
+    hid it, and fixing them exposed it.
+
+    Deliberately not reported:
+      * an identical *source* signature - that is `check_duplicate_members`' finding,
+        and reporting it twice helps nobody;
+      * a declaration carrying `@JvmName`, which renames the JVM method and removes
+        the clash (the standard cure);
+      * properties. Their getters take no parameters, so they can only clash with a
+        no-argument function named `getX` - vanishingly rare, and modelling it would
+        mean guessing at accessor names for a `val` that is private.
+    """
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            code = strip_comments(open(path, encoding="utf-8").read())
             lines = code.split("\n")
-            depth = 0
-            container = None  # (name, brace depth its members sit at)
-            seen = defaultdict(list)
-            # line number -> normalised parameter list, filled as members are seen.
-            signatures: dict[int, str] = {}
-
-            def flush():
-                for name, ls in seen.items():
-                    # ls is a list of line numbers; a name can appear more than
-                    # once legitimately as an overload, so count how many times
-                    # each *signature* occurs rather than each name.
-                    sig_lines: dict[str, list[int]] = defaultdict(list)
-                    for line_no in ls:
-                        sig_lines[signatures.get(line_no, "")].append(line_no)
-                    for sig, hits in sig_lines.items():
-                        if len(hits) > 1 and container:
-                            findings.append((path, container[0], f"{name}{sig}", hits))
-
-            for i, line in enumerate(lines, 1):
-                # leaving the container?
-                if container and depth < container[1]:
-                    flush()
-                    container, seen = None, defaultdict(list)
-                m = re.match(
-                    r"\s*(?:private |internal |abstract |sealed |data |open |final )*"
-                    r"(?:class|interface|object)\s+(\w+)",
-                    line,
-                )
-                if m:
-                    flush()
-                    container, seen = (m.group(1), depth + 1), defaultdict(list)
-                elif container and depth == container[1]:
-                    dm = re.search(r"\b(?:suspend\s+)?fun\s+(\w+)\s*([\(<])", line)
-                    if dm:
-                        seen[dm.group(1)].append(i)
-                        signatures[i] = _fun_signature(lines, i - 1, dm.end(1))
-                    else:
-                        pm = re.search(r"\b(?:val|var)\s+(\w+)\s*[:=]", line)
-                        if pm:
-                            seen[pm.group(1)].append(i)
-                            # A property has no parameter list, so its signature is
-                            # its declared type -- two `val x: Int` and `val x: String`
-                            # in one class is also a clash, but two `val x` is not
-                            # distinguishable without more parsing, so type only.
-                            tm = re.search(r":\s*([\w.<>?]+)", line[pm.end():])
-                            signatures[i] = f":{tm.group(1)}" if tm else ""
-                depth += line.count("{") - line.count("}")
-            flush()
+            groups: dict[tuple[str, str, str, bool], list[tuple[int, str]]] = defaultdict(list)
+            for container, name, line_no, sig, receiver, is_suspend in _container_members(path, code):
+                if sig.startswith(":"):
+                    continue  # a property, see the docstring
+                if any("@JvmName" in lines[j] for j in range(max(0, line_no - 3), line_no)):
+                    continue
+                key = (container, name, _erase_signature(sig, receiver), is_suspend)
+                groups[key].append((line_no, sig))
+            for (container, name, erased, _sus), entries in groups.items():
+                if len(entries) < 2:
+                    continue
+                # Identical text is the duplicate-member check's finding.
+                if len({sig for _, sig in entries}) < 2:
+                    continue
+                findings.append((path, container, name, erased, entries))
     return findings
 
 
@@ -1460,6 +1599,20 @@ def main() -> int:
         print("MISSING UNIT IMPORT - a dimension with no `androidx.compose.ui.unit` import")
         for path, line, ref, imp in units:
             print(f"  {path}:{line}  {ref}  ->  needs: import {imp}")
+        print()
+
+    clashes = check_erasure_clashes()
+    if clashes:
+        findings += len(clashes)
+        print("PLATFORM DECLARATION CLASH - two members with one erased JVM signature")
+        for path, container, name, erased, entries in clashes:
+            print(f"  {path}:{entries[0][0]}  {container}.{name} : {name}{erased}")
+            for line_no, sig in entries:
+                print(f"      :{line_no}  {name}{sig}")
+        print(
+            "      legal Kotlin, invalid bytecode: List<A> and List<B> erase to one\n"
+            "      signature. Rename one, or give it @JvmName."
+        )
         print()
 
     undef = check_undefined_symbols()

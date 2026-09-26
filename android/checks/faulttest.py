@@ -55,6 +55,8 @@ MEDLEN_VL = "android/app/src/main/java/com/medlenx/lab/data/remote/MedLenXVlClie
 DOCTOR_IDENTITY = "android/app/src/main/java/com/medlenx/lab/data/local/DoctorIdentity.kt"
 SCAN_SCREEN = "android/app/src/main/java/com/medlenx/lab/ui/screens/scan/ScanScreen.kt"
 DRAWER = "android/app/src/main/java/com/medlenx/lab/ui/screens/analytics/RxBreakdownSheet.kt"
+RX_AUDIT = "android/app/src/main/java/com/medlenx/lab/data/repo/RxAudit.kt"
+RX_PARTS = "android/app/src/main/java/com/medlenx/lab/ui/screens/rx/RxAuditParts.kt"
 
 # The join every query appending RX_FILTER_SQL must carry.
 JOIN = '            "LEFT JOIN doctors d ON p.doctor_id = d.id " +\n'
@@ -307,6 +309,32 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "import androidx.compose.ui.unit.em\n",
         "",
         "0.08.em",
+    ),
+    (
+        # The user's next build, verbatim: three `Platform declaration clash ... same
+        # JVM signature` pairs in RxAudit.kt, hidden until then because a build that
+        # fails in the frontend never reaches the backend that emits this diagnostic.
+        # The fault is the real one - the `List<EnrichedMedicine>` adapter put back
+        # beside the `List<RxAuditLine>` implementation it erases onto.
+        "two members that erase to one JVM signature",
+        "imports.py", RX_AUDIT,
+        "    fun buildMarketShare(lines: List<RxAuditLine>, ownCompany: String): RxMarketShare {",
+        "    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String):"
+        " RxMarketShare =\n"
+        "        buildMarketShare(medicines.map { lineOf(it) }, ownCompany)\n\n"
+        "    fun buildMarketShare(lines: List<RxAuditLine>, ownCompany: String): RxMarketShare {",
+        "buildMarketShare(List,String)",
+    ),
+    (
+        # The other half of the rule: two *top-level* functions in one file share a
+        # JVM class and clash the same way, and the first version of the traversal
+        # opened a container only on a `class`/`interface`/`object` line.
+        "two top-level functions that erase to one JVM signature",
+        "imports.py", RX_PARTS,
+        "fun classBreakdownOf(classes: List<String?>): List<ClassSlice> {",
+        "fun classBreakdownOf(lines: List<RxAuditLine>): List<ClassSlice> = emptyList()\n\n"
+        "fun classBreakdownOf(classes: List<String?>): List<ClassSlice> {",
+        "classBreakdownOf(List)",
     ),
 ]
 

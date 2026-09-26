@@ -107,6 +107,11 @@ fun RxAuditScreen(
 ) {
     var filter by remember { mutableStateOf(RxAuditFilter.All) }
 
+    // The audit arithmetic in RxAudit works on the drawer's row shape; the live scan
+    // is mapped to it once here, rather than by overloads that the JVM cannot tell
+    // apart (see `RxAudit.linesOf`).
+    val lines = remember(medicines) { RxAudit.linesOf(medicines) }
+
     val own = remember(medicines, ownCompany) {
         medicines.filter { RxAudit.sameCompanyLoose(it.company, ownCompany) }
     }
@@ -117,8 +122,8 @@ fun RxAuditScreen(
         RxAuditFilter.LowConfidence ->
             medicines.filter { needsAuditFollowUp(it.confidencePercent) }
     }
-    val share = remember(medicines, ownCompany) {
-        RxAudit.buildMarketShare(medicines, ownCompany)
+    val share = remember(lines, ownCompany) {
+        RxAudit.buildMarketShare(lines, ownCompany)
     }
     val antibiotics = medicines.count { it.isAntibiotic }
     val broadSpectrum = medicines.count { it.broadSpectrum }
@@ -192,11 +197,11 @@ fun RxAuditScreen(
             ownCount = share.ownCount,
             competitorCount = share.competitorCount,
             total = share.totalMedicines,
-            onExportCsv = { onExportCsv(RxAudit.itemsToCsv(medicines, ownCompany)) },
+            onExportCsv = { onExportCsv(RxAudit.itemsToCsv(lines, ownCompany)) },
             onCopyClipboard = {
                 onCopyClipboard(
                     RxAudit.itemsToClipboard(
-                        medicines,
+                        lines,
                         RxAudit.clipboardHeader(
                             rxNo = rxId,
                             doctorName = doctorName,

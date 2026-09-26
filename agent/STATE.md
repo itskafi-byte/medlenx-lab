@@ -166,6 +166,16 @@ flagged, not folded in, because module 2 was the substitution card.
   `Certificate` as the only name introduced since that never existed - so that
   defect class is now empty, and it was also invisible to every check here,
   because an icon name is only wrong against a library the checks cannot read.
+- **Three `Platform declaration clash` errors, in `RxAudit.kt`.** The audit
+  arithmetic is written once, against `RxAuditLine`, and the live scan reached it
+  through `List<EnrichedMedicine>` *overloads* of `buildMarketShare`, `itemsToCsv`
+  and `itemsToClipboard`. Both parameter lists erase to the same JVM signature, so
+  each pair was legal Kotlin and invalid bytecode. They had been in the tree since
+  the drawer round and were invisible for a reason worth remembering: **the build
+  that reported them had already failed in the frontend**, and a failed frontend
+  never reaches the backend that emits this diagnostic. The fix is `RxAudit.linesOf`
+  - one mapper the screen applies once - rather than three adapters that alias each
+  other in bytecode. Caught by a new check, not by reading.
 - **The Rx Audit screen's badges never had a condition that could be false.** The
   same defect class as the pitch card below, in a second surface: `if
   (medicine.neml != null)`, `if (medicine.dgdaAlert != null)` and `if
@@ -199,7 +209,7 @@ flagged, not folded in, because module 2 was the substitution card.
   receiver (`xs.toBarData()` - the reference is the name after the dot, which the
   plain scan skips on purpose) and a `dp`/`sp`/`em` unit extension with no
   `androidx.compose.ui.unit` import, which is the fourth error above, prevented
-  rather than fixed. `faulttest.py` is 26 faults, all firing, tree byte-identical.
+  rather than fixed. `faulttest.py` is 28 faults, all firing, tree byte-identical.
 - **Bug sweep of the three parity modules** — four defects, one of them user-visible.
   The check that found them is `2f5eaf9`; the fixes are in the commit that added this
   note:
@@ -256,6 +266,17 @@ flagged, not folded in, because module 2 was the substitution card.
   found `PrescriptionImageViewer.overlay`, invoked at the end of the canvas and
   supplied by nobody since the file was written; the slot is now gone rather than
   given a caller.
+- **`imports.py`, the JVM-signature rule** — two members of one type with the same
+  name and the same *erased* parameter list. `List<EnrichedMedicine>` and
+  `List<RxAuditLine>` are different types to the frontend and one
+  `Ljava/util/List;` to the backend, so the code is legal Kotlin and invalid
+  bytecode, and the compiler's diagnostic arrives only after every frontend error
+  in the same build is gone. Three live pairs (`buildMarketShare`, `itemsToCsv`,
+  `itemsToClipboard` in `RxAudit.kt`) surfaced in the build *after* the `em` fix,
+  because the build that reported the `em` error never got far enough to look. The
+  check is limited to `fun`s at a container's own depth, ignores
+  `@JvmName` (which cures the clash), and leaves properties alone - their getters
+  take no arguments, so they can only clash with a no-arg `getX`.
 - **`imports.py`, the cross-package rule** (`a19b44f`) — for anything declared at
   column 0: a type, a property, a function (`ClinicalStrip(`), or an extension
   called on a receiver (`xs.toBarData()`). A `private` declaration is not offered

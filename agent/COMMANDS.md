@@ -57,7 +57,7 @@ python3 android/checks/refcheck.py    # a Type.member or param.field that does n
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 26 faults
+python3 android/checks/faulttest.py            # all 28 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 
@@ -73,12 +73,13 @@ did not run.
 It also refuses to pass a fault whose anchor text no longer appears exactly once:
 a fault that has drifted out of sync with the code is a fault that silently
 stopped testing anything, which is worse than a missing one.
-- `imports.py` healthy: `imports: no findings` (12 checks: missing imports,
+- `imports.py` healthy: `imports: no findings` (13 checks: missing imports,
   duplicate members, orphaned `private set`, orphaned KDoc,
   composable-in-`remember`, scope leak, missing icon import, unresolved symbol,
   missing return, unknown theme token, missing cross-package import - by name or
-  through an extension receiver - and a `dp`/`sp`/`em` unit extension used
-  without its `androidx.compose.ui.unit` import)
+  through an extension receiver - a `dp`/`sp`/`em` unit extension used without its
+  `androidx.compose.ui.unit` import, and two members of one type whose parameter
+  lists erase to the same JVM signature)
 
 The eleventh check is the one the compiler finally had to make for me. The build
 reported 30 errors from two files; five were the cause and the other 25 were

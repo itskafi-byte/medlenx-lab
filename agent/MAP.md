@@ -27,17 +27,17 @@ When you need the reference behaviour, read the Python file on the left.
 |---|---|---|
 | `MainActivity.kt` | 34 | Compose entry |
 | `MedLenXApp.kt` | 31 | app class, connectivity callback, queue drain |
-| `ui/shell/MedLenXShell.kt` | 663 | nav host, insets, route mapping. `else -> PendingScreen` |
+| `ui/shell/MedLenXShell.kt` | 675 | nav host, insets, route mapping. `else -> PendingScreen` |
 | `ui/shell/MlxTopBar.kt` | 236 | top bar |
 | `ui/shell/MlxBottomNav.kt` | 94 | bottom nav, iterates `Destination.bottomBar` |
-| `ui/navigation/Destination.kt` | 56 | Scan, Analytics, Hub, Team, Settings, Help, RxAudit |
+| `ui/navigation/Destination.kt` | 63 | Scan, Analytics, Hub, Team, Settings, Help, RxAudit |
 
 ### Data
 | File | Lines | Role |
 |---|---|---|
-| `data/config/AppGraph.kt` | 110 | manual DI root |
+| `data/config/AppGraph.kt` | 111 | manual DI root |
 | `data/local/Entities.kt` | 421 | 10 `@Entity` + 20 projection rows. **Columns are snake_case via `@ColumnInfo`** |
-| `data/local/Daos.kt` | 937 | 6 DAOs, 70 `@Query`. Validated by `agent/roomcheck.py` |
+| `data/local/Daos.kt` | 952 | 6 DAOs, 70 `@Query`. Validated by `agent/roomcheck.py` |
 | `data/local/MedLenXDatabase.kt` | 54 | Room database, `version = 3`. Real migrations (1→2 doctors, 2→3 `doctors.territory`); `fallbackToDestructiveMigration` stays registered for any version with no route |
 | `data/local/AssetCatalogue.kt` | 144 | imports `medex_full.json` into Room |
 | `data/local/Filters.kt` | 115 | filter state, `RX_FILTER_SQL` + `RX_FILTER_SQL_SNAPSHOT`, `SOURCE_OPTIONS` |
@@ -48,10 +48,10 @@ When you need the reference behaviour, read the Python file on the left.
 | `data/repo/MedicineImageStore.kt` | 93 | bundled catalogue first, live Medex fetch as fallback |
 | `data/repo/Compliance.kt` | 429 | compliance rules |
 | `data/repo/Intelligence.kt` | 289 | DGDA / substitution / pitch |
-| `data/repo/RxAudit.kt` | 288 | `RxAuditLine` + the two mappers, share, CSV, clipboard, `clipboardHeader` |
+| `data/repo/RxAudit.kt` | 290 | `RxAuditLine` + the row mappers (`lineOf` 2x, `linesOf`), share, CSV, clipboard, `clipboardHeader` |
 | `data/repo/AnalyticsMetrics.kt` | 283 | KPI math |
-| `data/repo/TeamMetrics.kt` | 442 | RSM metrics |
-| `data/repo/PharmaHub.kt` | 320 | hub data |
+| `data/repo/TeamMetrics.kt` | 446 | RSM metrics |
+| `data/repo/PharmaHub.kt` | 484 | hub data |
 | `data/repo/TripsPortfolio.kt` | 163 | TRIPS |
 | `data/repo/Geofence.kt`, `LocationRepository.kt`, `ScanRepository.kt`, `DeviceStateRepository.kt`, `RegulatoryRepository.kt`, `NewsRepository.kt`, `PHash.kt`, `PyMath.kt` | | supporting |
 
@@ -62,14 +62,14 @@ When you need the reference behaviour, read the Python file on the left.
 | `ui/screens/scan/ScanViewModel.kt` | 981 | the scan state machine. **Enrich first, then build cards**. `mergeEdits` folds brand/dosage/strength/type/company/generic back, and is what makes a hand-picked catalogue variant survive the save-time re-enrichment |
 | `ui/screens/scan/Verification.kt` | 1125 | doctor + medicine verification. Both `toCardData()` mappers live here |
 | `ui/screens/scan/MedicineCard.kt` | 939 | editable card, ROI box, suggestions, "N other matches" picker, substitution card |
-| `ui/screens/scan/PrescriptionImageViewer.kt` | 228 | fullscreen viewer (the zoom escape hatch) |
+| `ui/screens/scan/PrescriptionImageViewer.kt` | 232 | fullscreen viewer (the zoom escape hatch) |
 | `ui/screens/analytics/AnalyticsScreen.kt` | 1038 | KPIs, charts, filters, drill-downs |
-| `ui/screens/analytics/RxBreakdownSheet.kt` | 953 | the Prescription Audit Summary drawer: header, search + filter pills, clinical strip, item table, portfolio row, share footer. `RxAuditDrawer` (its payload) is in `AnalyticsData.kt` |
-| `ui/screens/rx/RxAuditScreen.kt` | 459, `RxAuditParts.kt` 349, `DoctorPitchCard.kt` 479 | Rx audit screen; `RxAuditParts.kt` holds `ClassSlice`/`ClinicalStrip`/`PillButton`/`MarketShareCard`, shared with the drawer |
-| `ui/screens/hub/HubScreen.kt` | 1152 | drug index, news, jobs, health days, TRIPS |
+| `ui/screens/analytics/RxBreakdownSheet.kt` | 969 | the Prescription Audit Summary drawer: header, search + filter pills, clinical strip, item table, portfolio row, share footer. `RxAuditDrawer` (its payload) is in `AnalyticsData.kt` |
+| `ui/screens/rx/RxAuditScreen.kt` | 472, `RxAuditParts.kt` 349, `DoctorPitchCard.kt` 498 | Rx audit screen; `RxAuditParts.kt` holds `ClassSlice`/`ClinicalStrip`/`PillButton`/`MarketShareCard`, shared with the drawer |
+| `ui/screens/hub/HubScreen.kt` | 1592 | drug index, news, jobs, health days, TRIPS |
 | `ui/screens/team/TeamScreen.kt` | 461, `TeamSections.kt` 654 | RSM command |
 | `ui/screens/settings/SettingsScreen.kt` | 325 | settings, entry point to Help |
-| `ui/screens/help/HelpScreen.kt` | 217 | guide + error escalation |
+| `ui/screens/help/HelpScreen.kt` | 347 | guide + error escalation |
 | `ui/screens/PendingScreen.kt` | 34 | placeholder — now unreachable, all 7 destinations have screens |
 
 ### Theme / components
