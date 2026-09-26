@@ -15,7 +15,7 @@ Nothing in `agent/` is compiled or shipped. `android/checks/guard.py` treats
 | `STATE.md` | Where the port stands: done / unverified / next. Start here. |
 | `COMMANDS.md` | Every command used in this project, with what "healthy" output looks like. |
 | `MAP.md` | File → responsibility, and which Python module each Kotlin file ports. |
-| `findings/` | Dated scan reports. The findings, not the tool output. |
+| `findings/` | Dated scan reports — the findings, not the tool output. Mostly Android scans, but defects found in the web app belong here too (`2026-09-26-web-export-source.md`), because `origin/main` is the reference this ports from and a web-side bug is worth recording rather than reproducing. |
 | `parity.py` | Is any feature from `origin/main` missing on Android? |
 | `roomcheck.py` | Does every Room `@Query` column actually exist? |
 

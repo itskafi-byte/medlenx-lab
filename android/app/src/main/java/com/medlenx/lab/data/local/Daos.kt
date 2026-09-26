@@ -583,6 +583,14 @@ interface PrescriptionDao {
      *
      * `p.district`, `p.territory` and `p.mr_id` are already the captured values,
      * so only the specialty differs from the shared fragment.
+     *
+     * **`source` is applied here and not on the web.** The web's export button
+     * sends `source=` (`index.html:2265`) and `/api/export/recent-medicines.csv`
+     * never declares the parameter, so Flask drops it and a source-filtered
+     * dashboard exports every source with no error. See
+     * `agent/findings/2026-09-26-web-export-source.md`. Android honours the filter
+     * it is showing rather than reproducing that; the missing web parameter is
+     * logged to be fixed at the source instead.
      */
     @Query(
         "SELECT p.created_at AS createdAt, p.mr_id AS mrId, p.doctor_name AS doctorName, " +
