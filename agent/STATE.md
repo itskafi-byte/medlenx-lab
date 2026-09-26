@@ -178,6 +178,53 @@ flagged, not folded in, because module 2 was the substitution card.
 
 ## Recently fixed (committed, unverified)
 
+- **Five dead imports, and 24 formatting sites that followed the device locale** —
+  the sweep after the charts-and-cards round. Both classes were invisible to the
+  check suite and to the compiler, and both are now rules in it (see the check entry
+  below).
+
+  The dead imports (`b04335a`) were one line each in `AnalyticsCharts`,
+  `AnalyticsScreen`, `HubScreen` and `Verification`, plus the `width` left behind
+  when the drawer's table became cards. They were invisible because the scan that
+  looks for them is easy to write blind: with `(?<![\w.])` as the lookbehind, every
+  dot-received use (`.dp`, `Icons.Filled.X`) counts as a non-use, so an import that is
+  used is reported dead and an import that is used *nowhere* looks the same. The
+  lookbehind has to be `(?<![\w])`.
+
+  The locale sites (`3d1467c`) are the same mistake in 24 places: the app ships one
+  English resource set and the web prints ASCII, but `"%.1f".format(x)` takes the
+  *device* locale, and `SimpleDateFormat(..., Locale.getDefault())` and
+  `DateTimeFormatter.ofPattern` with no locale follow it too. On a bn-BD device the
+  percentages render in Bengali digits beside ASCII counts ("12 (২৪.০%)"); on any
+  comma-decimal device "14.3%" becomes "14,3%" and the scan's GPS pair becomes
+  "23,8106, 90,4123" — two coordinates, three commas, nothing downstream able to tell
+  them apart. `PyMath` already had the pattern (`fixed2`, with the reason written
+  down); it now has `fixed1`, `fixed0` and `fixedCoords`, and every call site goes
+  through them or through an explicit `Locale.US`.
+
+- **The company matcher merged companies that merely start alike** (`220943a`). The
+  web's `same_company` treats "either key is a prefix of the other" as equality, and
+  the port reproduced it, which merges 14 pairs on the shipped catalogue — Square
+  Pharmaceuticals with Square Toiletries, Sun Pharmaceutical with Sunman-Birdem,
+  Globe with Globex, Leo with Leon. Every own-vs-competitor decision in the app runs
+  through that function, including which products a rep can be pitched as their own
+  brand. `sameCompany` is now key equality, and `companyKey`'s noise-only fallback
+  trims the trailing corporate suffix so "Healthcare Pharmaceuticals Ltd." still
+  matches "Healthcare Pharmaceuticals" — the case the prefix clause was covering.
+  Deliberately stricter than `origin/main`; the finding file records the web's side,
+  the measurement, and the false alarm the first analysis raised (54 merges, from a
+  probe that used the first token as the key rather than the whole name).
+
+- **With no company in Settings, the drawer and the scan path had no own company at
+  all** (`60dc075`). `get_current_own_company` (`main.py:102`) never returns empty —
+  profile, then `is_own_company` row, then the demo database's own company — and the
+  port read the profile's raw string, so a rep who had not been onboarded got "": no
+  portfolio match on any row (no pill, no pitch button), 0 own in the footer, and no
+  substitution pick at all on a live scan. `MedicineMatcher.resolveOwnCompany` now
+  applies the web's rule and says whether the name is the rep's own or the fallback;
+  the drawer footer and the scan's medicines card say so in words, so the picks are
+  never presented as the rep's portfolio when they are a default.
+
 - **The Gemini directive's first three sections** — the audit-drawer freeze, the chart
   colours/aggregation, and the drawer's mobile cards. Verified against the web app
   before any code was touched, and three of the directive's claims turned out to be
@@ -330,6 +377,21 @@ flagged, not folded in, because module 2 was the substitution card.
   check is limited to `fun`s at a container's own depth, ignores
   `@JvmName` (which cures the clash), and leaves properties alone - their getters
   take no arguments, so they can only clash with a no-arg `getX`.
+- **`imports.py`, the delegate convention and the locale rule** — two checks added
+  after a manual sweep found both classes by hand, which is the test for whether a
+  rule is worth having. *Delegates:* `getValue`/`setValue` are operator imports that
+  never appear in the source, so a naive unused-import scan calls all 40-odd of them
+  dead; the check instead requires a real delegated *property* to justify each one
+  (`val x by ...` for `getValue`, `var x by ...` for `setValue`) and reports both
+  directions. The first version of it produced five false files because `by` also
+  appears in interface delegation, in `ORDER BY` inside SQL strings, and in prose.
+  It also cannot use `mask_literals`, this file's own documented trap: that function
+  turned the 39,688-character `RxBreakdownSheet.kt` into a 16,087-character string and
+  mangled `web's` into `web''s` on the way, so the check reads a comment-stripped
+  source instead. *Locale:* `"%.1f".format(x)`, `String.format("%.4f", ...)`,
+  `Locale.getDefault()` and `ofPattern(...)` with no locale - 24 sites, all rendering
+  differently on the market this app ships to (see the recently-fixed entry above).
+  Both are fault-locked (#29-#31).
 - **`imports.py`, the cross-package rule** (`a19b44f`) — for anything declared at
   column 0: a type, a property, a function (`ClinicalStrip(`), or an extension
   called on a receiver (`xs.toBarData()`). A `private` declaration is not offered

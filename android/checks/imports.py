@@ -34,6 +34,15 @@ Checks
 13. Platform declaration clash - two members of one type whose parameter lists erase
     to the same JVM signature (`List<A>` against `List<B>`). Legal Kotlin, and the
     backend rejects it after the frontend has already passed.
+14. Delegate-import convention - `getValue`/`setValue` are operator imports that are
+    never written in code, so a naive unused-import scan calls all 40-odd of them
+    dead; this checks the reverse, that a delegated property exists to justify them
+    and that a `var ... by` has its `setValue`.
+15. Locale-sensitive formatting - `"%.1f".format(x)`, `String.format("%.4f", ...)`,
+    `Locale.getDefault()`, and `DateTimeFormatter.ofPattern` with no locale. The app
+    ships one English resource set (`res/values` only), so on a bn-BD device these
+    render Bengali digits beside ASCII counts, and on a comma-decimal device
+    "23.8106, 90.4123" becomes "23,8106, 90,4123" - two coordinates, three commas.
 
 Run it from anywhere: the source root is derived from this file's own path. A
 previous revision used a relative root, so running it from the repo root walked a
@@ -1514,6 +1523,124 @@ def check_missing_return():
     return findings
 
 
+def _strip_comments(src: str) -> str:
+    """
+    Blank out `//` and `/* */` comments, preserving every other offset and newline.
+
+    Not `mask_literals`: that one is for string literal *content*, it abandons a
+    non-raw literal at the first newline and blanks inside `${...}`, and it made a
+    39,688-character file 16,087 characters - so anything structural read from it is
+    read from a file that no longer exists. Checks that need code-without-comments use
+    this instead.
+    """
+    out = list(src)
+    i, n = 0, len(src)
+    while i < n:
+        if src.startswith("/*", i):
+            end = src.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            for j in range(i, end):
+                if out[j] != "\n":
+                    out[j] = " "
+            i = end
+        elif src.startswith("//", i):
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            for j in range(i, end):
+                out[j] = " "
+            i = end
+        else:
+            i += 1
+    return "".join(out)
+
+
+def check_delegate_imports():
+    """
+    The runtime delegate convention, in both directions.
+
+    `import androidx.compose.runtime.getValue` pulls in the `getValue` operator that
+    `val x by mutableStateOf(...)` needs; the name never appears in the source, so no
+    unused-import scan can see it and no compiler complains if it is missing until the
+    delegation is actually written. Conversely, an import with no delegation to serve is
+    dead weight: `setValue` in a file whose only delegations are `val`s is dead, because
+    `setValue` exists for `var ... by`.
+
+    The distinction that matters, and that a first attempt at this got wrong: `by` is
+    also interface delegation (`class X : Y by z`), which needs no runtime import, and the
+    bare word appears in SQL strings (`ORDER BY`) and prose. Only a delegated *property*
+    - `val`/`var` followed by a name, an optional type, then `by` - counts.
+    """
+    prop = re.compile(
+        r"\b(?:private\s+|internal\s+|public\s+|protected\s+|override\s+)*"
+        r"(val|var)\s+\w+\s*(?::[^=\n]+?)?\s+by\b"
+    )
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            src = open(path, encoding="utf-8").read()
+            code = _strip_comments(src)
+            kinds = set(prop.findall(code))
+            has_by = bool(kinds)
+            has_var_by = "var" in kinds
+            has_get = "import androidx.compose.runtime.getValue" in code
+            has_set = "import androidx.compose.runtime.setValue" in code
+            if has_get and not has_by:
+                findings.append(
+                    (path, "getValue imported but no delegated property in the file")
+                )
+            if has_set and not has_var_by:
+                findings.append(
+                    (path, "setValue imported but no `var ... by` to delegate")
+                )
+            if has_by and not has_get:
+                findings.append(
+                    (path, "a delegated property but getValue is NOT imported")
+                )
+            if has_var_by and not has_set:
+                findings.append(
+                    (path, "a `var ... by` but setValue is NOT imported")
+                )
+    return findings
+
+
+def check_locale_formatting():
+    """
+    Formatting that takes its digits from the device locale.
+
+    Four shapes, all of them rendering differently on the market this app ships to:
+    `"%.1f".format(x)` and `String.format("%.4f", ...)` (both locale-default), and
+    `SimpleDateFormat`/`DateTimeFormatter.ofPattern` with no explicit locale (their
+    DecimalStyle picks up the default locale's digits). `PyMath.fixed1/fixed0/fixed2/
+    fixedCoords` and an explicit `Locale.US` are the sanctioned forms - `Locale.US` and
+    not "no locale", because the strings being mirrored are the web's `toFixed` output.
+    """
+    fmt = re.compile(r'"[^"\n]*%[^"\n]*"\s*\.format\(')
+    sfmt = re.compile(r'String\.format\(\s*"')
+    getdef = re.compile(r"Locale\.getDefault\s*\(")
+    ofpat = re.compile(r"ofPattern\(\s*\"[^\"]*\"\s*\)")
+    findings = []
+    for dirpath, _, files in os.walk(ROOT):
+        for fn in sorted(files):
+            if not fn.endswith(".kt"):
+                continue
+            path = os.path.join(dirpath, fn)
+            for n, line in enumerate(open(path, encoding="utf-8"), start=1):
+                if line.lstrip().startswith("*") or line.lstrip().startswith("//"):
+                    continue
+                for rx, why in (
+                    (fmt, "formats with the default locale - use PyMath.fixed1/fixed0"),
+                    (sfmt, "String.format with the default locale - pass Locale.US"),
+                    (getdef, "Locale.getDefault() - pin Locale.US"),
+                    (ofpat, "ofPattern without a locale - pass Locale.US"),
+                ):
+                    if rx.search(line):
+                        findings.append((path, n, line.strip(), why))
+    return findings
+
+
 def main() -> int:
     findings = 0
 
@@ -1637,6 +1764,22 @@ def main() -> int:
         for path, line, ret in noret:
             print(f"  {path}:{line}  returns {ret} but the body has no return/throw")
             print("       a block body needs `return`; only `= expr` bodies infer it")
+        print()
+
+    dl = check_delegate_imports()
+    if dl:
+        findings += len(dl)
+        print("DELEGATE-IMPORT MISMATCH - the `by` convention and its imports disagree")
+        for path, why in dl:
+            print(f"  {path}\n      {why}")
+        print()
+
+    loc = check_locale_formatting()
+    if loc:
+        findings += len(loc)
+        print("LOCALE-SENSITIVE FORMATTING - digits that follow the device, not the data")
+        for path, line, text, why in loc:
+            print(f"  {path}:{line}\n      {text}\n      {why}")
         print()
 
     if findings:

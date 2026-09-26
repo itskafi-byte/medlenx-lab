@@ -336,6 +336,40 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "fun classBreakdownOf(classes: List<String?>): List<ClassSlice> {",
         "classBreakdownOf(List)",
     ),
+    (
+        # The delegate convention, first direction: `val x by mutableStateOf(...)` with
+        # the operator import removed. Legal-looking, invisible to a compiler here, and
+        # exactly what a naive unused-import "cleanup" does to these 40-odd imports.
+        "a delegated property without its getValue import",
+        "imports.py",
+        "android/app/src/main/java/com/medlenx/lab/ui/screens/analytics/FilterSheet.kt",
+        "import androidx.compose.runtime.getValue\n",
+        "",
+        "getValue",
+    ),
+    (
+        # The delegate convention, second direction: the import is present and nothing
+        # delegates. The property the `by` belonged to is gone, so the import is dead.
+        "a getValue import with no delegated property to serve",
+        "imports.py",
+        # MlxTopBar, whose only delegated property this is: removing the `by` leaves
+        # the import with nothing to serve.
+        "android/app/src/main/java/com/medlenx/lab/ui/shell/MlxTopBar.kt",
+        "var focused by remember { mutableStateOf(false) }",
+        "var focused = remember { mutableStateOf(false) }",
+        "no delegated property",
+    ),
+    (
+        # Locale-sensitive formatting, the shape that does the most damage: the GPS
+        # pair. On a comma-decimal device the default locale renders it
+        # "23,8106, 90,4123" - two coordinates, three commas.
+        "a number formatted with the device locale",
+        "imports.py",
+        "android/app/src/main/java/com/medlenx/lab/ui/screens/scan/GeoStrip.kt",
+        "append(PyMath.fixedCoords(state.lat, state.lng))",
+        "append(\"%.4f, %.4f\".format(state.lat, state.lng))",
+        "locale",
+    ),
 ]
 
 
