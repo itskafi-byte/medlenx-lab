@@ -126,12 +126,22 @@ work), and the `title=` tooltips on the NEML / DGDA / TRIPS badges - `dgdaReason
 carried on the line for it, but Android has no tooltip and the detail needs a long-press
 affordance to land somewhere.
 
-*Not ported, and not deliberately:* the web's brand footnote is
-`[m.type || m.form, m.dosage_normalized]` (`index.html:2951`), so a row with no `type`
-still shows the dosage form. `ScannedMedicineEntity` stores `dosage_form`
-(`Entities.kt:120`), but `RxAuditLine` has no such field and the drawer's `@Query` does
-not select it, so the footnote starts at `dosage` whenever `type` is empty. Small and
-real; left out of the cards round because it is a DAO + model change, not a layout one.
+**The brand footnote's `type || form` fallback is already honoured, in two places.**
+`RxAuditLine` carries no separate `form` field, which is what made this look like a gap,
+but the fallback is applied before the line is ever built: `ScanRepository` writes
+`dosageForm = med.type.ifBlank { med.form }` when a scan is saved (`:171`), and
+`RxAudit.lineOf(EnrichedMedicine)` does the same for a live scan (`type = med.type.ifBlank
+{ med.form }`). The saved-row mapper then reads that one column into `type`, so the
+drawer's footnote renders the web's `[m.type || m.form, m.dosage_normalized]` exactly.
+No change needed - an earlier note in this file claimed otherwise and was wrong.
+
+**Chart A draws eight bars, not ten.** The web's endpoint defaults to `limit=10`
+(`database.py`, `get_most_prescribed_medicines`) but its dashboard asks for eight
+(`/api/dashboard/most-prescribed?limit=8`, `index.html:2497`), and the app had taken the
+endpoint default. The count is not only how tall the chart is: `mostPrescribed` computes
+each bar's share over the rows it was handed, so ten bars printed different percentages
+from the web's for the same prescription set - and the share is on the bar now that the
+tooltip's contents are printed. Set to 8 on the user's call.
 
 ### Parity directive, module 2 — generic substitution in the review stream
 

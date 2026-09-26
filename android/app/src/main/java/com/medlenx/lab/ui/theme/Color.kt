@@ -122,7 +122,7 @@ object Mlx {
      * neighbours rather than to match a specific company.
      *
      * Position-indexed: index 7 takes colour 7, and past the end the index wraps -
-     * the failure the six-colour array had, but far later. Chart A draws at most ten
+     * the failure the six-colour array had, but far later. Chart A draws eight
      * bars. The donut reserves two colours of its own - the own company's emerald
      * ([Ok500]) and the "Others" bucket's slate ([Brand400], which is the web's own
      * `others` entry) - so its numbered slices draw on the other 19 and it stays

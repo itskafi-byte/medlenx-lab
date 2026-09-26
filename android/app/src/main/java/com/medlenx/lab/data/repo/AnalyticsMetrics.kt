@@ -87,7 +87,9 @@ object AnalyticsMetrics {
     /**
      * Widget A. `market_share_percent` is the brand's share of the *returned
      * page*, not of all prescribing — `total` is summed over the fetched rows
-     * only, exactly as the Python does.
+     * only, exactly as the Python does. The caller's `limit` therefore decides the
+     * percentages as well as the bar count: the web's dashboard fetches eight
+     * (`index.html:2497`), so the app does too.
      */
     fun mostPrescribed(rows: List<MostPrescribedRow>): List<MostPrescribed> {
         val total = rows.sumOf { it.captureCount }.takeIf { it != 0 } ?: 1

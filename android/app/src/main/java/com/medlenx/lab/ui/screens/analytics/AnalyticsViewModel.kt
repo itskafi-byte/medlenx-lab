@@ -500,8 +500,15 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     ownCompanyName = ownCompany,
                 )
 
+                // `limit = 8`, not the DAO's default 10: the web's dashboard asks for
+                // eight (`/api/dashboard/most-prescribed?limit=8`, index.html:2497) even
+                // though the endpoint's own default is 10, and the number matters for
+                // more than how tall the chart is. `AnalyticsMetrics.mostPrescribed`
+                // computes each bar's share over the rows it was given, so eight bars and
+                // ten bars print different percentages for the same data - the web's and
+                // the app's would disagree on every bar.
                 mostPrescribed = AnalyticsMetrics.mostPrescribed(
-                    prescriptionDao.mostPrescribedRows(since = since, limit = 10, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
+                    prescriptionDao.mostPrescribedRows(since = since, limit = 8, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
                 companyShare = AnalyticsMetrics.companyShare(
                     prescriptionDao.companyShareRows(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
