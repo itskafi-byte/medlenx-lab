@@ -161,7 +161,7 @@ interface PrescriptionDao {
         SELECT p.id AS prescriptionId,
                p.doctor_name AS doctorName,
                IFNULL(d.specialty, '') AS specialty,
-               IFNULL(p.district, '') AS district,
+               IFNULL(d.district, '') AS district,
                sm.generic AS generic,
                sm.brand_name AS brandName
         FROM scanned_medicines sm

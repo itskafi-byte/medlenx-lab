@@ -11,11 +11,15 @@ import com.medlenx.lab.data.local.TrendItemRow
  * Ports of the RSM aggregates in `app/database.py`.
  *
  * These are re-implementations rather than transliterations: the backend runs
- * them as SQL over `prescribed_medicines` joined to a `doctors` table, whereas
- * Android stores specialty, district and territory directly on the prescription
- * row and has no doctor primary key. The SQL lives in
- * [com.medlenx.lab.data.local.PrescriptionDao]; only the post-query arithmetic
- * is here, so it can be verified without a database.
+ * them as SQL over `prescribed_medicines` joined to a `doctors` table. Android
+ * now has that table too, so specialty, district and territory are read from the
+ * joined doctor exactly as the backend reads them. That is not a detail: the
+ * prescription row carries its own copy of each, captured at scan time, so
+ * reading `p.district` in a query that groups by doctor would take whichever
+ * row happened to be scanned first and silently disagree with the web.
+ *
+ * The SQL lives in [com.medlenx.lab.data.local.PrescriptionDao]; only the
+ * post-query arithmetic is here, so it can be verified without a database.
  */
 object TeamMetrics {
 

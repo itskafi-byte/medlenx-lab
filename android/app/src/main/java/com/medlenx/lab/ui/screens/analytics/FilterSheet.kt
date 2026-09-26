@@ -148,7 +148,12 @@ fun FilterSheet(
 
                 Spacer(Modifier.height(MlxD.Space4))
                 Text(
-                    text = "${draft.activeCount} filters active",
+                    // The web pluralises this; "1 filters active" did not.
+                    text = if (draft.activeCount == 1) {
+                        "1 filter active"
+                    } else {
+                        "${draft.activeCount} filters active"
+                    },
                     style = MlxType.Footnote,
                     color = Mlx.Text400,
                     modifier = Modifier.padding(bottom = MlxD.Space3),
