@@ -166,6 +166,20 @@ flagged, not folded in, because module 2 was the substitution card.
   `Certificate` as the only name introduced since that never existed - so that
   defect class is now empty, and it was also invisible to every check here,
   because an icon name is only wrong against a library the checks cannot read.
+- **The pitch card claimed compliance the medicine might not have** (`97f955e`).
+  "NEML Listed" and "DGDA Price Alert" were rendered on every substitution, with no
+  test against the medicine's own flags - and this is the card a rep presents to a
+  prescriber. The web gates both (`index.html:3034`), reading them off the audit item
+  the card was opened from; Android's card had nothing to read, because a
+  `Substitution` carries no regulatory fields. `PitchCompliance` now travels with it -
+  filled from the `EnrichedMedicine` on the live path and from the drawer row on the
+  saved one - the pills are gated, the NEML pill takes the web's blue and appends the
+  molecule, and the PDF carries the web's two conditional bullets (its third,
+  "Pricing unverified", tests a DGDA gazette MRP this app does not carry).
+  **No check here can see this class**: every pill was a real call to a real
+  composable and the defect was a missing condition. It came out of reading the web's
+  render for the same card against this one, which is still the only method that
+  finds it.
 - **`imports.py` could not see the `ClinicalStrip` error** (`a19b44f`). The hole is
   the interesting part: `_TOP_DECL` matched no `fun` at all and required a
   capitalised name, so *no top-level function in the project was indexed*; and a
