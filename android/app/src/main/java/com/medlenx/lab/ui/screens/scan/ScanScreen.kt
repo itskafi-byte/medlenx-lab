@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
@@ -272,6 +273,9 @@ fun ScanScreen(
             // it went, so the label is the pitch note and not the mechanism.
             onCopyPitch = { _, pitch -> copyToClipboard(context, pitch, "Pitch note") },
             onMarkWon = vm::markConversionWon,
+            // Same resolution the view model used for the picks, so the notice and the
+            // picks cannot disagree about whether the company was configured.
+            ownCompanyAssumed = !MedicineMatcher.resolveOwnCompany(vm.officerProfile?.company).confirmed,
             modifier = modifier.padding(top = topInset),
         )
 

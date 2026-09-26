@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.analytics
 import com.medlenx.lab.data.local.BrandDoctorRow
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.model.Substitution
+import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.data.repo.RxAuditLine
 import com.medlenx.lab.data.repo.RxMarketShare
 import com.medlenx.lab.ui.screens.rx.ClassSlice
@@ -164,8 +165,13 @@ data class RxAuditDrawer(
     val prescription: PrescriptionEntity,
     val lines: List<RxAuditLine>,
     val portfolios: List<Substitution?>,
-    /** Blank when no officer profile is saved; the drawer then shows no own brand. */
+    /** The resolved own company — never blank; see [MedicineMatcher.resolveOwnCompany]. */
     val ownCompany: String,
+    /**
+     * False when [ownCompany] is the fallback rather than the rep's own choice. The
+     * drawer labels the picks in that case instead of implying they were configured.
+     */
+    val ownCompanyConfirmed: Boolean,
     val marketShare: RxMarketShare,
     /** Therapeutic-class split for the stacked bar, largest first. */
     val slices: List<ClassSlice>,

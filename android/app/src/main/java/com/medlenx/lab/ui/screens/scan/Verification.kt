@@ -741,6 +741,14 @@ fun VerifyMedicinesSection(
     onCopyPitch: (Int, String) -> Unit = { _, _ -> },
     /** The substitution card's "Mark as won", for the medicine at that index. */
     onMarkWon: (Int) -> Unit = {},
+    /**
+     * True when the own company is the fallback rather than the rep's own choice.
+     *
+     * The substitution picks and their pitch buttons are computed against it, so when
+     * the rep has not set a company in Settings the card says which company it assumed
+     * instead of presenting an assumption as the rep's own portfolio.
+     */
+    ownCompanyAssumed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
@@ -796,6 +804,18 @@ fun VerifyMedicinesSection(
                 color = Mlx.Text600,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
+            // The substitution picks below are computed for one company; when that is
+            // the fallback rather than the rep's, say so here - before the picks are
+            // read and saved, not only afterwards in the audit drawer's footer.
+            if (ownCompanyAssumed) {
+                Text(
+                    text = "Substitution picks use the default own company — set yours " +
+                        "in Settings to see your own portfolio instead.",
+                    style = MlxType.MicroPill.copy(fontWeight = FontWeight.Normal),
+                    color = Mlx.Warn500,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
             if (cards.isEmpty()) {
                 MlxEmptyState(
                     message = "No medicines were detected on this scan. Rescan with better " +

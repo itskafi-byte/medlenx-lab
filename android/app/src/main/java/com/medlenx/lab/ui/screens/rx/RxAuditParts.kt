@@ -219,6 +219,15 @@ fun MarketShareCard(
      * out to touch.
      */
     showCropHint: Boolean = true,
+    /**
+     * True when [ownLabel] is the fallback company rather than the rep's own.
+     *
+     * The share above is computed against whatever own company resolved, so when the
+     * rep has not set one in Settings the numbers are still meaningful but the label is
+     * not the rep's: the footnote says which, instead of showing an own-company share
+     * with no indication of whose.
+     */
+    ownCompanyAssumed: Boolean = false,
 ) {
     MlxCard {
         Text(
@@ -240,6 +249,16 @@ fun MarketShareCard(
             color = Mlx.Warn500,
             modifier = Modifier.padding(bottom = MlxD.Space3),
         )
+
+        if (ownCompanyAssumed) {
+            Text(
+                text = "Using the default own company — set yours in Settings to make " +
+                    "these picks and this share your own.",
+                style = MlxType.Footnote,
+                color = Mlx.Warn500,
+                modifier = Modifier.padding(bottom = MlxD.Space3),
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
             ExportButton(

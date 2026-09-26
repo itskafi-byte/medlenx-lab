@@ -167,6 +167,38 @@ object MedicineMatcher {
         return key
     }
 
+    /**
+     * Who "own" means when the officer profile has no company.
+     *
+     * `get_current_own_company` (`main.py:102`) never returns empty: it prefers the
+     * officer profile, then the `is_own_company` pharma row, and finally falls back to
+     * the demo database's own company (`database.py:368`). This app has no pharma table,
+     * so the two steps that exist here are the profile and the same literal - and it
+     * matters because so much hangs off it: with a blank own company the drawer computes
+     * no portfolio matches (its rows lose the Own Portfolio Match pill and the pitch
+     * button entirely) and a live scan computes no substitution pick.
+     *
+     * The Analytics widgets default to `Square Pharmaceuticals Ltd.`
+     * ([AnalyticsMetrics.DEFAULT_OWN_COMPANY]) and the Team aggregates to this one,
+     * because the Python's two families of functions really do use two different
+     * literals; the scan and the audit drawer sit on the `get_current_own_company` side.
+     */
+    const val DEFAULT_OWN_COMPANY = "Healthcare Pharmaceuticals Ltd."
+
+    /**
+     * The own company to use, and whether it is the one the rep actually chose.
+     *
+     * [confirmed] is false when nothing is configured, so a surface that shows picks
+     * derived from this can say so rather than implying the rep set it up.
+     */
+    data class OwnCompany(val name: String, val confirmed: Boolean)
+
+    fun resolveOwnCompany(profileCompany: String?): OwnCompany {
+        val configured = profileCompany.orEmpty().trim()
+        return if (configured.isNotEmpty()) OwnCompany(configured, true)
+        else OwnCompany(DEFAULT_OWN_COMPANY, false)
+    }
+
     /** True when two company strings refer to the same manufacturer. */
     fun sameCompany(a: String?, b: String?): Boolean {
         val ka = companyKey(a)

@@ -34,6 +34,7 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.data.export.ExportDocuments
+import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.ui.components.copyToClipboard
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
@@ -400,6 +401,10 @@ fun MedLenXShell(
                 composable(Destination.RxAudit.route) {
                     val s = scanVm.state
                     val profile = scanVm.officerProfile
+                    // Resolved once, here, rather than in the screen: the audit screen's
+                    // own-vs-competitor split and the scan view-model that produced the
+                    // picks must agree about who "own" is.
+                    val own = MedicineMatcher.resolveOwnCompany(profile?.company)
                     RxAuditScreen(
                         rxId = s.receipt?.rxNumber ?: "Unsaved read",
                         doctorName = s.doctor.name,
@@ -407,7 +412,8 @@ fun MedLenXShell(
                         repId = profile?.employeeId ?: s.receipt?.repCode.orEmpty(),
                         district = s.doctor.district,
                         medicines = s.enriched,
-                        ownCompany = profile?.company.orEmpty(),
+                        ownCompany = own.name,
+                        ownCompanyConfirmed = own.confirmed,
                         offTerritory = s.geo.offTerritory,
                         duplicateOfRxIds = scanVm.duplicateOfRxIds,
                         onBack = { navController.popBackStack() },

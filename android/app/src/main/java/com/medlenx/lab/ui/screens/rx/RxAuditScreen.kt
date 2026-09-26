@@ -95,6 +95,8 @@ fun RxAuditScreen(
     district: String,
     medicines: List<EnrichedMedicine>,
     ownCompany: String,
+    /** False when [ownCompany] is the fallback; the share footnote says so. */
+    ownCompanyConfirmed: Boolean = true,
     offTerritory: Boolean,
     duplicateOfRxIds: List<String>,
     onBack: () -> Unit,
@@ -198,6 +200,7 @@ fun RxAuditScreen(
             competitorCount = share.competitorCount,
             total = share.totalMedicines,
             onExportCsv = { onExportCsv(RxAudit.itemsToCsv(lines, ownCompany)) },
+            ownCompanyAssumed = !ownCompanyConfirmed,
             onCopyClipboard = {
                 onCopyClipboard(
                     RxAudit.itemsToClipboard(

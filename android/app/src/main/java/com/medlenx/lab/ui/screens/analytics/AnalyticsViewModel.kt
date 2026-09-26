@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.medlenx.lab.data.repo.MedicineMatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import com.medlenx.lab.MedLenXApp
@@ -241,7 +242,11 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         val prescription = prescriptionDao.byId(prescriptionId) ?: return null
         val rows = failureAsNull { prescriptionDao.medicinesFor(prescriptionId) }
             .orEmpty()
-        val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+        // Never blank, and the flag says whether the rep picked it: a blank own company
+        // would silently drop every portfolio match in the drawer, which is the pills and
+        // the pitch button gone from every row (`main.py:102` always resolves one).
+        val own = MedicineMatcher.resolveOwnCompany(app.graph.profileDao.current()?.company)
+        val ownCompany = own.name
         val lines = rows.map { RxAudit.lineOf(it) }
 
         // Only fetched when there is something to pitch; a drawer opened on an
@@ -281,6 +286,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             lines = lines,
             portfolios = portfolios,
             ownCompany = ownCompany,
+            ownCompanyConfirmed = own.confirmed,
             marketShare = RxAudit.buildMarketShare(lines, ownCompany),
             // The web groups on `therapeutic_class`, which the saved row carries from
             // the scan-time enrichment; a blank one folds into "Other" exactly as the

@@ -23,6 +23,7 @@ import com.medlenx.lab.data.model.MatchType
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
+import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.data.repo.PHash
 import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.ui.components.CompanyVerification
@@ -319,7 +320,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             // Own-company basis for the substitution engine. Blank when no
             // officer profile is saved, which makes genericSubstitution
             // return null rather than guessing a manufacturer.
-            ownCompany = officerProfile?.company.orEmpty(),
+            // Resolved, not raw: with a blank own company the enrichment computes no
+            // substitution pick at all, and the web's resolver never returns blank.
+            ownCompany = MedicineMatcher.resolveOwnCompany(officerProfile?.company).name,
         )
         state = state.copy(
             phase = ScanPhase.VerifyDoctor,
@@ -783,7 +786,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         medicines = corrected.medicines,
                         index = scanRepository.medexIndex(),
                         regulatory = app.graph.regulatoryRepository.data(),
-                        ownCompany = profile?.company.orEmpty(),
+                        ownCompany = MedicineMatcher.resolveOwnCompany(profile?.company).name,
                     )
                 }.getOrDefault(state.enriched)
                 state = state.copy(enriched = audit)
@@ -826,7 +829,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     ),
                     result = corrected,
                     mrId = repId,
-                    ownCompany = profile?.company,
+                    ownCompany = MedicineMatcher.resolveOwnCompany(profile?.company).name,
                     enriched = audit,
                 )
                 duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()

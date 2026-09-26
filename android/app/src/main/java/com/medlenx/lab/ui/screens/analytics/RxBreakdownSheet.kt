@@ -385,6 +385,7 @@ private fun DrawerBody(
                     )
                 },
                 showCropHint = false,
+                ownCompanyAssumed = !drawer.ownCompanyConfirmed,
             )
         }
     }
