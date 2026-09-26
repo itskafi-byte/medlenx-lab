@@ -152,6 +152,31 @@ flagged, not folded in, because module 2 was the substitution card.
 
 ## Recently fixed (committed, unverified)
 
+- **The four compile errors from the user's local build** (`dcd75dd`), every one of
+  them in the audit drawer the module-3 round wrote:
+
+  | Error | Cause | Fix |
+  |---|---|---|
+  | `:27:47` `Certificate` | `Icons.Filled.Certificate` does not exist in the icon set | `Icons.Filled.Check`, the NEML badge on `DoctorPitchCard.kt:145` and `RxAuditScreen.kt:341` |
+  | `:318:13` `ClinicalStrip` | `public` in `ui.screens.rx`, called from `ui.screens.analytics`, no import | import written |
+  | `:671:45` `Certificate` | the same icon, the same fix | — |
+  | `:753:70` `em` | `0.2.em` needs `androidx.compose.ui.unit.em`; the file imported `dp` only | import written |
+
+  Sweeping every icon name in the tree against the last device-built tree leaves
+  `Certificate` as the only name introduced since that never existed - so that
+  defect class is now empty, and it was also invisible to every check here,
+  because an icon name is only wrong against a library the checks cannot read.
+- **`imports.py` could not see the `ClinicalStrip` error** (`a19b44f`). The hole is
+  the interesting part: `_TOP_DECL` matched no `fun` at all and required a
+  capitalised name, so *no top-level function in the project was indexed*; and a
+  name declared anywhere in the project counted as resolvable in a file that had
+  not imported it, which is not a thing Kotlin does. Both fixed, plus `private`
+  declarations are no longer offered as import targets (they cannot be imported).
+  Two capabilities added and fault-locked: an extension function called on a
+  receiver (`xs.toBarData()` - the reference is the name after the dot, which the
+  plain scan skips on purpose) and a `dp`/`sp`/`em` unit extension with no
+  `androidx.compose.ui.unit` import, which is the fourth error above, prevented
+  rather than fixed. `faulttest.py` is 26 faults, all firing, tree byte-identical.
 - **Bug sweep of the three parity modules** — four defects, one of them user-visible.
   The check that found them is `2f5eaf9`; the fixes are in the commit that added this
   note:
@@ -208,6 +233,14 @@ flagged, not folded in, because module 2 was the substitution card.
   found `PrescriptionImageViewer.overlay`, invoked at the end of the canvas and
   supplied by nobody since the file was written; the slot is now gone rather than
   given a caller.
+- **`imports.py`, the cross-package rule** (`a19b44f`) — for anything declared at
+  column 0: a type, a property, a function (`ClinicalStrip(`), or an extension
+  called on a receiver (`xs.toBarData()`). A `private` declaration is not offered
+  as a target, because it cannot be imported. The rule is exact - no import, no
+  compilation - which is why the two false starts are worth remembering: indexing
+  indented declarations turns 1240 parameters and locals into phantom
+  cross-package types, and treating "declared somewhere in the project" as
+  "resolvable here" is precisely the question an import decides.
 - **`refcheck.py`** — a **member that does not exist**. `imports.py` resolves symbols
   (does `MlxD` have an import?) and cannot tell whether `MlxD.Space7` is a member of
   `MlxD`; `audit.py` catches an argument a function does not take, but only when it is
