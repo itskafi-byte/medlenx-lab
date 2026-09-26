@@ -166,6 +166,15 @@ flagged, not folded in, because module 2 was the substitution card.
   `Certificate` as the only name introduced since that never existed - so that
   defect class is now empty, and it was also invisible to every check here,
   because an icon name is only wrong against a library the checks cannot read.
+- **The Rx Audit screen's badges never had a condition that could be false.** The
+  same defect class as the pitch card below, in a second surface: `if
+  (medicine.neml != null)`, `if (medicine.dgdaAlert != null)` and `if
+  (medicine.tripsWatch != null)` were true for **every** medicine, because all three
+  lookups return a value whether or not anything was found. So the screen wore "NEML
+  Listed", "DGDA Price Alert" and "TRIPS Watch" on every row. Now `.listed`,
+  `.flagged`, `.watch`. The ABX badges above them were already gated correctly - the
+  screen's *tones* for NEML stay emerald, which is Android's own choice for this
+  Android-only full-screen variant; the web has only the drawer.
 - **The pitch card claimed compliance the medicine might not have** (`97f955e`).
   "NEML Listed" and "DGDA Price Alert" were rendered on every substitution, with no
   test against the medicine's own flags - and this is the card a rep presents to a
@@ -276,6 +285,17 @@ flagged, not folded in, because module 2 was the substitution card.
 
 ## UI decisions worth remembering
 
+- **`EnrichedMedicine.neml`, `.dgdaAlert` and `.tripsWatch` are never null.** The
+  lookups behind them return a value unconditionally - a molecule that is not listed
+  comes back as `NemlStatus(listed = false, molecule = "", therapeuticClass = null)`,
+  not as `null` (`Compliance.nemlLookup`, `tripsLookup`, `priceCeilingAlert`). The
+  fields are declared nullable only because the type allows it, so a null test reads
+  as a real guard and is not one: `if (medicine.neml != null)` was true for every
+  medicine, and the Rx Audit screen showed "NEML Listed" on all of them until the
+  guards were re-pointed at the flags. Gate these badges on the **flag** - `.listed`, `.flagged`,
+  `.watch` - which is what the web tests (`index.html:2922-2940`). Same shape for
+  `substitution` on `EnrichedMedicine`, which the enricher sets only when a match is
+  found and which *is* a real null.
 - **Screens must add NO top inset at all.** `Scaffold` measures its `topBar` slot and
   reports the full height (status bar + 63dp bar + 1dp divider) through
   `inner.calculateTopPadding()`, which the content Box in `MedLenXShell` already

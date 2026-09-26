@@ -332,12 +332,20 @@ private fun AuditItemCard(
         }
 
         // Regulatory chips - only the flags this medicine actually carries.
+        //
+        // Every one of these three is tested against its *flag*, never against the
+        // field being non-null. `Compliance.nemlLookup`, `tripsLookup` and
+        // `priceCeilingAlert` all return a value unconditionally - a not-listed
+        // molecule comes back as `NemlStatus(listed = false, ...)`, not as null - so
+        // `neml != null` was true for every medicine on this screen and the badges
+        // were unconditional. The web tests `m.neml.listed`, `m.trips.watch` and
+        // `m.dgda_price_alert.flagged` (`index.html:2922-2940`).
         FlowRowCompat(
             modifier = Modifier.padding(top = 6.dp, bottom = 6.dp),
             horizontalSpacing = 4.dp,
             verticalSpacing = 4.dp,
         ) {
-            if (medicine.neml != null) {
+            if (medicine.neml?.listed == true) {
                 RegulatoryPill(text = "NEML Listed", tone = PillTone.Emerald, icon = Icons.Filled.Check)
             }
             when {
@@ -352,14 +360,14 @@ private fun AuditItemCard(
                     icon = Icons.Filled.Biotech,
                 )
             }
-            if (medicine.dgdaAlert != null) {
+            if (medicine.dgdaAlert?.flagged == true) {
                 RegulatoryPill(
                     text = "DGDA Price Alert",
                     tone = PillTone.RedSoft,
                     icon = Icons.Filled.Block,
                 )
             }
-            if (medicine.tripsWatch != null) {
+            if (medicine.tripsWatch?.watch == true) {
                 RegulatoryPill(text = "TRIPS Watch", tone = PillTone.Blue, icon = Icons.Filled.Flag)
             }
             if (isDuplicate) {
