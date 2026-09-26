@@ -41,7 +41,7 @@ guard: REFUSING - the working tree is not safe to commit
 ## Static checks — these replace compiling
 
 The user compiles, so anything catchable without a compiler must be caught here.
-All five are fast; run them together.
+All six are fast; run them together.
 
 ```bash
 python3 android/checks/guard.py      # tree safety / reset detection
@@ -51,6 +51,26 @@ python3 agent/roomcheck.py           # every @Query column resolves against its 
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 ```
+
+`faulttest.py` runs on its own, because it edits the tree on purpose:
+
+```bash
+python3 android/checks/faulttest.py            # all 16 faults
+python3 android/checks/faulttest.py roomcheck  # one check's faults
+```
+
+It injects each fault, asserts the check reports it *and* exits non-zero,
+restores, re-runs the check to confirm it is clean again, and finally re-hashes
+every file under `android/` and `agent/` and fails if anything differs from the
+pre-run hash. That last step is the point: fault injection used to be done by
+hand, and one of those scripts crashed partway through and left `Migrations.kt`
+mutated until it was caught by eye. "Restored" has to be checked, not asserted,
+because the failure mode being guarded against is precisely the code path that
+did not run.
+
+It also refuses to pass a fault whose anchor text no longer appears exactly once:
+a fault that has drifted out of sync with the code is a fault that silently
+stopped testing anything, which is worse than a missing one.
 - `imports.py` healthy: `imports: no findings` (11 checks: missing imports,
   duplicate members, orphaned `private set`, orphaned KDoc,
   composable-in-`remember`, scope leak, missing icon import, unresolved symbol,
