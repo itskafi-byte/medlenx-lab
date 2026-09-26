@@ -266,6 +266,7 @@ fun ScanScreen(
             onSelectMedicine = vm::selectMedicine,
             suggestions = state.brandSuggestions,
             onPickSuggestion = vm::pickSuggestion,
+            onPickAlternative = vm::applyAlternative,
             modifier = modifier.padding(top = topInset),
         )
 

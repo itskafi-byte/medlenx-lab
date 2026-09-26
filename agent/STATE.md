@@ -30,8 +30,34 @@ counterpart — see `MAP.md`.
    was silently discarded. **Still needs the logcat** to confirm that was the
    cause rather than something else.
 2. **Device-verify rounds 2, 3, 4** — all committed, none confirmed on hardware.
-3. **Training queue** — persist the correction image slice; add list + stats.
-4. Company drill-down, DGDA monitor — low-severity parity gaps.
+3. **Parity directive, modules 2 and 3** — the three-module brief; module 1 has
+   landed, see below. Module 2 is the substitution card in the scan review stream
+   plus Copy pitch / Mark as won; module 3 grows `RxBreakdownSheet` into the full
+   Prescription Audit Summary. Scope and references are in
+   `findings/2026-09-26-parity-directive-audit.md`.
+4. **Training queue** — persist the correction image slice; add list + stats.
+5. Company drill-down, DGDA monitor — low-severity parity gaps.
+
+### Parity directive, module 1 — brand form variations
+
+`MedicineCardData.alternatives` reaches the card and renders under the company
+badge as "N other matches for this brand" (`MedicineCard.kt`, `AlternativesPicker`).
+The data was never missing: `MedicineEnricher` has always computed every catalogue
+variant of the matched brand, and `EnrichedMedicine.toCardData()` dropped the list
+at the card boundary - the same trap the comment above `packImage` in that function
+describes. `Color.kt`'s indigo tokens were already labelled "alternatives picker".
+
+Picking one is authoritative, as it is on the web. `mergeEdits` now folds strength,
+type, company and generic back into the VL read, so the save-time re-enrichment
+re-resolves onto the chosen variant instead of the original one. **That fold fixes
+two pre-existing bugs beyond this feature:** the name autocomplete and "verify
+against MedEx" also set those fields, and both were being discarded on save.
+
+*Not yet built and deliberately deferred to module 2:* the web also renders the
+substitution card and the DGDA flag inside the review card. `check_undefined_symbols`
+cannot see a dropped field, and no check catches "the mapper forgot a field" -
+building one now would report the module 2/3 fields as defects, so it belongs
+after they land.
 
 ## Recently fixed (committed, unverified)
 

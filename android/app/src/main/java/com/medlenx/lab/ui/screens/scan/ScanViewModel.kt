@@ -381,6 +381,23 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     med.dosageNormalized
                 },
+                // The same rule for the fields a catalogue pick rewrites. Without
+                // these four lines every correction made through "N other matches for
+                // this brand" - and, before it, through the name autocomplete and
+                // "verify against MedEx" - stopped at the card and was thrown away on
+                // save. Folding them back is what makes the officer's pick survive the
+                // re-enrichment below, because `pickVariant` re-resolves on
+                // brand + strength + dosage form and so lands on the variant that was
+                // chosen; the pack photo follows from that same re-resolution and
+                // needs no line of its own.
+                strength = if (card.strength != shown.strength) card.strength else med.strength,
+                type = if (card.type != shown.type) card.type else med.type,
+                company = if (card.company != shown.company) card.company else med.company,
+                genericName = if (card.ingredient != shown.ingredient) {
+                    card.ingredient
+                } else {
+                    med.genericName
+                },
             )
         }
         return result.copy(medicines = medicines)
@@ -414,6 +431,71 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 type = product.form.ifBlank { product.type }.ifBlank { it.type },
                 packImage = product.packImage?.takeIf { url -> url.isNotBlank() }
                     ?: product.imageUrl,
+            )
+        }
+        suggestionJob?.cancel()
+        state = state.copy(brandSuggestions = emptyList())
+    }
+
+    /**
+     * Applies one of the other catalogue variants of the same brand.
+     *
+     * The brand was never in question; the strength, the dosage form and sometimes the
+     * manufacturer were. The web calls this "N other matches for this brand"
+     * (`index.html:1909`) and installs it on any brand with more than one catalogue
+     * entry, matching what `MedicineEnricher` puts in
+     * [MedicineCardData.alternatives].
+     *
+     * The officer's pick is authoritative. In the web that is enforced by writing
+     * `company_source='user'` and `company_verified=true` onto the medicine and
+     * re-rendering (`index.html:3312`); nothing downstream is allowed to second-guess it
+     * again. There is no such flag here, and none is needed, because the save path
+     * re-resolves the medicine from the catalogue by brand + strength + dosage form
+     * (`MedicineMatcher.pickVariant`). Carrying the pick into `mergeEdits` therefore
+     * makes the re-resolution land on the chosen variant by construction, rather than
+     * out-voting it with a flag.
+     *
+     * The `alternatives` list itself is deliberately left alone. The web's array is
+     * whatever the last enrichment computed, so the variant just chosen stays listed
+     * and can be swapped back; recomputing here would be a divergence, not a fix.
+     */
+    fun applyAlternative(index: Int, product: MedexProduct) {
+        updateCard(index) {
+            it.copy(
+                // The brand is not touched, because the web's handler does not touch it
+                // either (`index.html:3312`): every entry in this list is a variant *of
+                // the brand already on the card*, so rewriting the name could only
+                // replace the officer's own text with a catalogue spelling of the same
+                // thing.
+                //
+                // `company` is replaced rather than merged, again as the web does
+                // (`med.company = btn.dataset.company || ''`). A variant the officer
+                // picked is the authority on its own manufacturer, and a blank one means
+                // this row has none - not that the previous row's name should stand in.
+                // The badge follows the new value, so a blank company reads as
+                // "Company not identified" rather than as a verified empty one.
+                company = product.company,
+                companyVerification = if (product.company.isNotBlank()) {
+                    CompanyVerification.Verified
+                } else {
+                    CompanyVerification.None
+                },
+                ingredient = product.generic.ifBlank { it.ingredient },
+                strength = product.strength.ifBlank { it.strength },
+                // The web reads the catalogue's `type` first (`data-type` on the button),
+                // so that field leads here too rather than `form`.
+                type = product.type.ifBlank { product.form }.ifBlank { it.type },
+                // Only overwritten when the chosen variant actually has a photo, which
+                // is the web's `if(btn.dataset.image)`. Assigning unconditionally would
+                // blank the pack shot for every variant the catalogue has no image for.
+                packImage = (product.packImage?.takeIf { url -> url.isNotBlank() }
+                    ?: product.imageUrl?.takeIf { url -> url.isNotBlank() })
+                    ?: it.packImage,
+                // A hand-picked variant is no longer a guess, and the catalogue-note
+                // strip under it would now be describing a product the officer just
+                // rejected by hand. The web clears `company_conflict` for the same
+                // reason.
+                catalogueNote = null,
             )
         }
         suggestionJob?.cancel()

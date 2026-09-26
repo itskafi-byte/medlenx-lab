@@ -1,5 +1,6 @@
 package com.medlenx.lab.ui.screens.scan
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,12 +20,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -67,6 +74,17 @@ data class MedicineCardData(
     val bbox: List<Float> = emptyList(),
     /** MedEx pack photo URL resolved for this SKU, when the catalogue matched it. */
     val packImage: String? = null,
+    /**
+     * Every catalogue variant of the matched brand except the one chosen, so the
+     * officer can correct the strength, the dosage form or the manufacturer without
+     * retyping the brand.
+     *
+     * The web renders these directly under the company badge, in the order
+     * company → conflict note → alternatives (`index.html:1962-1964`). `MedicineEnricher`
+     * has always computed them; `toCardData()` did not carry them, so they stopped at
+     * this boundary and no picker could be built.
+     */
+    val alternatives: List<MedexProduct> = emptyList(),
 )
 
 /** The three card variants Figma derives from the confidence band. */
@@ -98,6 +116,7 @@ fun MedicineCard(
     onSelected: () -> Unit = {},
     suggestions: List<MedexProduct> = emptyList(),
     onPickSuggestion: (MedexProduct) -> Unit = {},
+    onPickAlternative: (MedexProduct) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val skin = skinFor(data.confidencePct)
@@ -270,6 +289,12 @@ fun MedicineCard(
                 modifier = Modifier.padding(bottom = 8.dp),
             )
         }
+
+        AlternativesPicker(
+            alternatives = data.alternatives,
+            onPick = onPickAlternative,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
 
         // Footer: provenance on the left, escalation on the right.
         Row(
@@ -498,4 +523,109 @@ private fun UnderlinedTextField(
             }
             .padding(vertical = 2.dp),
     )
+}
+
+/**
+ * "N other matches for this brand" — the web's `<details>` block (`index.html:1909`).
+ *
+ * A detected brand can exist in the catalogue several times over: the same name from
+ * a different manufacturer, or the same manufacturer at another strength or dosage
+ * form. When the automatic pick lands on the wrong one, the brand was already right —
+ * so the correction belongs here, next to the badge, rather than in a retyped name.
+ *
+ * Collapsed until asked, like the web's `<details>`, and it folds itself away once a
+ * variant is chosen so the card the officer is reading is not left covered by the list
+ * they picked from. Only the chosen variant's fields are rewritten; see
+ * `ScanViewModel.applyAlternative`.
+ */
+@Composable
+private fun AlternativesPicker(
+    alternatives: List<MedexProduct>,
+    onPick: (MedexProduct) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (alternatives.isEmpty()) {
+        return
+    }
+    // Per-card state, which is safe here because the review list is a Column inside
+    // one verticalScroll, not a LazyColumn: composition slots are not recycled, so
+    // this cannot attach itself to a neighbour's card.
+    var expanded by remember { mutableStateOf(false) }
+    // The web pluralises the same way, and only ever at two or more.
+    val summary = "${alternatives.size} other match" +
+        (if (alternatives.size > 1) "es" else "") + " for this brand"
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = summary,
+                style = MlxType.MicroPill.copy(fontWeight = FontWeight.SemiBold),
+                color = Mlx.Indigo,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) {
+                    "Hide the other matches for this brand"
+                } else {
+                    "Show the other matches for this brand"
+                },
+                tint = Mlx.Indigo,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                alternatives.forEach { alt ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Mlx.Screen, MlxShape.Small)
+                            .border(1.dp, Mlx.Brand200, MlxShape.Small)
+                            .clickable {
+                                onPick(alt)
+                                expanded = false
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = alt.company.ifBlank { "Unknown company" },
+                            style = MlxType.MicroPill.copy(fontWeight = FontWeight.SemiBold),
+                            color = Mlx.IndigoDeep,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        // `strength` and `type` are the two the officer is choosing
+                        // between; a blank one collapses rather than leaving a stray
+                        // separator, which is how the web's template reads too.
+                        Text(
+                            text = listOf(alt.strength, alt.type)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" "),
+                            style = MlxType.MicroPill,
+                            color = Mlx.Text500,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

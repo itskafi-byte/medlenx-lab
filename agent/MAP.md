@@ -58,10 +58,10 @@ When you need the reference behaviour, read the Python file on the left.
 ### Screens
 | File | Lines | Role |
 |---|---|---|
-| `ui/screens/scan/ScanScreen.kt` | 601 | capture + phases |
-| `ui/screens/scan/ScanViewModel.kt` | 720 | the scan state machine. **Enrich first, then build cards** |
-| `ui/screens/scan/Verification.kt` | 1107 | doctor + medicine verification |
-| `ui/screens/scan/MedicineCard.kt` | 501 | editable card, ROI box, suggestions |
+| `ui/screens/scan/ScanScreen.kt` | 611 | capture + phases |
+| `ui/screens/scan/ScanViewModel.kt` | 926 | the scan state machine. **Enrich first, then build cards**. `mergeEdits` folds brand/dosage/strength/type/company/generic back, and is what makes a hand-picked catalogue variant survive the save-time re-enrichment |
+| `ui/screens/scan/Verification.kt` | 1117 | doctor + medicine verification. Both `toCardData()` mappers live here |
+| `ui/screens/scan/MedicineCard.kt` | 631 | editable card, ROI box, suggestions, "N other matches" picker |
 | `ui/screens/scan/PrescriptionImageViewer.kt` | 228 | fullscreen viewer (the zoom escape hatch) |
 | `ui/screens/analytics/AnalyticsScreen.kt` | 708 | KPIs, charts, filters |
 | `ui/screens/rx/RxAuditScreen.kt` | 694, `DoctorPitchCard.kt` 440 | Rx audit |

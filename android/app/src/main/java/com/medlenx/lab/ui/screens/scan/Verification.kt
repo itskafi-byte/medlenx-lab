@@ -737,6 +737,7 @@ fun VerifyMedicinesSection(
     onSelectMedicine: (Int) -> Unit = {},
     suggestions: List<com.medlenx.lab.data.model.MedexProduct> = emptyList(),
     onPickSuggestion: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
+    onPickAlternative: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
@@ -810,6 +811,7 @@ fun VerifyMedicinesSection(
                         onSelected = { onSelectMedicine(index) },
                         suggestions = if (index == selectedMedicine) suggestions else emptyList(),
                         onPickSuggestion = { onPickSuggestion(index, it) },
+                        onPickAlternative = { onPickAlternative(index, it) },
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
@@ -1070,15 +1072,23 @@ fun com.medlenx.lab.data.model.EnrichedMedicine.toCardData(): MedicineCardData {
         // The enricher already resolved the MedEx pack photo; without this line it
         // was dropped at the card boundary and never reached the UI.
         packImage = imageUrl,
+        // Same trap, same fix: `MedicineEnricher` computes every variant of the
+        // matched brand so a wrong strength or manufacturer can be corrected by hand,
+        // and the card boundary dropped the list before any picker could show it.
+        alternatives = alternatives,
     )
 }
 
 /**
  * Maps a raw VL read onto the review card.
  *
- * This is the mapper the scan flow actually uses, because [com.medlenx.lab.data.model.VlScanResult]
- * carries `VlMedicine`. The enriched variant above is what the catalogue-matched path
- * will use once medicine_matcher is ported; both produce the same card.
+ * This is no longer the mapper the review list is built from — the flow enriches
+ * first and builds every card from `EnrichedMedicine` (`ScanViewModel.enterVerification`),
+ * so the mapper above is the live one. This one's remaining job is to be the
+ * "before" side of the comparison in `ScanViewModel.mergeEdits`: folding an edit
+ * back into the VL read means knowing which fields the card still shows unedited,
+ * and that is exactly what this function describes. It also carries no
+ * `alternatives`, because a raw read has not been near the catalogue yet.
  *
  * The prompt forbids the model from guessing a manufacturer, so `company` is empty
  * unless it was literally printed — that renders the "Company not identified" state
