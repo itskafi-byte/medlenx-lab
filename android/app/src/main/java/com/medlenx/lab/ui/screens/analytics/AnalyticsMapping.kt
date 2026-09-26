@@ -5,6 +5,7 @@ import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.repo.CompanySlice
 import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
+import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.data.repo.MostPrescribed
 import java.time.Instant
 import java.time.ZoneId
@@ -62,21 +63,49 @@ fun DashboardKpis.topBrandLabel(): String =
     else "${topBrand.brand} · ${topBrand.count} captures"
 
 fun List<MostPrescribed>.toBarData(): List<BarDatum> =
-    map { BarDatum(it.brandName, it.captureCount) }
+    map {
+        BarDatum(
+            name = it.brandName,
+            value = it.captureCount,
+            manufacturer = it.manufacturer,
+            sharePercent = it.marketSharePercent,
+        )
+    }
 
 fun List<CompanySlice>.toDonutData(): List<DonutDatum> =
     map {
         DonutDatum(
             name = it.company,
-            value = it.percentage.toInt(),
+            count = it.count,
+            sharePercent = it.percentage,
             isOthers = it.isOthers,
             members = it.members,
         )
     }
 
-fun List<CompanySlice>.centreSoVLabel(): String {
-    val top = firstOrNull { !it.isOthers } ?: return "SoV —"
-    return "SoV ${"%.0f".format(top.percentage)}%"
+/**
+ * The donut's centre, as a caption and a value.
+ *
+ * The number is the *own* company's share whenever the own company is a slice of its
+ * own. The previous label read the first slice, so whenever a competitor led the donut
+ * the centre captioned somebody else's share "SoV". One decimal, the same precision as
+ * the Target Share KPI card beside it.
+ *
+ * The own company is not always a slice: [AnalyticsMetrics.companyShare] folds every
+ * company under 3% into "Others", so a small own presence is inside that bucket and
+ * has no share of its own to print. Then the caption reads "Top SoV" and the value is
+ * the leading company's share - the number the old label showed, now labelled as what
+ * it actually is. Slices are in count-descending order from the DAO and "Others" is
+ * appended last, so the first non-Others slice is the leader.
+ */
+fun List<CompanySlice>.centreSoV(ownCompany: String): Pair<String, String> {
+    val own = firstOrNull {
+        !it.isOthers && ownCompany.isNotBlank() &&
+            MedicineMatcher.sameCompany(it.company, ownCompany)
+    }
+    if (own != null) return "Own SoV" to "${"%.1f".format(own.percentage)}%"
+    val top = firstOrNull { !it.isOthers } ?: return "SoV" to "—"
+    return "Top SoV" to "${"%.1f".format(top.percentage)}%"
 }
 
 fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =

@@ -111,10 +111,44 @@ object Mlx {
     val Surface = Color(0xFFFFFFFF)
     val Screen = Brand50
 
-    /** Chart.js series palette — CHART_SERIES_COLORS in templates/index.html. */
+    /**
+     * The categorical palette the charts draw from, in order.
+     *
+     * Twenty, not the six the web's `CHART_SERIES_COLORS` array holds: the web's
+     * charts index that array and wrap, so a donut of twelve companies shows the
+     * first six colours twice and a ten-bar chart repeats from the seventh bar. The
+     * first six here are the web's first five plus its crimson replaced by a rose:
+     * beyond that the values are chosen to stay distinguishable from their
+     * neighbours rather than to match a specific company.
+     *
+     * Position-indexed: index 7 takes colour 7, and past the end the index wraps -
+     * the failure the six-colour array had, but far later. Chart A draws at most ten
+     * bars. The donut reserves two colours of its own - the own company's emerald
+     * ([Ok500]) and the "Others" bucket's slate ([Brand400], which is the web's own
+     * `others` entry) - so its numbered slices draw on the other 19 and it stays
+     * distinct up to 21 slices, where six repeated from the seventh.
+     */
     val ChartSeries = listOf(
-        Color(0xFF1E40AF), Color(0xFF059669), Color(0xFFD97706),
-        Color(0xFF0891B2), Color(0xFF7C3AED), Color(0xFFDC2626),
+        Color(0xFF1E40AF), // Indigo
+        Color(0xFF059669), // Emerald
+        Color(0xFFD97706), // Amber
+        Color(0xFF0891B2), // Cyan
+        Color(0xFF7C3AED), // Violet
+        Color(0xFFE11D48), // Rose
+        Color(0xFF2563EB), // Blue
+        Color(0xFF0D9488), // Teal
+        Color(0xFFEA580C), // Orange
+        Color(0xFFC026D3), // Fuchsia
+        Color(0xFF65A30D), // Lime
+        Color(0xFF0284C7), // Sky
+        Color(0xFFDB2777), // Pink
+        Color(0xFFCA8A04), // Gold
+        Color(0xFF4F46E5), // Slate blue
+        Color(0xFF10B981), // Mint
+        Color(0xFFF43F5E), // Coral
+        Color(0xFF9333EA), // Deep purple
+        Color(0xFF0369A1), // Cerulean
+        Color(0xFFC2410C), // Terracotta
     )
 
     /** heatmapColor(sov) — territory penetration. */

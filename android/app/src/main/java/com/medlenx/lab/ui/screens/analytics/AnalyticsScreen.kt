@@ -151,9 +151,15 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(title = "B. Company Share of Voice — Donut", icon = Icons.Filled.PieChart)
+            // The own company's share is reserved a colour and labelled in the legend,
+            // so the donut needs to know which slice is its own.
+            val ownCompany = vm.kpis?.marketShare?.ownCompany.orEmpty()
+            val (centreCaption, centreValue) = vm.companyShare.centreSoV(ownCompany)
             ShareOfVoiceDonut(
                 data = vm.companyShare.toDonutData(),
-                centreLabel = vm.companyShare.centreSoVLabel(),
+                centreCaption = centreCaption,
+                centreValue = centreValue,
+                ownCompany = ownCompany,
                 modifier = Modifier.padding(top = 12.dp),
                 onSliceClick = { datum ->
                     if (datum.isOthers) vm.openOthersDrilldown(datum.members)

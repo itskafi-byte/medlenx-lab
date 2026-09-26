@@ -8,17 +8,24 @@ import com.medlenx.lab.data.repo.RxMarketShare
 import com.medlenx.lab.ui.screens.rx.ClassSlice
 import com.medlenx.lab.data.local.DrillCountRow
 /**
- * Analytics models and the figures the dashboard renders.
+ * Analytics models — the shapes the dashboard's charts, drill-downs and drawers render.
  *
- * These values are the Figma export's own dataset (`barData`, `donutData`,
- * `stackedData`, `sparkData` at App.tsx:976-990, plus the inline `scans` and
- * `recentRx` arrays). They are placeholder analytics, exactly as the export has them:
- * the Room-backed aggregation that replaces them is a later step. Keeping the same
- * numbers means the screen is visually identical to the mock while the data behind it
- * is still being wired.
+ * The values in them are the on-device aggregates ported from `get_dashboard_kpis`,
+ * `get_most_prescribed_medicines`, `get_company_share` and the drill-down endpoints
+ * (`AnalyticsMetrics`, `AnalyticsViewModel`); the Figma export's placeholder arrays
+ * they used to hold are gone.
  */
 
-data class BarDatum(val name: String, val value: Int)
+// One bar of Chart A. `manufacturer` and `sharePercent` are here because the web puts
+// both in the recharts tooltip (`index.html:2513`) and a touch screen has no hover to
+// show them in; the bar's row prints them instead.
+data class BarDatum(
+    val name: String,
+    val value: Int,
+    val manufacturer: String = "",
+    /** Share of the captured items the chart drew, as the web computes it. */
+    val sharePercent: Double = 0.0,
+)
 
 /**
  * One donut segment.
@@ -30,7 +37,10 @@ data class BarDatum(val name: String, val value: Int)
  */
 data class DonutDatum(
     val name: String,
-    val value: Int,
+    /** Items captured for this company. The arc is drawn from this, not from [value]. */
+    val count: Int,
+    /** Unrounded share, so the legend can print the web's one-decimal percentage. */
+    val sharePercent: Double,
     val isOthers: Boolean = false,
     /** For [isOthers] only: the companies folded into the bucket. */
     val members: List<String> = emptyList(),
