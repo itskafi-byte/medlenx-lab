@@ -41,7 +41,7 @@ guard: REFUSING - the working tree is not safe to commit
 ## Static checks — these replace compiling
 
 The user compiles, so anything catchable without a compiler must be caught here.
-All six are fast; run them together.
+All seven are fast; run them together.
 
 ```bash
 python3 android/checks/guard.py      # tree safety / reset detection
@@ -50,12 +50,13 @@ python3 android/checks/audit.py      # declaration counts, Room/Hilt wiring sani
 python3 agent/roomcheck.py           # every @Query column resolves against its entity
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
+python3 android/checks/deadparams.py  # a control whose callback nothing ever supplies
 ```
 
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 19 faults
+python3 android/checks/faulttest.py            # all 20 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 
@@ -127,6 +128,12 @@ upwards before every edit.
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
   (87 sites)
 - `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
+- `deadparams.py` healthy: `no problems found - all N parameter(s) are supplied by a
+  caller`, under a header reading `N @Composable function(s) parsed` and `M with a
+  parameter defaulted to an empty lambda`. Both counts are there to be read, and
+  the check **exits 1 when either parse count is 0** rather than reporting a clean
+  tree — a discovery pattern that stopped matching would otherwise be the most
+  reassuring possible output.
 
 `migrationcheck.py` exists because Room's schema validation runs on the device at
 first open after an upgrade and throws `Migration didn't properly handle ...` on a
@@ -240,6 +247,23 @@ wrong variant matches the other one exactly and is not reported. What is reporte
 is which statements use which variant — the count line names them — so a
 statement changing families shows up in the output without being a finding.
 
+`deadparams.py` catches the defect class this project has now hit three times: a
+control that renders, responds to touch, and does nothing, because its callback
+parameter is declared, typed, defaulted to `{}`, and passed by no call site.
+`ScanScreen.kt` shipped `{ /* Medex re-check - Step 7 */ }` for both
+`onVerifyAgainstMedex` and `onReportMisId`; `RecentPrescriptions` promised "tap for
+item breakdown" under every row; and `PrescriptionImageViewer.overlay` was invoked at
+the end of the canvas and supplied by nobody since the file was written. None of those
+is a compile error and none is visible to a symbol check — the parameter *is* declared,
+*is* typed and *is* used, so it reads as intentional. Only a project-wide pass can see
+that nothing supplies it.
+
+It is scoped to `@Composable`: an optional no-op hook is normal design in non-UI code,
+and reporting those would bury the real findings. It reports a deliberately-unused
+extension point the same way it reports a forgotten one, which is intended — both want
+the same conversation — and the fix for the dead one is removal, as
+`PrescriptionImageViewer.overlay` was removed rather than given a caller.
+
 `roomcheck.py` and `daocalls.py` are complements and cover the whole path from a
 call site to a column: roomcheck validates the SQL *inside* a `@Query` against the
 entity schema, and says nothing about whether Kotlin calls the function correctly.
@@ -308,6 +332,7 @@ git ls-tree -r --name-only HEAD | grep -v '^android/' | grep -v '^agent/'
 
 ```bash
 python3 android/checks/guard.py && python3 android/checks/imports.py \
+  && python3 android/checks/deadparams.py \
   && (cd android && python3 checks/audit.py | tail -3) \
   && git add android agent \
   && git commit -q -F - <<'MSG' && git push -q origin arena/01a09bf9-medlenx-lab

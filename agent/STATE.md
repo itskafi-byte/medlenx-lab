@@ -100,6 +100,15 @@ flagged, not folded in, because module 2 was the substitution card.
   declared in `build.gradle` was referenced by no code at all.
 - **`05de3a7`** — `android/checks/imports.py`, the symbol-level checker.
 - **`8d1a375`** — `android/checks/guard.py`, the reset guard.
+- **`deadparams.py`** — a control whose callback nothing ever supplies. Three
+  separate screens have now shipped a parameter declared, typed, defaulted to `{}`,
+  and passed by no one, so the button rendered, took the touch, and did nothing.
+  None of the three was a compile error and none was visible to a symbol check:
+  the parameter *is* declared, *is* typed and *is* used, so every file reads as
+  intentional and only a project-wide pass can see that nothing supplies it. It
+  found `PrescriptionImageViewer.overlay`, invoked at the end of the canvas and
+  supplied by nobody since the file was written; the slot is now gone rather than
+  given a caller.
 
 ## UI decisions worth remembering
 

@@ -53,6 +53,7 @@ ANALYTICS = "android/app/src/main/java/com/medlenx/lab/ui/screens/analytics/Anal
 HUB_SCREEN = "android/app/src/main/java/com/medlenx/lab/ui/screens/hub/HubScreen.kt"
 MEDLEN_VL = "android/app/src/main/java/com/medlenx/lab/data/remote/MedLenXVlClient.kt"
 DOCTOR_IDENTITY = "android/app/src/main/java/com/medlenx/lab/data/local/DoctorIdentity.kt"
+SCAN_SCREEN = "android/app/src/main/java/com/medlenx/lab/ui/screens/scan/ScanScreen.kt"
 
 # The join every query appending RX_FILTER_SQL must carry.
 JOIN = '            "LEFT JOIN doctors d ON p.doctor_id = d.id " +\n'
@@ -225,6 +226,18 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "CREATE UNIQUE INDEX IF NOT EXISTS `index_doctors_identity_key`",
         "CREATE INDEX IF NOT EXISTS `index_doctors_identity_key`",
         "should be UNIQUE",
+    ),
+    # ── deadparams.py ────────────────────────────────────────────────────────
+    (
+        # The fault is the one from this project's own history: a control's
+        # callback declared, typed, defaulted to `{}`, and never passed. Here the
+        # wiring is deleted from the screen instead of never written, which is the
+        # same fact about the tree.
+        "a callback that no call site supplies",
+        "deadparams.py", SCAN_SCREEN,
+        "            onMarkWon = vm::markConversionWon,\n",
+        "",
+        "onMarkWon",
     ),
 ]
 

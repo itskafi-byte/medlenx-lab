@@ -99,6 +99,12 @@ private fun contrastFilter(c: Float): ColorFilter {
  * Web equivalents: scroll-to-zoom becomes pinch-to-zoom, drag-to-pan is preserved,
  * and the rotate / contrast / fit controls map 1:1. The zoom readout is kept because
  * the officer needs to know the magnification before judging a confidence badge.
+ *
+ * There was an `overlay: @Composable () -> Unit = {}` slot here, invoked at the end
+ * of the canvas and supplied by nobody in the project. The per-medicine region box
+ * draws from [roi] instead, so it was an extension point that never extended
+ * anything. Removed rather than left in place; `android/checks/deadparams.py` now
+ * reports the next one.
  */
 @Composable
 fun PrescriptionImageViewer(
@@ -106,7 +112,6 @@ fun PrescriptionImageViewer(
     transform: ViewerTransform,
     modifier: Modifier = Modifier,
     roi: List<Float>? = null,
-    overlay: @Composable () -> Unit = {},
 ) {
     // Read in composition, not inside the draw lambda: draw scopes do not observe
     // snapshot state, so a late-arriving aspect would otherwise never repaint the box.
@@ -171,7 +176,6 @@ fun PrescriptionImageViewer(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        overlay()
     }
 }
 
