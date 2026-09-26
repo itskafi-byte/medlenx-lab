@@ -41,7 +41,7 @@ guard: REFUSING - the working tree is not safe to commit
 ## Static checks — these replace compiling
 
 The user compiles, so anything catchable without a compiler must be caught here.
-All seven are fast; run them together.
+All eight are fast; run them together.
 
 ```bash
 python3 android/checks/guard.py      # tree safety / reset detection
@@ -51,12 +51,13 @@ python3 agent/roomcheck.py           # every @Query column resolves against its 
 python3 android/checks/daocalls.py   # every DAO call site matches its declaration
 python3 android/checks/migrationcheck.py  # migration DDL vs the entities it creates
 python3 android/checks/deadparams.py  # a control whose callback nothing ever supplies
+python3 android/checks/refcheck.py    # a Type.member or param.field that does not exist
 ```
 
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 21 faults
+python3 android/checks/faulttest.py            # all 23 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 
@@ -128,6 +129,15 @@ upwards before every edit.
 - `daocalls.py` healthy: `N call site(s) checked - all match their declaration`
   (87 sites)
 - `migrationcheck.py` healthy: `no problems found - every migration DDL statement matches its entity`
+- `refcheck.py` healthy: `no problems found - every Type.member reference resolves`,
+  under counts that are there to be read: `N project type(s) indexed`, `N
+  Type.member reference(s) resolved` and `N typed-parameter member reference(s)
+  resolved` (241 / 1931 / 541 today). It **exits 1 if it parsed 0 type
+  declarations**, for the same reason `deadparams.py` does: a discovery pattern
+  that stopped matching must not read as a clean tree. It resolves four spellings
+  - `Type.member`, `param.member` for a parameter of a project type, enum entries,
+  and members inherited through a companion object or an extension - and nothing
+  else; see its module docstring for what it deliberately cannot see.
 - `deadparams.py` healthy: `no problems found - all N parameter(s) are supplied by a
   caller`, under a header reading `N @Composable function(s) parsed` and `M with a
   parameter defaulted to an empty lambda`. Both counts are there to be read, and
@@ -332,7 +342,7 @@ git ls-tree -r --name-only HEAD | grep -v '^android/' | grep -v '^agent/'
 
 ```bash
 python3 android/checks/guard.py && python3 android/checks/imports.py \
-  && python3 android/checks/deadparams.py \
+  && python3 android/checks/deadparams.py && python3 android/checks/refcheck.py \
   && (cd android && python3 checks/audit.py | tail -3) \
   && git add android agent \
   && git commit -q -F - <<'MSG' && git push -q origin arena/01a09bf9-medlenx-lab

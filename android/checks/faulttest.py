@@ -250,6 +250,27 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "",
         "onMarkWon",
     ),
+    # ── refcheck.py ──────────────────────────────────────────────────────────
+    (
+        # The exact defect the check was written for: `PillTone.VioletSolid` was
+        # typed from memory while building this very drawer. The enum has `Violet`
+        # and a `Solid` suffix on two other families, and nothing else in the
+        # project - compiler aside - could tell that the member does not exist.
+        "an enum member written from memory",
+        "refcheck.py", DRAWER,
+        "tone = PillTone.Slate)",
+        "tone = PillTone.VioletSolid)",
+        "PillTone.VioletSolid",
+    ),
+    (
+        # The other half of the check: a field read off a typed parameter, which is
+        # the spelling the whole model layer uses and which no symbol check sees.
+        "a field that is not on the entity",
+        "refcheck.py", "android/app/src/main/java/com/medlenx/lab/data/repo/RxAudit.kt",
+        "row.dosageForm",
+        "row.dosageFormX",
+        "row.dosageFormX",
+    ),
 ]
 
 
