@@ -70,7 +70,6 @@ import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.StatusPill
 import com.medlenx.lab.ui.theme.Mlx
-import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 
