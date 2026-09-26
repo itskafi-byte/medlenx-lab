@@ -187,6 +187,25 @@ object RxAudit {
             }
         }.joinToString("\n")
 
+    /**
+     * The clipboard header the web builds server-side (`main.py:1086`):
+     * `Rx #A-12 - Ahmed - 4 medicines - MR 12`.
+     *
+     * Lives here rather than at the two call sites because they disagreed with each
+     * other: the audit screen passed `"Rx $rxId"` and the drawer passed
+     * `"Rx #${rxNo}"`, and neither carried the doctor, the count or the MR that the
+     * web's header does. The receipt number keeps this app's own `RX-n` numbering, which
+     * is what the screen title above the table already shows.
+     */
+    fun clipboardHeader(
+        rxNo: String,
+        doctorName: String,
+        count: Int,
+        mrId: String?,
+    ): String =
+        "Rx #$rxNo • ${doctorName.takeIf { it.isNotBlank() } ?: "Unknown"} • " +
+            "$count medicines • MR ${mrId?.takeIf { it.isNotBlank() } ?: "-"}"
+
     /** Live-scan overload, for the Rx Audit screen's unsaved read. */
     fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
         itemsToCsv(medicines.map { lineOf(it) }, ownCompany)

@@ -152,6 +152,38 @@ flagged, not folded in, because module 2 was the substitution card.
 
 ## Recently fixed (committed, unverified)
 
+- **Bug sweep of the three parity modules** — four defects, one of them user-visible.
+  The check that found them is `2f5eaf9`; the fixes are in the commit that added this
+  note:
+  * **The Doctor Pitch sheet opened underneath the audit drawer.** The drawer is a
+    `Dialog`, so it has its own window; the pitch sheet was a plain `Box` in the
+    activity's window, so opening it from the drawer composed it *below* the drawer -
+    dimmed under the scrim at best, and untouchable, because a dialog window takes the
+    touches. Opened from the Rx Audit screen it looked right, which is why the
+    audit-screen path never surfaced it. It is a `Dialog` now
+    (`usePlatformDefaultWidth = false`), which reproduces the web's own relationship -
+    the pitch modal is `z-[10001]` over the drawer's `z-[9999]` and the drawer stays
+    open behind it. Back closes the sheet before the drawer.
+  * `DoctorPitchCard.kt` had a **stray `@Composable`** between the card's KDoc and
+    `data class PitchTarget`, so the annotation bound to the data class and the card's
+    KDoc ended up above another KDoc - the orphaned-KDoc defect class this project keeps
+    meeting. The data class moved above the card's KDoc and the annotation is gone.
+  * `PortfolioRow` appended ` (saving)` / ` (premium)` to a label that already reads
+    "0.45 BDT lower per unit", and the web's drawer row prints that label bare - the
+    suffix belongs to the verification card's price line (`index.html:1724`). The row
+    now prints the payload's label unmodified.
+  * The two clipboard call sites disagreed with each other (`"Rx $rxId"` against
+    `"Rx #${rxNo}"`) and neither carried the doctor, the item count or the MR that the
+    web builds server-side (`main.py:1086`). One `RxAudit.clipboardHeader` builds it
+    for both, keeping this app's own `RX-n` numbering.
+
+  Verified clean in the same sweep, by a scan rather than by reading: no unresolved
+  `Type.member` or `param.member` anywhere; no `@Composable` parameter defaulted to an
+  empty lambda that nothing supplies; **no lambda parameter anywhere in the project
+  that its own body never references**; no `private fun` referenced nowhere; every
+  `Mlx` / `MlxShape` / `MlxD` / `MlxType` / `PillTone` member the three modules name
+  exists; and every icon import is present (proved by injection, not by reading).
+
 - **`e161485`** — the pending camera URI survives process death
   (`rememberSaveable`). Was the closest thing to the camera crash that is
   findable from source; logcat still wanted to confirm it.
@@ -176,6 +208,24 @@ flagged, not folded in, because module 2 was the substitution card.
   found `PrescriptionImageViewer.overlay`, invoked at the end of the canvas and
   supplied by nobody since the file was written; the slot is now gone rather than
   given a caller.
+- **`refcheck.py`** — a **member that does not exist**. `imports.py` resolves symbols
+  (does `MlxD` have an import?) and cannot tell whether `MlxD.Space7` is a member of
+  `MlxD`; `audit.py` catches an argument a function does not take, but only when it is
+  named. Three defects of this shape are already in this project's history:
+  `PillTone.VioletSolid` written from memory while building the audit drawer (the enum
+  has no such entry), `ItemRow(index = i)` with an argument the function never took, and
+  plausible-but-absent tokens like `Mlx.DangerSoftBorder`. It resolves **1931
+  `Type.member`** and **541 `param.member`** references across 91 files against 241
+  indexed types, and exits 1 if it parses no types at all.
+  Getting it to zero took eight passes, and the shape of every false start is the
+  lesson: each of the first five reported a *clean tree while parsing nothing* - a
+  nested declaration whose body was cut off at the next declaration, a `limit` that
+  clamped brace matching, primary-constructor properties never indexed (most of the
+  model layer is a data class with no body), extensions resolved against a type set
+  that was still empty, companion-object members invisible, and a typed-parameter pass
+  whose first parameter never matched because the parameter list was sliced from its
+  opening parenthesis. Each one was caught by injecting the defect and reading the exit
+  code, never by reading the pattern.
 
 ## UI decisions worth remembering
 

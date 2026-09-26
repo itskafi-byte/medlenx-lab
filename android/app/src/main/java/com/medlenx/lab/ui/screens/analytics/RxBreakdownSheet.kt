@@ -361,7 +361,19 @@ private fun DrawerBody(
                 },
                 onCopyClipboard = {
                     onCopyList(
-                        RxAudit.itemsToClipboard(drawer.lines, "Rx #${drawer.prescription.rxNo}")
+                        RxAudit.itemsToClipboard(
+                            drawer.lines,
+                            // The web's header carries the doctor, the item count and the
+                            // MR as well as the number (`main.py:1086`); built by the one
+                            // function both this and the audit screen use, so the two
+                            // cannot drift apart again.
+                            RxAudit.clipboardHeader(
+                                rxNo = drawer.prescription.rxNo,
+                                doctorName = drawer.prescription.doctorName,
+                                count = drawer.lines.size,
+                                mrId = drawer.prescription.mrId,
+                            ),
+                        )
                     )
                 },
                 showCropHint = false,
@@ -729,15 +741,6 @@ private fun PortfolioRow(
 ) {
     val competitor = substitution.competitor
     val own = substitution.ownBrand
-    // The web's rule again: a suffix only when both prices are known, and a zero delta
-    // is neither a saving nor a premium.
-    val bothPrices = competitor.mrp != null && own.mrp != null
-    val suffix = when {
-        !bothPrices -> ""
-        substitution.unitDifference < 0 -> " (saving)"
-        substitution.unitDifference > 0 -> " (premium)"
-        else -> ""
-    }
 
     Column(
         modifier = Modifier
@@ -772,8 +775,13 @@ private fun PortfolioRow(
                 emphasise = true,
             )
             if (substitution.unitDifferenceLabel.isNotBlank()) {
+                // The label already carries the direction ("0.45 BDT lower per unit"), and
+                // the web's drawer row prints it bare - ` (saving)` / ` (premium)` belong
+                // to the verification card's price line (`index.html:1724`), which is a
+                // different surface. Appending them here made this row say it twice and
+                // was one of the three places the port had drifted from the payload.
                 StatusPill(
-                    text = substitution.unitDifferenceLabel + suffix,
+                    text = substitution.unitDifferenceLabel,
                     tone = if (substitution.unitDifference < 0) PillTone.Emerald else PillTone.Amber,
                 )
             }
@@ -827,11 +835,11 @@ private fun PortfolioChip(
 ) {
     Row(
         modifier = Modifier
-            .background(Mlx.Surface, RoundedCornerShape(8.dp))
+            .background(Mlx.Surface, MlxShape.Chip)
             .border(
                 1.dp,
                 if (emphasise) Mlx.VioletBorder else Mlx.Brand200,
-                RoundedCornerShape(8.dp),
+                MlxShape.Chip,
             )
             .padding(horizontal = MlxD.Space2, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

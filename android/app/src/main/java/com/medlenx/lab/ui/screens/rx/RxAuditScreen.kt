@@ -194,7 +194,17 @@ fun RxAuditScreen(
             total = share.totalMedicines,
             onExportCsv = { onExportCsv(RxAudit.itemsToCsv(medicines, ownCompany)) },
             onCopyClipboard = {
-                onCopyClipboard(RxAudit.itemsToClipboard(medicines, "Rx $rxId"))
+                onCopyClipboard(
+                    RxAudit.itemsToClipboard(
+                        medicines,
+                        RxAudit.clipboardHeader(
+                            rxNo = rxId,
+                            doctorName = doctorName,
+                            count = medicines.size,
+                            mrId = repId,
+                        ),
+                    )
+                )
             },
         )
     }

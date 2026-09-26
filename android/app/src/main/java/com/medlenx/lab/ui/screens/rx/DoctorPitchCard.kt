@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.medlenx.lab.data.model.MedexProduct
@@ -50,21 +52,6 @@ import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxType
 
-/**
- * Doctor Pitch Card - Figma `DoctorPitchCard` (App.tsx:898-991).
- *
- * A bottom sheet the rep opens from a competitor row in the audit drawer. It sets the
- * competitor against the own-portfolio substitute, states the price position, and
- * carries the pitch script the rep reads out during a chamber visit.
- *
- * The layout is the Figma's; the *content* is the caller's. Every line of the compare
- * table comes from the two [MedexProduct] records on the [Substitution], the pitch
- * script is [Substitution.pitch], and the bioequivalence paragraph is passed in rather
- * than hardcoded - the export's copy asserts DGDA registration and bioequivalence
- * certification for products that may not have either, and shipping that text verbatim
- * would put an unverifiable clinical claim in front of a doctor.
- */
-@Composable
 /**
  * What the Doctor Pitch sheet shows, decoupled from the scan that produced it.
  *
@@ -80,6 +67,29 @@ data class PitchTarget(
     val substitution: Substitution,
 )
 
+/**
+ * Doctor Pitch Card - Figma `DoctorPitchCard` (App.tsx:898-991).
+ *
+ * A bottom sheet the rep opens from a competitor row in the audit drawer. It sets the
+ * competitor against the own-portfolio substitute, states the price position, and
+ * carries the pitch script the rep reads out during a chamber visit.
+ *
+ * The layout is the Figma's; the *content* is the caller's. Every line of the compare
+ * table comes from the two [MedexProduct] records on the [Substitution], the pitch
+ * script is [Substitution.pitch], and the bioequivalence paragraph is passed in rather
+ * than hardcoded - the export's copy asserts DGDA registration and bioequivalence
+ * certification for products that may not have either, and shipping that text verbatim
+ * would put an unverifiable clinical claim in front of a doctor.
+ *
+ * A [Dialog], deliberately. The web stacks this over the audit drawer (`z-[10001]`
+ * against the drawer's `z-[9999]`, `index.html:553` / `:644`) and leaves the drawer open
+ * behind it. A Compose [Dialog] is its own window and the drawer is one too, so the same
+ * relationship needs the same mechanism: while the pitch sheet was a plain Box in the
+ * activity's window, opening it from the drawer composed it *underneath* the drawer's
+ * window - visible only through the scrim, and unreachable, because the dialog window
+ * takes the touches. From the audit screen it looked right, which is why the audit-screen
+ * path did not catch it. Back now closes the sheet before the drawer, as on the web.
+ */
 @Composable
 fun DoctorPitchCard(
     rxId: String,
@@ -97,112 +107,122 @@ fun DoctorPitchCard(
     // The web version is position:fixed inset:0 with a 50% black scrim and the sheet
     // pinned to the bottom edge; reproduced as a full-size Box with a bottom-aligned
     // sheet so it can be shown from any screen by flipping a flag.
-    Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(onClick = onClose),
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.88f)
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(Mlx.Surface)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            PitchHeader(
-                subtitle = "$doctorName · Rx #$rxId · " +
-                    "${competitor.brandName} → ${own.brandName}",
-                onClose = onClose,
+    //
+    // In a Dialog, because the audit drawer is one and this has to sit *above* it - see
+    // the note on this composable. `usePlatformDefaultWidth = false` is what makes the
+    // window the whole screen; the platform default would inset the sheet to a
+    // phone-sized column and leave the scrim short of the edges.
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(modifier = modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(onClick = onClose),
             )
 
-            Column(modifier = Modifier.padding(MlxD.Space4)) {
-                // Compliance pills carried over from the medicine being displaced.
-                FlowRowCompat(horizontalSpacing = 4.dp, verticalSpacing = 4.dp) {
-                    RegulatoryPill(text = "NEML Listed", tone = PillTone.Emerald, icon = Icons.Filled.Check)
-                    RegulatoryPill(
-                        text = "DGDA Price Alert",
-                        tone = PillTone.RedSoft,
-                        icon = Icons.Filled.Block,
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.88f)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .background(Mlx.Surface)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                PitchHeader(
+                    subtitle = "$doctorName · Rx #$rxId · " +
+                        "${competitor.brandName} → ${own.brandName}",
+                    onClose = onClose,
+                )
+
+                Column(modifier = Modifier.padding(MlxD.Space4)) {
+                    // Compliance pills carried over from the medicine being displaced.
+                    FlowRowCompat(horizontalSpacing = 4.dp, verticalSpacing = 4.dp) {
+                        RegulatoryPill(text = "NEML Listed", tone = PillTone.Emerald, icon = Icons.Filled.Check)
+                        RegulatoryPill(
+                            text = "DGDA Price Alert",
+                            tone = PillTone.RedSoft,
+                            icon = Icons.Filled.Block,
+                        )
+                    }
+
+                    CompareTable(competitor = competitor, own = own)
+
+                    // Price position - #ECFDF5 / #A7F3D0 / #047857.
+                    NoteBox(
+                        icon = Icons.Filled.Balance,
+                        iconTint = Mlx.Ok600,
+                        background = Mlx.Ok50,
+                        border = Mlx.Ok200,
+                        textColor = Mlx.Ok600,
+                        text = "Price position: ${substitution.unitDifferenceLabel.ifBlank {
+                            formatDifference(substitution.unitDifference)
+                        }} lower per unit than ${competitor.brandName}",
+                    )
+
+                    // Bioequivalence - rgba(239,246,255,.60) / #DBEAFE / #1D4ED8.
+                    EvidenceBox(
+                        title = "Bioequivalence & dosage evidence",
+                        titleIcon = Icons.Filled.Biotech,
+                        titleColor = Mlx.Brand600,
+                        background = Color(0xFFEFF6FF).copy(alpha = 0.60f),
+                        border = Mlx.Accent100,
+                        paragraphs = bioequivalenceNote.split("\n").filter { it.isNotBlank() },
+                    )
+
+                    // Pitch script - #F8FAFC / #E2E8F0 / #64748B.
+                    EvidenceBox(
+                        title = "Smart pitch script",
+                        titleIcon = Icons.Filled.Campaign,
+                        titleColor = Mlx.Text500,
+                        background = Mlx.Brand50,
+                        border = Mlx.Brand200,
+                        paragraphs = listOf(substitution.pitch),
+                        italic = true,
+                    )
+
+                    Text(
+                        text = "Bioequivalence & pack data from the MedEx-audited catalogue " +
+                            "· verify sample stock before the visit.",
+                        style = MlxType.Footnote,
+                        color = Mlx.Text400,
+                        modifier = Modifier.padding(bottom = MlxD.Space3),
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
+                        PitchFooterButton(
+                            text = "Download PDF",
+                            icon = Icons.Filled.Description,
+                            filled = true,
+                            onClick = onDownloadPdf,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PitchFooterButton(
+                            text = "Copy pitch script",
+                            icon = Icons.Filled.ContentCopy,
+                            filled = false,
+                            onClick = onCopyPitch,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    // The web's pitch card offers a PDF only. A WhatsApp button lived
+                    // here between gap 6 and the health-day sheet, as an approximation
+                    // of the campaign card that actually has one; it is gone now that
+                    // that card exists, so this screen has no action the web does not.
+                    Text(
+                        text = "Show during chamber visit",
+                        style = MlxType.Footnote,
+                        color = Mlx.Text400,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = MlxD.Space2),
                     )
                 }
-
-                CompareTable(competitor = competitor, own = own)
-
-                // Price position - #ECFDF5 / #A7F3D0 / #047857.
-                NoteBox(
-                    icon = Icons.Filled.Balance,
-                    iconTint = Mlx.Ok600,
-                    background = Mlx.Ok50,
-                    border = Mlx.Ok200,
-                    textColor = Mlx.Ok600,
-                    text = "Price position: ${substitution.unitDifferenceLabel.ifBlank {
-                        formatDifference(substitution.unitDifference)
-                    }} lower per unit than ${competitor.brandName}",
-                )
-
-                // Bioequivalence - rgba(239,246,255,.60) / #DBEAFE / #1D4ED8.
-                EvidenceBox(
-                    title = "Bioequivalence & dosage evidence",
-                    titleIcon = Icons.Filled.Biotech,
-                    titleColor = Mlx.Brand600,
-                    background = Color(0xFFEFF6FF).copy(alpha = 0.60f),
-                    border = Mlx.Accent100,
-                    paragraphs = bioequivalenceNote.split("\n").filter { it.isNotBlank() },
-                )
-
-                // Pitch script - #F8FAFC / #E2E8F0 / #64748B.
-                EvidenceBox(
-                    title = "Smart pitch script",
-                    titleIcon = Icons.Filled.Campaign,
-                    titleColor = Mlx.Text500,
-                    background = Mlx.Brand50,
-                    border = Mlx.Brand200,
-                    paragraphs = listOf(substitution.pitch),
-                    italic = true,
-                )
-
-                Text(
-                    text = "Bioequivalence & pack data from the MedEx-audited catalogue " +
-                        "· verify sample stock before the visit.",
-                    style = MlxType.Footnote,
-                    color = Mlx.Text400,
-                    modifier = Modifier.padding(bottom = MlxD.Space3),
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
-                    PitchFooterButton(
-                        text = "Download PDF",
-                        icon = Icons.Filled.Description,
-                        filled = true,
-                        onClick = onDownloadPdf,
-                        modifier = Modifier.weight(1f),
-                    )
-                    PitchFooterButton(
-                        text = "Copy pitch script",
-                        icon = Icons.Filled.ContentCopy,
-                        filled = false,
-                        onClick = onCopyPitch,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                // The web's pitch card offers a PDF only. A WhatsApp button lived
-                // here between gap 6 and the health-day sheet, as an approximation
-                // of the campaign card that actually has one; it is gone now that
-                // that card exists, so this screen has no action the web does not.
-                Text(
-                    text = "Show during chamber visit",
-                    style = MlxType.Footnote,
-                    color = Mlx.Text400,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = MlxD.Space2),
-                )
             }
         }
     }
