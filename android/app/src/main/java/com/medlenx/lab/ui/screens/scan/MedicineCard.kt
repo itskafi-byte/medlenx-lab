@@ -5,12 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.medlenx.lab.data.model.MedexProduct
+import com.medlenx.lab.data.model.Substitution
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -21,7 +23,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.SmartToy
@@ -48,7 +56,10 @@ import com.medlenx.lab.data.model.confidenceBand
 import com.medlenx.lab.ui.components.CompanyPill
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.ConfidenceBadge
+import com.medlenx.lab.ui.components.MedicineThumb
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.theme.Mlx
+import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 
@@ -85,6 +96,16 @@ data class MedicineCardData(
      * this boundary and no picker could be built.
      */
     val alternatives: List<MedexProduct> = emptyList(),
+    /**
+     * The competitor → own-brand card, or null when this medicine is already the
+     * officer's own or the catalogue holds no equivalent.
+     *
+     * Built by `Intelligence.genericSubstitution` during enrichment and rendered in
+     * the web's verification card between the alternatives picker and the DGDA flag
+     * (`index.html:1965`). Like [alternatives] it was computed and then dropped at the
+     * card boundary, so the review stream had no substitution card at all.
+     */
+    val substitution: Substitution? = null,
 )
 
 /** The three card variants Figma derives from the confidence band. */
@@ -117,6 +138,8 @@ fun MedicineCard(
     suggestions: List<MedexProduct> = emptyList(),
     onPickSuggestion: (MedexProduct) -> Unit = {},
     onPickAlternative: (MedexProduct) -> Unit = {},
+    onCopyPitch: (String) -> Unit = {},
+    onMarkWon: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val skin = skinFor(data.confidencePct)
@@ -295,6 +318,15 @@ fun MedicineCard(
             onPick = onPickAlternative,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+
+        data.substitution?.let { substitution ->
+            SubstitutionCard(
+                substitution = substitution,
+                onCopyPitch = onCopyPitch,
+                onMarkWon = onMarkWon,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
 
         // Footer: provenance on the left, escalation on the right.
         Row(
@@ -627,5 +659,281 @@ private fun AlternativesPicker(
                 }
             }
         }
+    }
+}
+
+/**
+ * Competitor → own-brand substitution card — the web's `substitutionCard`
+ * (`index.html:1696`), rendered in the review card at `index.html:1965`.
+ *
+ * Two product cells with a transfer arrow between them, the price position as a
+ * per-unit delta, and the two-sentence pitch the officer reads out. The web's wording
+ * for the price is a **BDT difference, not a percentage** (`unit_difference_label`:
+ * "12.50 BDT lower per unit"), so the badge says that and nothing more.
+ *
+ * Both actions are the web's: `Copy pitch` writes the script to the clipboard, and
+ * `Mark as won` records the conversion. They are the reason this card exists in the
+ * review stream rather than only in the audit drawer — a rep reading the pitch has to
+ * be able to take it away while the prescription is still on screen.
+ */
+@Composable
+private fun SubstitutionCard(
+    substitution: Substitution,
+    onCopyPitch: (String) -> Unit,
+    onMarkWon: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val competitor = substitution.competitor
+    val own = substitution.ownBrand
+    // The web gates the saving/premium suffix on both gazette prices being known, and
+    // treats a zero delta as neither: `unit_difference < 0 ? ' (saving)' : > 0 ? ' (premium)' : ''`.
+    // Without that guard a card whose prices are unknown would still be labelled.
+    val bothPrices = competitor.mrp != null && own.mrp != null
+    val priceSuffix = when {
+        !bothPrices -> ""
+        substitution.unitDifference < 0 -> " (saving)"
+        substitution.unitDifference > 0 -> " (premium)"
+        else -> ""
+    }
+    val priceColor = if (substitution.unitDifference < 0) Mlx.Ok600 else Mlx.Warn500
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Mlx.BlueBg.copy(alpha = 0.60f), MlxShape.Medium)
+            .border(1.dp, Mlx.Blue200, MlxShape.Medium)
+            .padding(MlxD.Space3),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SwapHoriz,
+                contentDescription = null,
+                tint = Mlx.Brand600,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = "GENERIC SUBSTITUTION",
+                style = MlxType.RegulatoryPill.copy(letterSpacing = 0.08.em),
+                color = Mlx.Brand600,
+                // Weighted rather than paired with a Spacer, so the trailing label
+                // sits on the right without another import in this file.
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "MPO Smart Pitch ready",
+                style = MlxType.RegulatoryPill,
+                color = Mlx.Brand500,
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = MlxD.Space2),
+            horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
+        ) {
+            ProductCell(product = competitor, own = false, modifier = Modifier.weight(1f))
+            // The arrow straddles the gap between the cells, as the web's absolutely
+            // positioned badge does (`-left-2 top-1/2`), so it reads as one product
+            // becoming the other rather than as a decoration inside the green cell.
+            Box(modifier = Modifier.weight(1f)) {
+                ProductCell(product = own, own = true, modifier = Modifier.fillMaxWidth())
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = (-8).dp)
+                        .size(16.dp)
+                        .background(Mlx.Ok500, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
+            }
+        }
+
+        if (substitution.unitDifferenceLabel.isNotBlank()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = MlxD.Space2),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MonetizationOn,
+                    contentDescription = null,
+                    tint = priceColor,
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = substitution.unitDifferenceLabel + priceSuffix,
+                    style = MlxType.Footnote.copy(fontWeight = FontWeight.SemiBold),
+                    color = priceColor,
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = MlxD.Space2)
+                .background(Mlx.Surface, MlxShape.Small)
+                .border(1.dp, Mlx.Blue100, MlxShape.Small)
+                .padding(MlxD.Space2),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Campaign,
+                    contentDescription = null,
+                    tint = Mlx.Brand600,
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = "SMART PITCH NOTE",
+                    style = MlxType.RegulatoryPill.copy(letterSpacing = 0.08.em),
+                    color = Mlx.Brand600,
+                )
+            }
+            Text(
+                text = substitution.pitch,
+                style = MlxType.Footnote,
+                color = Mlx.Text700,
+                modifier = Modifier.padding(top = MlxD.Space1),
+            )
+            Row(
+                modifier = Modifier.padding(top = MlxD.Space1 + MlxD.Space1),
+                horizontalArrangement = Arrangement.spacedBy(MlxD.Space1 + MlxD.Space1),
+            ) {
+                PitchActionButton(
+                    text = "Copy pitch",
+                    icon = Icons.Filled.ContentCopy,
+                    background = Mlx.Brand600,
+                    onClick = { onCopyPitch(substitution.pitch) },
+                )
+                PitchActionButton(
+                    text = "Mark as won",
+                    icon = Icons.Filled.CheckCircle,
+                    background = Mlx.Ok500,
+                    onClick = onMarkWon,
+                )
+            }
+        }
+    }
+}
+
+/** One side of the substitution card: pack photo, brand, and what identifies it. */
+@Composable
+private fun ProductCell(
+    product: MedexProduct,
+    own: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        modifier = modifier
+            .background(if (own) Mlx.Ok50 else Mlx.Surface, shape)
+            .border(1.dp, if (own) Mlx.Ok200 else Mlx.Brand200, shape)
+            .padding(MlxD.Space2),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        MedicineThumb(
+            name = product.brandName,
+            imageUrl = product.imageUrl?.takeIf { it.isNotBlank() } ?: product.packImage,
+            size = 48.dp,
+        )
+        Text(
+            text = product.brandName,
+            style = MlxType.BodySmall.copy(fontWeight = FontWeight.Bold),
+            color = if (own) Mlx.Ok600 else Mlx.Text900,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = MlxD.Space1),
+        )
+        if (own) {
+            Text(
+                text = "Our portfolio",
+                style = MlxType.RegulatoryPill,
+                color = Mlx.Ok500,
+            )
+        } else {
+            // The web prints only the manufacturer's first word here (`c.company.split(' ')[0]`)
+            // to keep the narrow cell to one line - "Square", not "Square Pharmaceuticals Ltd.".
+            Text(
+                text = product.company.trim().split(" ").firstOrNull().orEmpty(),
+                style = MlxType.Footnote,
+                color = Mlx.Text500,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = listOf(product.strength, product.type)
+                .filter { it.isNotBlank() }
+                .joinToString(" "),
+            style = MlxType.Footnote,
+            color = if (own) Mlx.Text500 else Mlx.Text400,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        product.mrp?.let { mrp ->
+            // `toFixed(2)`, so 12.5 prints as "12.50" - PyMath.fixed2 is the Locale.US
+            // formatter the rest of the port already uses for the same reason.
+            Text(
+                text = "BDT ${PyMath.fixed2(mrp)}",
+                style = MlxType.RegulatoryPill.copy(fontWeight = FontWeight.SemiBold),
+                color = if (own) Mlx.Ok600 else Mlx.Text600,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The card's two small filled buttons.
+ *
+ * Not `MlxButton`: the web's are 9px in a 24px pill, and `MlxButton` has no blue tone
+ * — it would have meant either a wrong colour or a new shared enum member for one
+ * caller. These carry the web's exact fills and stay above a tappable height.
+ */
+@Composable
+private fun PitchActionButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    background: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .background(background, RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = MlxD.Space2, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = text,
+            style = MlxType.RegulatoryPill,
+            color = Color.White,
+        )
     }
 }

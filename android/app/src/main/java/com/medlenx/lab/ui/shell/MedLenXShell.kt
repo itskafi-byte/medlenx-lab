@@ -1,8 +1,6 @@
 package com.medlenx.lab.ui.shell
 
 import android.app.Application
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -35,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.data.export.ExportDocuments
+import com.medlenx.lab.ui.components.copyToClipboard
 import com.medlenx.lab.ui.navigation.Destination
 import com.medlenx.lab.ui.screens.PendingScreen
 import com.medlenx.lab.ui.screens.analytics.AnalyticsScreen
@@ -611,17 +610,3 @@ private fun rxLabel(scanVm: ScanViewModel): String =
         ?: scanVm.state.doctor.name.takeIf { it.isNotBlank() }
         ?: "items"
 
-/**
- * Puts text on the system clipboard.
- *
- * This was once where the CSV exports landed, because there was no write path to
- * a file. That is no longer true — exports go through `CreateDocument` and a real
- * document — so what remains here is the genuine copy actions: the pitch script
- * and the market-share summary, both of which are meant to be pasted into a chat
- * rather than saved.
- */
-private fun copyToClipboard(context: Context, text: String, label: String) {
-    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    manager.setPrimaryClip(ClipData.newPlainText(label, text))
-    Toast.makeText(context, "$label copied to the clipboard", Toast.LENGTH_SHORT).show()
-}

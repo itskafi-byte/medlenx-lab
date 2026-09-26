@@ -53,6 +53,7 @@ import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.MlxErrorLine
 import com.medlenx.lab.ui.components.MlxIconButton
+import com.medlenx.lab.ui.components.copyToClipboard
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.ProgressTrack
 import com.medlenx.lab.ui.components.SectionHeader
@@ -267,6 +268,10 @@ fun ScanScreen(
             suggestions = state.brandSuggestions,
             onPickSuggestion = vm::pickSuggestion,
             onPickAlternative = vm::applyAlternative,
+            // The web's toast is "Pitch note copied"; the shared helper appends where
+            // it went, so the label is the pitch note and not the mechanism.
+            onCopyPitch = { _, pitch -> copyToClipboard(context, pitch, "Pitch note") },
+            onMarkWon = vm::markConversionWon,
             modifier = modifier.padding(top = topInset),
         )
 

@@ -30,10 +30,9 @@ counterpart — see `MAP.md`.
    was silently discarded. **Still needs the logcat** to confirm that was the
    cause rather than something else.
 2. **Device-verify rounds 2, 3, 4** — all committed, none confirmed on hardware.
-3. **Parity directive, modules 2 and 3** — the three-module brief; module 1 has
-   landed, see below. Module 2 is the substitution card in the scan review stream
-   plus Copy pitch / Mark as won; module 3 grows `RxBreakdownSheet` into the full
-   Prescription Audit Summary. Scope and references are in
+3. **Parity directive, module 3** — the three-module brief; modules 1 and 2 have
+   landed, see below. Module 3 grows `RxBreakdownSheet` into the full Prescription
+   Audit Summary. Scope and references are in
    `findings/2026-09-26-parity-directive-audit.md`.
 4. **Training queue** — persist the correction image slice; add list + stats.
 5. Company drill-down, DGDA monitor — low-severity parity gaps.
@@ -58,6 +57,31 @@ substitution card and the DGDA flag inside the review card. `check_undefined_sym
 cannot see a dropped field, and no check catches "the mapper forgot a field" -
 building one now would report the module 2/3 fields as defects, so it belongs
 after they land.
+
+### Parity directive, module 2 — generic substitution in the review stream
+
+`MedicineCardData.substitution` reaches the card and renders as the web's
+competitor → own-brand card (`MedicineCard.kt`, `SubstitutionCard`) directly under
+the alternatives picker, which is the web's order (`index.html:1964-1966`). Both
+actions are wired: **Copy pitch** and **Mark as won**. The price badge is the web's
+per-unit BDT delta with its `(saving)` / `(premium)` suffix, gated on both gazette
+prices being known exactly as the web gates it - not the percentage the brief
+described, which appears nowhere in the web's code path.
+
+`Mark as won` writes to `error_reports` through the same path as `reportMisId`,
+because the web sends both down one training-queue endpoint and distinguishes them
+only by `notes` (`ScanViewModel.CONVERSION_WON_NOTE`). It is **not** a weekly
+performance record; the web keeps no such record, and inventing one would put a
+number in a report nothing else agrees with.
+
+`copyToClipboard` moved from `MedLenXShell` (private) to `ui/components/Clipboard.kt`
+so the review card could copy without a fourth hand-rolled `setPrimaryClip`.
+HubScreen still has its own inline copy for the campaign script and was left alone.
+
+*Still absent from the review card:* the web also renders the DGDA flag after the
+substitution card (`index.html:1966`). `EnrichedMedicine.dgdaAlert` is computed
+during enrichment and, like the two fields above, is dropped by `toCardData()` -
+flagged, not folded in, because module 2 was the substitution card.
 
 ## Recently fixed (committed, unverified)
 

@@ -738,6 +738,10 @@ fun VerifyMedicinesSection(
     suggestions: List<com.medlenx.lab.data.model.MedexProduct> = emptyList(),
     onPickSuggestion: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
     onPickAlternative: (Int, com.medlenx.lab.data.model.MedexProduct) -> Unit = { _, _ -> },
+    /** (medicine index, pitch script) — the substitution card's "Copy pitch". */
+    onCopyPitch: (Int, String) -> Unit = { _, _ -> },
+    /** The substitution card's "Mark as won", for the medicine at that index. */
+    onMarkWon: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
@@ -812,6 +816,8 @@ fun VerifyMedicinesSection(
                         suggestions = if (index == selectedMedicine) suggestions else emptyList(),
                         onPickSuggestion = { onPickSuggestion(index, it) },
                         onPickAlternative = { onPickAlternative(index, it) },
+                        onCopyPitch = { pitch -> onCopyPitch(index, pitch) },
+                        onMarkWon = { onMarkWon(index) },
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
@@ -1076,6 +1082,8 @@ fun com.medlenx.lab.data.model.EnrichedMedicine.toCardData(): MedicineCardData {
         // matched brand so a wrong strength or manufacturer can be corrected by hand,
         // and the card boundary dropped the list before any picker could show it.
         alternatives = alternatives,
+        // And again: the enricher builds the competitor → own-brand card here too.
+        substitution = substitution,
     )
 }
 

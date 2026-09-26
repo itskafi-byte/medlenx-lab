@@ -612,6 +612,53 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Records a conversion win — the "Mark as won" button on a substitution card.
+     *
+     * The web sends this down the *same* training-queue endpoint as a mis-read, with
+     * the brand and company unchanged and only `notes` marking it out as a conversion
+     * (`index.html:1786`, `queueTrainingItem(...)` with `'Marked as won conversion on
+     * substitution pitch'`). So this writes the same row shape as [reportMisId] for the
+     * same reason: one queue, distinguished by its note, rather than a second table
+     * that would drift from the first.
+     *
+     * The row is therefore not a correction, and must not be read as one. `detectedBrand`
+     * and `correction` are deliberately equal here — nothing was mis-read — and the note
+     * is what makes the row mean "this pitch landed". That is also why the brief's
+     * "flags the conversion in the MPO's weekly performance records" is not what happens:
+     * the web keeps no such record, and inventing one would put a number in a report
+     * that nothing else agrees with.
+     */
+    fun markConversionWon(index: Int) {
+        val card = state.cards.getOrNull(index) ?: return
+        val substitution = card.substitution ?: return
+        val asRead = state.result?.medicines
+            ?.getOrNull(index)?.brandName
+            ?.trim()
+            .orEmpty()
+        viewModelScope.launch {
+            val row = ErrorReportEntity(
+                detectedBrand = asRead.ifBlank { card.brand.trim() },
+                correction = card.brand.trim(),
+                notes = buildList {
+                    // Lead with the marker: it is the only thing separating this row
+                    // from a mis-read in the same table.
+                    add(CONVERSION_WON_NOTE)
+                    card.lineRef?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    add("confidence ${card.confidencePct}%")
+                    add("pitched ${substitution.ownBrand.brandName}")
+                }.joinToString(" - "),
+                raw = card.rawText.orEmpty(),
+                createdAt = System.currentTimeMillis(),
+            )
+            val queued = runCatching { app.graph.database.rsmDao().reportError(row) }.isSuccess
+            showToast(
+                if (queued) "Logged as a conversion win - queued for learning."
+                else "Could not log the conversion - try again.",
+            )
+        }
+    }
+
+    /**
      * Transient confirmation, kept in the ViewModel so both handlers can report
      * without threading a callback back through the screen.
      *
@@ -621,6 +668,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun showToast(message: String) {
         android.widget.Toast.makeText(app, message, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    companion object {
+        /**
+         * The `notes` prefix that marks a row in `error_reports` as a conversion win
+         * rather than a mis-read. Same string the web sends (`index.html:1788`).
+         */
+        const val CONVERSION_WON_NOTE = "Marked as won conversion on substitution pitch"
     }
 
     /**

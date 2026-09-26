@@ -27,7 +27,7 @@ When you need the reference behaviour, read the Python file on the left.
 |---|---|---|
 | `MainActivity.kt` | 34 | Compose entry |
 | `MedLenXApp.kt` | 31 | app class, connectivity callback, queue drain |
-| `ui/shell/MedLenXShell.kt` | 429 | nav host, insets, route mapping. `else -> PendingScreen` |
+| `ui/shell/MedLenXShell.kt` | 612 | nav host, insets, route mapping. `else -> PendingScreen` |
 | `ui/shell/MlxTopBar.kt` | 236 | top bar |
 | `ui/shell/MlxBottomNav.kt` | 94 | bottom nav, iterates `Destination.bottomBar` |
 | `ui/navigation/Destination.kt` | 56 | Scan, Analytics, Hub, Team, Settings, Help, RxAudit |
@@ -59,9 +59,9 @@ When you need the reference behaviour, read the Python file on the left.
 | File | Lines | Role |
 |---|---|---|
 | `ui/screens/scan/ScanScreen.kt` | 611 | capture + phases |
-| `ui/screens/scan/ScanViewModel.kt` | 926 | the scan state machine. **Enrich first, then build cards**. `mergeEdits` folds brand/dosage/strength/type/company/generic back, and is what makes a hand-picked catalogue variant survive the save-time re-enrichment |
+| `ui/screens/scan/ScanViewModel.kt` | 981 | the scan state machine. **Enrich first, then build cards**. `mergeEdits` folds brand/dosage/strength/type/company/generic back, and is what makes a hand-picked catalogue variant survive the save-time re-enrichment |
 | `ui/screens/scan/Verification.kt` | 1117 | doctor + medicine verification. Both `toCardData()` mappers live here |
-| `ui/screens/scan/MedicineCard.kt` | 631 | editable card, ROI box, suggestions, "N other matches" picker |
+| `ui/screens/scan/MedicineCard.kt` | 939 | editable card, ROI box, suggestions, "N other matches" picker, substitution card |
 | `ui/screens/scan/PrescriptionImageViewer.kt` | 228 | fullscreen viewer (the zoom escape hatch) |
 | `ui/screens/analytics/AnalyticsScreen.kt` | 708 | KPIs, charts, filters |
 | `ui/screens/rx/RxAuditScreen.kt` | 694, `DoctorPitchCard.kt` 440 | Rx audit |
@@ -73,7 +73,7 @@ When you need the reference behaviour, read the Python file on the left.
 
 ### Theme / components
 `ui/theme/` (Color, Dimens, Shape, Theme, Type) and `ui/components/` (Buttons,
-Cards, CompanyPill, EmptyStates, FlowRowCompat, MedicineThumb, Pills,
+Cards, Clipboard, CompanyPill, EmptyStates, FlowRowCompat, MedicineThumb, Pills,
 TextField).
 
 `MedicineThumb.kt`: reads `LocalContext.current` in the composable **body** and
