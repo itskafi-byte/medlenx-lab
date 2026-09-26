@@ -65,6 +65,22 @@ import com.medlenx.lab.ui.theme.MlxType
  * would put an unverifiable clinical claim in front of a doctor.
  */
 @Composable
+/**
+ * What the Doctor Pitch sheet shows, decoupled from the scan that produced it.
+ *
+ * The sheet used to be opened only from the Rx Audit screen and read its rx number and
+ * doctor straight from `ScanViewModel.state`. The audit drawer opens it too, for a
+ * prescription that was saved earlier - possibly on another device, and with no scan in
+ * progress at all - so those two fields have to travel with the substitution instead.
+ */
+data class PitchTarget(
+    val rxId: String,
+    val doctorName: String,
+    val doctorSpecialty: String,
+    val substitution: Substitution,
+)
+
+@Composable
 fun DoctorPitchCard(
     rxId: String,
     doctorName: String,

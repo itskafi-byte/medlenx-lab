@@ -10,9 +10,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
-import com.medlenx.lab.data.local.ScannedMedicineEntity
-import com.medlenx.lab.data.local.BrandDoctorRow
-import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
@@ -23,7 +20,10 @@ import com.medlenx.lab.data.repo.CompanySlice
 import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
 import com.medlenx.lab.data.repo.GenericMatrix
+import com.medlenx.lab.data.repo.Intelligence
 import com.medlenx.lab.data.repo.MostPrescribed
+import com.medlenx.lab.data.repo.RxAudit
+import com.medlenx.lab.ui.screens.rx.classBreakdownOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -124,29 +124,118 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     /**
-     * Item breakdown for a tapped Recent Prescriptions row, or null when closed.
+     * The Prescription Audit Summary for a tapped Recent Prescriptions row, or null
+     * when the drawer is closed.
      *
      * The web build renders the row with a "tap for item breakdown" caption but never
-     * passes its own `onSelect` prop, so the tap is inert there. Here it loads the
-     * real `scanned_medicines` rows for that prescription.
+     * passes its own `onSelect` prop, so the tap is inert there; the drawer it would
+     * have opened is the one this loads. One pass assembles the whole payload the way
+     * `GET /api/prescriptions/{id}` does (`main.py:928`), because the drawer's pill
+     * counts, its clinical strip and its footer share all have to describe the same
+     * list of items.
      */
-    var breakdown by mutableStateOf<List<ScannedMedicineEntity>?>(null)
+    var breakdown by mutableStateOf<RxAuditDrawer?>(null)
         private set
 
-    /** Doctor name for the row whose breakdown is open, so the sheet can title itself. */
-    var breakdownDoctor by mutableStateOf("")
+    /** True while the drawer's payload is loading, so the sheet can show its spinner. */
+    var breakdownLoading by mutableStateOf(false)
+        private set
+
+    /**
+     * Why the drawer has nothing to show, or null when it does.
+     *
+     * Kept separate from [error] because the drawer renders it *inside itself*: the
+     * sheet is already open by the time the load can fail, so pushing the message into
+     * the screen's error line would leave the user looking at a closed drawer and no
+     * explanation. The web does the same thing with a toast before closing
+     * (`index.html:2784`).
+     */
+    var breakdownError by mutableStateOf<String?>(null)
         private set
 
     fun showBreakdown(row: RecentRxRow) {
-        breakdownDoctor = row.doctor
+        breakdownLoading = true
+        breakdownError = null
         viewModelScope.launch {
-            breakdown = runCatching { prescriptionDao.medicinesFor(row.id) }
-                .getOrDefault(emptyList())
+            val loaded = runCatching { loadDrawer(row.id) }.getOrNull()
+            breakdown = loaded
+            breakdownLoading = false
+            if (loaded == null) {
+                breakdownError = "Could not load the audit summary for ${row.doctor}'s " +
+                    "prescription. The items may not have been stored."
+            }
         }
     }
 
     fun dismissBreakdown() {
         breakdown = null
+        breakdownLoading = false
+        breakdownError = null
+    }
+
+    /**
+     * Assembles the drawer payload.
+     *
+     * Every field the drawer shows either comes from storage or is derived here, never
+     * from the UI: [RxAudit.lineOf] normalises the confidence and folds `type`/`form`,
+     * and the portfolio matches are computed now for rows saved before substitutions
+     * existed - which is exactly what the web does when `sub` is missing from
+     * `medicines_json` (`main.py:969`).
+     *
+     * The own-company test is the loose matcher, not the entity's stored `isOwn`: the
+     * web recomputes `is_own` from the saved company (`main.py:947`) so that the row
+     * badge and the footer share below it can never disagree.
+     */
+    private suspend fun loadDrawer(prescriptionId: Long): RxAuditDrawer? {
+        val prescription = prescriptionDao.byId(prescriptionId) ?: return null
+        val rows = runCatching { prescriptionDao.medicinesFor(prescriptionId) }
+            .getOrDefault(emptyList())
+        val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+        val lines = rows.map { RxAudit.lineOf(it) }
+
+        // Only fetched when there is something to pitch; a drawer opened on an
+        // empty prescription should not pay for the 25K-row catalogue.
+        val portfolios = if (ownCompany.isBlank()) {
+            List(lines.size) { null }
+        } else {
+            val index = runCatching { app.graph.scanRepository.medexIndex() }.getOrNull()
+            val regulatory = app.graph.regulatoryRepository.data()
+            lines.mapIndexed { i, line ->
+                val company = line.company.orEmpty()
+                if (line.generic.isBlank() || RxAudit.sameCompanyLoose(company, ownCompany)) {
+                    null
+                } else {
+                    runCatching {
+                        Intelligence.genericSubstitution(
+                            data = regulatory,
+                            detectedBrand = line.brand,
+                            detectedCompany = company,
+                            detectedGeneric = line.generic,
+                            detectedStrength = line.strength,
+                            detectedType = line.type,
+                            detectedImageUrl = rows.getOrNull(i)?.imageUrl,
+                            ownCompany = ownCompany,
+                            medexDb = index?.all.orEmpty(),
+                        )
+                    }.getOrNull()
+                }
+            }
+        }
+
+        return RxAuditDrawer(
+            prescription = prescription,
+            lines = lines,
+            portfolios = portfolios,
+            ownCompany = ownCompany,
+            marketShare = RxAudit.buildMarketShare(lines, ownCompany),
+            // The web groups on `therapeutic_class`, which the saved row carries from
+            // the scan-time enrichment; a blank one folds into "Other" exactly as the
+            // web's classBreakdown does.
+            slices = classBreakdownOf(rows.map { it.therapeuticClass }),
+            duplicateOf = prescription.duplicateOf?.let { original ->
+                runCatching { prescriptionDao.byId(original) }.getOrNull()
+            },
+        )
     }
 
     var loaded by mutableStateOf(false)

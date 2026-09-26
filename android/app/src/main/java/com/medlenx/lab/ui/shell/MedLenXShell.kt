@@ -53,7 +53,7 @@ import com.medlenx.lab.ui.screens.analytics.AnalyticsViewModelFactory
 import com.medlenx.lab.ui.screens.hub.HubScreen
 import com.medlenx.lab.ui.screens.hub.HubViewModel
 import com.medlenx.lab.ui.screens.hub.HubViewModelFactory
-import com.medlenx.lab.data.model.EnrichedMedicine
+import com.medlenx.lab.ui.screens.rx.PitchTarget
 import com.medlenx.lab.ui.screens.rx.DoctorPitchCard
 import com.medlenx.lab.ui.screens.rx.RxAuditScreen
 import com.medlenx.lab.ui.screens.scan.ScanScreen
@@ -92,8 +92,17 @@ fun MedLenXShell(
      * time the user walked to the Hub and back.
      */
     val context = LocalContext.current
-    /** Medicine whose Doctor Pitch sheet is open; null keeps it closed. */
-    var pitchTarget by remember { mutableStateOf<EnrichedMedicine?>(null) }
+    /**
+     * What the Doctor Pitch sheet is currently showing; null keeps it closed.
+     *
+     * Carries the rx number and doctor with the substitution rather than pointing at the
+     * live scan, because the sheet is reachable from two places now: the Rx Audit screen,
+     * which audits the scan in progress, and the audit drawer, which audits a saved
+     * prescription that may have been captured by another device. Reading
+     * `scanVm.state` for those two fields made the drawer's pitch card claim the wrong
+     * Rx number whenever the drawer was opened without an active scan.
+     */
+    var pitchTarget by remember { mutableStateOf<PitchTarget?>(null) }
     val scanVm: ScanViewModel = viewModel(
         factory = ScanViewModelFactory(context.applicationContext as Application),
     )
@@ -404,7 +413,12 @@ fun MedLenXShell(
                         onPitchCard = { med ->
                             val sub = med.substitution
                             if (sub != null) {
-                                pitchTarget = med
+                                pitchTarget = PitchTarget(
+                                    rxId = s.receipt?.rxNumber ?: "Unsaved read",
+                                    doctorName = s.doctor.name,
+                                    doctorSpecialty = s.doctor.specialty,
+                                    substitution = sub,
+                                )
                             } else {
                                 // No silent no-op: say why there is nothing to pitch.
                                 Toast.makeText(
@@ -446,8 +460,8 @@ fun MedLenXShell(
                 }
             }
 
-            pitchTarget?.let { med ->
-                med.substitution?.let { sub ->
+            pitchTarget?.let { target ->
+                target.substitution?.let { sub ->
                     // The card's "Bioequivalence & dosage evidence" box was being fed
                     // sub.pitch, which is the pitch script — so the script rendered
                     // twice and the box said nothing about bioequivalence. The ported
@@ -467,17 +481,17 @@ fun MedLenXShell(
                         )
                     }
                     DoctorPitchCard(
-                        rxId = scanVm.state.receipt?.rxNumber ?: "Unsaved read",
-                        doctorName = scanVm.state.doctor.name,
+                        rxId = target.rxId,
+                        doctorName = target.doctorName,
                         substitution = sub,
                         bioequivalenceNote = notes.bioequiv + "\n" + notes.dosageAdvantage,
                         onClose = { pitchTarget = null },
                         onDownloadPdf = {
                             runCatching {
                                 ExportDocuments.pitchCardPdf(
-                                    rxId = scanVm.state.receipt?.rxNumber ?: "unsaved",
-                                    doctorName = scanVm.state.doctor.name,
-                                    doctorSpecialty = scanVm.state.doctor.specialty,
+                                    rxId = target.rxId,
+                                    doctorName = target.doctorName,
+                                    doctorSpecialty = target.doctorSpecialty,
                                     substitution = sub,
                                     // Same string the card is given, so the exported PDF
                                     // and the screen it came from read identically.
@@ -528,11 +542,48 @@ fun MedLenXShell(
         // "Tap for item breakdown" on a Recent Prescriptions row. Rendered here rather
         // than inside the Scan screen because the prescription data belongs to the
         // analytics store, which outlives the tab the row was tapped on.
-        analyticsVm.breakdown?.let { items ->
+        // Open for the load and for a failed load, not only for a loaded drawer: the
+        // sheet is what reports the failure, so closing it on error would leave the tap
+        // with no visible outcome at all.
+        if (analyticsVm.breakdownLoading || analyticsVm.breakdown != null ||
+            analyticsVm.breakdownError != null
+        ) {
             com.medlenx.lab.ui.screens.analytics.RxBreakdownSheet(
-                doctor = analyticsVm.breakdownDoctor,
-                items = items,
+                drawer = analyticsVm.breakdown,
+                loading = analyticsVm.breakdownLoading,
+                loadError = analyticsVm.breakdownError,
                 onDismiss = analyticsVm::dismissBreakdown,
+                // The web downloads `/api/prescriptions/{id}/export.csv`; the string
+                // comes from RxAudit.itemsToCsv, so this only changes where it goes.
+                onExportCsv = { csv ->
+                    documentSaver.saveCsv(
+                        exportFileName(
+                            "rx_items",
+                            analyticsVm.breakdown?.prescription?.rxNo.orEmpty(),
+                            extension = "csv",
+                        ),
+                        csv.toByteArray(Charsets.UTF_8),
+                    )
+                },
+                onCopyList = { text -> copyToClipboard(context, text, "Rx items") },
+                onCopyPitch = { pitch -> copyToClipboard(context, pitch, "Pitch note") },
+                onPitchCard = { sub ->
+                    val p = analyticsVm.breakdown?.prescription
+                    pitchTarget = PitchTarget(
+                        rxId = p?.rxNo ?: "Saved Rx",
+                        doctorName = p?.doctorName.orEmpty(),
+                        doctorSpecialty = p?.doctorSpecialty.orEmpty(),
+                        substitution = sub,
+                    )
+                },
+                // The web's "Verify against Medex" opens the Drug Index tab of the Pharma
+                // Intelligence Hub - not a re-scan, which would just reproduce the value
+                // already on screen. Same destination the Rx Audit screen uses.
+                onVerifyAgainstMedex = {
+                    analyticsVm.dismissBreakdown()
+                    navController.navigate(Destination.Hub.route)
+                },
+                modifier = Modifier.fillMaxSize(),
             )
         }
         }

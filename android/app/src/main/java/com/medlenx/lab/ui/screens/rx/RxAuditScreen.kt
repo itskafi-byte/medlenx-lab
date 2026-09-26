@@ -11,11 +11,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,11 +23,8 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
@@ -43,8 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -59,7 +52,6 @@ import com.medlenx.lab.ui.components.FlowRowCompat
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.components.MlxFilterChip
 import com.medlenx.lab.ui.components.MlxIconButton
-import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.StatusPill
@@ -260,117 +252,6 @@ private fun AuditHeader(
     }
 }
 
-// ----------------------------------------------------------- clinical strip ----
-
-/** One slice of the therapeutic-class stacked bar. */
-private data class ClassSlice(val label: String, val count: Int)
-
-/** Groups the Rx by therapeutic class, largest first, blank class folded into "Other". */
-private fun classBreakdown(medicines: List<EnrichedMedicine>): List<ClassSlice> {
-    val grouped = LinkedHashMap<String, Int>()
-    for (m in medicines) {
-        val key = m.therapeuticClass?.takeIf { it.isNotBlank() } ?: "Other"
-        grouped[key] = (grouped[key] ?: 0) + 1
-    }
-    return grouped.entries
-        .sortedByDescending { it.value }
-        .map { ClassSlice(it.key, it.value) }
-}
-
-@Composable
-private fun ClinicalStrip(
-    antibiotics: Int,
-    broadSpectrum: Int,
-    total: Int,
-    offTerritory: Boolean,
-    slices: List<ClassSlice>,
-) {
-    MlxCard {
-        FlowRowCompat(horizontalSpacing = 6.dp, verticalSpacing = 6.dp) {
-            StatusPill(
-                text = "Antibiotic Stewardship: $antibiotics in Rx · $broadSpectrum broad-spectrum",
-                tone = PillTone.Amber,
-                icon = Icons.Filled.Biotech,
-            )
-            if (offTerritory) {
-                StatusPill(
-                    text = "Off-Territory Audit",
-                    tone = PillTone.Red,
-                    icon = Icons.Filled.LocationOn,
-                )
-            }
-            // The web escalates this one badge by level - amber from 5 medicines, red
-            // from 8, with a warning icon - because it is a clinical safety signal, not a
-            // count. Rendering the neutral slate label at every size hid that, so the
-            // ported `polypharmacy_index` picks the tone. Its label carries the emoji the
-            // web inlines; this app uses Material icons instead, so the glyph is stripped.
-            val poly = Compliance.polypharmacyIndex(total)
-            StatusPill(
-                text = poly.label.replace("\u26A0\uFE0F", "").replace("\u26A0", "").trim(),
-                tone = when (poly.level) {
-                    "high" -> PillTone.Red
-                    "moderate" -> PillTone.Amber
-                    else -> PillTone.Slate
-                },
-                icon = if (poly.level == "normal") null else Icons.Filled.Warning,
-            )
-        }
-
-        Text(
-            text = "THERAPEUTIC CLASS BREAKDOWN",
-            style = MlxType.SectionLabel,
-            color = Mlx.Text600,
-            modifier = Modifier.padding(top = MlxD.Space3, bottom = 6.dp),
-        )
-
-        if (total == 0) {
-            Text("No medicines to break down.", style = MlxType.Footnote, color = Mlx.Text400)
-        } else {
-            // Stacked bar: height 12dp, fully rounded, segments weighted by count.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(12.dp)
-                    .clip(CircleShape),
-            ) {
-                slices.forEachIndexed { i, slice ->
-                    Box(
-                        modifier = Modifier
-                            .weight(slice.count.toFloat())
-                            .fillMaxSize()
-                            .background(Mlx.ChartSeries[i % Mlx.ChartSeries.size]),
-                    )
-                }
-            }
-            FlowRowCompat(
-                modifier = Modifier.padding(top = 6.dp),
-                horizontalSpacing = 4.dp,
-                verticalSpacing = 4.dp,
-            ) {
-                slices.forEachIndexed { i, slice ->
-                    val pct = Math.round(slice.count * 100f / total)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(Mlx.ChartSeries[i % Mlx.ChartSeries.size]),
-                        )
-                        Text(
-                            text = "${slice.label}: $pct%",
-                            style = MlxType.Footnote,
-                            color = Mlx.Text600,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ------------------------------------------------------------ fraud notice ----
 
 @Composable
@@ -566,129 +447,3 @@ private fun AuditItemCard(
  * The two violet pill buttons under a competitor row (App.tsx:861-864). Drawn by hand
  * because neither is a [com.medlenx.lab.ui.components.MlxButton] tone.
  */
-@Composable
-private fun PillButton(
-    text: String,
-    filled: Boolean,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(if (filled) Mlx.Violet else Mlx.VioletBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (filled) Color.White else Mlx.Violet,
-            modifier = Modifier.size(11.dp),
-        )
-        Text(
-            text = text,
-            style = MlxType.MicroPill.copy(fontWeight = FontWeight.SemiBold),
-            color = if (filled) Color.White else Mlx.Violet,
-        )
-    }
-}
-
-// --------------------------------------------------------- market share ----
-
-@Composable
-private fun MarketShareCard(
-    ownLabel: String,
-    ownCount: Int,
-    competitorCount: Int,
-    total: Int,
-    onExportCsv: () -> Unit,
-    onCopyClipboard: () -> Unit,
-) {
-    MlxCard {
-        Text(
-            text = "Market Share Summary for this Rx:",
-            style = MlxType.BodySmall.copy(fontWeight = FontWeight.Bold),
-            color = Mlx.Text600,
-            modifier = Modifier.padding(bottom = MlxD.Space2),
-        )
-        Text(
-            text = "• $ownLabel: $ownCount / $total (${sharePct(ownCount, total)}%)",
-            style = MlxType.BodySmall,
-            color = Mlx.Ok600,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Text(
-            text = "• Competitor brands identified: $competitorCount / $total " +
-                "(${sharePct(competitorCount, total)}%)",
-            style = MlxType.BodySmall,
-            color = Mlx.Warn500,
-            modifier = Modifier.padding(bottom = MlxD.Space3),
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
-            ExportButton(
-                text = "Export Rx CSV",
-                icon = Icons.Filled.FileDownload,
-                tint = Mlx.Ok500,
-                onClick = onExportCsv,
-                modifier = Modifier.weight(1f),
-            )
-            ExportButton(
-                text = "Copy to Clipboard",
-                icon = Icons.Filled.ContentCopy,
-                tint = Mlx.Brand600,
-                onClick = onCopyClipboard,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Text(
-            text = "Long-press a medicine name to preview the prescription crop",
-            style = MlxType.Footnote,
-            color = Mlx.Text400,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = MlxD.Space2),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-        )
-    }
-}
-
-private fun sharePct(count: Int, total: Int): Int =
-    if (total == 0) 0 else Math.round(count * 100f / total)
-
-@Composable
-private fun ExportButton(
-    text: String,
-    icon: ImageVector,
-    tint: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Mlx.Surface)
-            .defaultMinSize(minHeight = MlxD.TouchTarget)
-            .clickable(onClick = onClick)
-            .padding(horizontal = MlxD.Space2),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(13.dp),
-        )
-        Text(
-            text = text,
-            style = MlxType.BodySmall,
-            color = tint,
-            modifier = Modifier.padding(start = 6.dp),
-        )
-    }
-}

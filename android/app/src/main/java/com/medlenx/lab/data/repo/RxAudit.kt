@@ -1,5 +1,6 @@
 package com.medlenx.lab.data.repo
 
+import com.medlenx.lab.data.local.ScannedMedicineEntity
 import com.medlenx.lab.data.model.EnrichedMedicine
 
 /**
@@ -45,17 +46,17 @@ object RxAudit {
      * loosely; with no own company configured everything is a competitor, which is
      * what the web drawer shows before the rep picks a company.
      */
-    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): RxMarketShare {
+    fun buildMarketShare(lines: List<RxAuditLine>, ownCompany: String): RxMarketShare {
         val ownBrands = mutableListOf<String>()
         val competitorBrands = mutableListOf<String>()
-        for (med in medicines) {
-            if (ownCompany.isNotBlank() && sameCompanyLoose(med.company, ownCompany)) {
-                ownBrands += med.brandName
+        for (line in lines) {
+            if (ownCompany.isNotBlank() && sameCompanyLoose(line.company, ownCompany)) {
+                ownBrands += line.brand
             } else {
-                competitorBrands += med.brandName
+                competitorBrands += line.brand
             }
         }
-        val total = medicines.size
+        val total = lines.size
         return RxMarketShare(
             ownCompany = ownCompany,
             totalMedicines = total,
@@ -67,6 +68,65 @@ object RxAudit {
             competitorBrands = competitorBrands,
         )
     }
+
+    /**
+     * Live-scan overload, for the Rx Audit screen's unsaved read.
+     *
+     * Kept as a thin adapter rather than a second implementation: the drawer audits
+     * *saved* rows and the screen audits the in-memory ones, and if each had its own
+     * share arithmetic the two would eventually disagree about the same prescription.
+     */
+    fun buildMarketShare(medicines: List<EnrichedMedicine>, ownCompany: String): RxMarketShare =
+        buildMarketShare(medicines.map { lineOf(it) }, ownCompany)
+
+    // ----------------------------------------------------- row model -----
+
+    /** Maps an in-memory scan row onto the audit shape. */
+    fun lineOf(med: EnrichedMedicine): RxAuditLine = RxAuditLine(
+        brand = med.brandName,
+        strength = med.strength,
+        type = med.type.ifBlank { med.form },
+        dosage = med.dosageNormalized.ifBlank { med.dosage },
+        generic = med.genericName,
+        company = med.company,
+        confidencePercent = confidencePercentOf(med.confidence),
+        imageUrl = med.imageUrl,
+        nemlListed = med.neml?.listed == true,
+        nemlMolecule = med.neml?.molecule.orEmpty(),
+        // The web's item carries `dgda_price_alert.flagged`; the ported alert carries
+        // the same verdict plus the sentence explaining it (`main.py:963`).
+        dgdaFlagged = med.dgdaAlert?.flagged == true,
+        dgdaReason = med.dgdaAlert?.reason.orEmpty(),
+        isAntibiotic = med.isAntibiotic,
+        broadSpectrum = med.broadSpectrum,
+        tripsWatch = med.tripsWatch?.watch == true,
+        therapeuticClass = med.therapeuticClass,
+    )
+
+    /** Maps a saved `scanned_medicines` row onto the audit shape. */
+    fun lineOf(row: ScannedMedicineEntity): RxAuditLine = RxAuditLine(
+        brand = row.brandName,
+        strength = row.strength,
+        type = row.dosageForm,
+        dosage = row.dosage,
+        generic = row.generic,
+        company = row.companyName,
+        confidencePercent = confidencePercentOf(row.confidenceScore),
+        imageUrl = row.imageUrl,
+        nemlListed = row.nemlListed,
+        // The saved row keeps the NEML verdict but not the molecule it matched, and the
+        // molecule is only ever a tooltip here; the generic is the same value the web
+        // falls back to anyway (`m.neml.molecule||m.generic`).
+        nemlMolecule = row.generic,
+        dgdaFlagged = row.dgdaFlagged,
+        // Same story: `scanned_medicines` stores the flag, not the sentence. The drawer
+        // shows the pill either way; only its long-press detail is lost.
+        dgdaReason = "",
+        isAntibiotic = row.isAntibiotic,
+        broadSpectrum = row.broadSpectrum,
+        tripsWatch = row.tripsWatch,
+        therapeuticClass = row.therapeuticClass,
+    )
 
     /**
      * Company equality, delegated to [MedicineMatcher.sameCompany].
@@ -90,20 +150,20 @@ object RxAudit {
      * as a fraction, anything above as an already-percentage number - so both the
      * 0..1 model output and a stray 0..100 value land in the same column.
      */
-    fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
+    fun itemsToCsv(lines: List<RxAuditLine>, ownCompany: String = ""): String =
         buildString {
             // LF, not PyCsv's CRLF default: rx_audit.py:153 passes
             // `lineterminator="\n"`, so this export is the one that differs.
             append(PyCsv.row(CSV_HEADERS, PyCsv.LF))
-            for (med in medicines) {
-                val own = ownCompany.isNotBlank() && sameCompanyLoose(med.company, ownCompany)
+            for (line in lines) {
+                val own = ownCompany.isNotBlank() && sameCompanyLoose(line.company, ownCompany)
                 val row = listOf(
-                    med.brandName,
-                    med.strength,
-                    med.type.ifBlank { med.form },
-                    med.genericName,
-                    med.company.orEmpty(),
-                    pyRound(confidencePercentOf(med)).toString(),
+                    line.brand,
+                    line.strength,
+                    line.type,
+                    line.generic,
+                    line.company.orEmpty(),
+                    line.confidencePercent.toString(),
                     if (own) "Own" else "Competitor",
                 )
                 append(PyCsv.row(row, PyCsv.LF))
@@ -116,19 +176,24 @@ object RxAudit {
      * The em dashes and the "(NN%)" suffix are reproduced verbatim from the web
      * version, and a missing company reads "Unknown Brand" rather than blank.
      */
-    fun itemsToClipboard(medicines: List<EnrichedMedicine>, header: String = ""): String =
+    fun itemsToClipboard(lines: List<RxAuditLine>, header: String = ""): String =
         buildList {
             if (header.isNotBlank()) add(header)
-            medicines.forEachIndexed { i, med ->
-                val brand = listOf(
-                    med.brandName,
-                    med.strength,
-                    med.type.ifBlank { med.form },
-                ).filter { it.isNotBlank() }.joinToString(" ")
-                val company = med.company?.takeIf { it.isNotBlank() } ?: "Unknown Brand"
-                add("${i + 1}. $brand — ${med.genericName} — $company (${pyRound(confidencePercentOf(med))}%)")
+            lines.forEachIndexed { i, line ->
+                val brand = listOf(line.brand, line.strength, line.type)
+                    .filter { it.isNotBlank() }.joinToString(" ")
+                val company = line.company?.takeIf { it.isNotBlank() } ?: "Unknown Brand"
+                add("${i + 1}. $brand — ${line.generic} — $company (${line.confidencePercent}%)")
             }
         }.joinToString("\n")
+
+    /** Live-scan overload, for the Rx Audit screen's unsaved read. */
+    fun itemsToCsv(medicines: List<EnrichedMedicine>, ownCompany: String = ""): String =
+        itemsToCsv(medicines.map { lineOf(it) }, ownCompany)
+
+    /** Live-scan overload, for the Rx Audit screen's unsaved read. */
+    fun itemsToClipboard(medicines: List<EnrichedMedicine>, header: String = ""): String =
+        itemsToClipboard(medicines.map { lineOf(it) }, header)
 
     // -------------------------------------------------------- internals ----
 
@@ -142,14 +207,54 @@ object RxAudit {
      * fraction, anything above is already a percentage. Reproduced exactly, including
      * how a stray negative falls into the fraction branch.
      */
-    private fun confidencePercentOf(med: EnrichedMedicine): Double {
-        val conf = med.confidence
-        return if (conf <= 1.0) conf * 100.0 else conf
-    }
+    fun confidencePercentOf(conf: Double): Int =
+        pyRound(if (conf <= 1.0) conf * 100.0 else conf)
 
     /** Delegated so both exports escape identically — see [PyCsv]. */
     private fun csvEscape(field: String): String = PyCsv.escape(field)
 }
+
+/**
+ * One detected medicine, reduced to what the audit surfaces actually read.
+ *
+ * The drawer and the Rx Audit screen reach their rows by different routes - one
+ * loads `scanned_medicines` for a saved prescription, the other holds the enriched
+ * in-memory list - and the two must produce byte-identical CSV, clipboard text and
+ * market share for the same prescription. Reducing both to this shape first is what
+ * makes that true by construction rather than by review.
+ *
+ * `type` is the web's `type || form`, already resolved: `scanned_medicines` folds
+ * the two into one `dosage_form` column at save time, so a saved row has nothing
+ * left to fall back to. `form` is not carried separately for that reason.
+ *
+ * `isOwn` is deliberately absent. The web drawer recomputes `is_own` from the saved
+ * company with the loose matcher (`main.py:947`), and the footer's share uses the
+ * same one; reading the entity's stored `isOwn` instead would put a strict
+ * `equals` in the row badge and the loose matcher in the footer below it, and the
+ * two would disagree on "Square Pharmaceuticals" vs "Square Pharmaceuticals Ltd.".
+ */
+data class RxAuditLine(
+    val brand: String,
+    val strength: String,
+    val type: String,
+    val dosage: String,
+    val generic: String,
+    val company: String?,
+    /** Already normalised to 0..100 - see [confidencePercentOf]. */
+    val confidencePercent: Int,
+    val imageUrl: String? = null,
+    // ── The drawer row's regulatory badges. `main.py:928` attaches every one of these
+    //    to the item it returns, and the row renders them inline; they belong on the
+    //    line rather than in a second list the UI would have to index in step.
+    val nemlListed: Boolean = false,
+    val nemlMolecule: String = "",
+    val dgdaFlagged: Boolean = false,
+    val dgdaReason: String = "",
+    val isAntibiotic: Boolean = false,
+    val broadSpectrum: Boolean = false,
+    val tripsWatch: Boolean = false,
+    val therapeuticClass: String? = null,
+)
 
 /** Own-vs-competitor summary for one prescription. Mirrors `build_market_share`. */
 data class RxMarketShare(

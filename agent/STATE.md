@@ -30,10 +30,14 @@ counterpart — see `MAP.md`.
    was silently discarded. **Still needs the logcat** to confirm that was the
    cause rather than something else.
 2. **Device-verify rounds 2, 3, 4** — all committed, none confirmed on hardware.
-3. **Parity directive, module 3** — the three-module brief; modules 1 and 2 have
-   landed, see below. Module 3 grows `RxBreakdownSheet` into the full Prescription
-   Audit Summary. Scope and references are in
-   `findings/2026-09-26-parity-directive-audit.md`.
+3. **Long-press crop preview** — `MarketShareCard`'s footnote promises "Long-press a
+   medicine name to preview the prescription crop", and **no `combinedClickable` or
+   `onLongClick` exists anywhere in this project**, so the gesture does nothing on the
+   Rx Audit screen, where the caption has always been. The audit drawer suppresses the
+   footnote (`showCropHint = false`) rather than repeat the claim. The web's version
+   crops the scan at the medicine's line band (`cropMedicineSlice`, :1745) and shows it
+   in a popover; implementing it needs the saved prescription's bitmap plus that crop
+   arithmetic. Either build it or drop the caption from `RxAuditScreen` too.
 4. **Training queue** — persist the correction image slice; add list + stats.
 5. Company drill-down, DGDA monitor — low-severity parity gaps.
 
@@ -57,6 +61,61 @@ substitution card and the DGDA flag inside the review card. `check_undefined_sym
 cannot see a dropped field, and no check catches "the mapper forgot a field" -
 building one now would report the module 2/3 fields as defects, so it belongs
 after they land.
+
+### Parity directive, module 3 — the Prescription Audit Summary drawer
+
+`RxBreakdownSheet` was 159 lines: a doctor's name and one row per medicine. It is now
+the drawer the web opens from a Recent Prescriptions row (`index.html:552`, renderer
+`:2764`), fed by one assembled payload the way `GET /api/prescriptions/{id}` returns it
+(`main.py:928`): header with the duplicate tag, search plus the four filter pills with
+counts, the clinical strip (polypharmacy / stewardship / off-territory / therapy bar),
+the four-column item table with its regulatory badges and portfolio-match expander, and
+the market-share footer with the two exports.
+
+The payload is assembled in `AnalyticsViewModel.loadDrawer`, not in the sheet, so the
+pill counts, the clinical strip and the footer share all describe the same list in the
+same pass - the web gets that from a single fetch.
+
+**One row shape, two sources.** `RxAuditLine` (`RxAudit.kt`) is what the audit math
+reads, and `lineOf` maps both an in-memory `EnrichedMedicine` and a saved
+`ScannedMedicineEntity` onto it. Before this, `buildMarketShare`/`itemsToCsv`/
+`itemsToClipboard` only accepted `EnrichedMedicine`; the drawer audits saved rows, so a
+second implementation was the alternative. The `EnrichedMedicine` overloads survive as
+thin adapters to the same core.
+
+**`is_own` is recomputed, never read.** `scanned_medicines` stores an `isOwn` computed
+with a strict `equals(ignoreCase)`, while the footer's share uses the loose matcher. The
+web recomputes `is_own` from the saved company (`main.py:947`) for exactly this reason:
+reading the stored flag would put the strict comparison in the row badge and the loose
+one in the footer below it, and they would disagree on "Square Pharmaceuticals" vs
+"Square Pharmaceuticals Ltd.".
+
+**The table scrolls sideways.** Four columns do not fit a phone. The web already gives
+its table `min-w-[560px]` inside an `overflow-x-auto`, so a horizontally scrolled table
+is what it shows on a phone too; reflowing each row into a card would be a different
+screen from the one the web and the Figma export describe. Because there is no `<table>`
+to size the cells, `TABLE_WIDTH` states the width and the header, every row, the
+expander and the empty state all use it - inside a `horizontalScroll` the constraints are
+unbounded, so anything relying on `fillMaxWidth` there collapses instead of filling.
+
+**Four shared parts came out of `RxAuditScreen`** (`ui/screens/rx/RxAuditParts.kt`):
+`ClassSlice` + `classBreakdown`, `ClinicalStrip`, `PillButton` and `MarketShareCard`.
+They were `private`, and the drawer needs all four; writing a second copy is how the
+two surfaces drift. `RxAuditScreen`'s rendering is unchanged - the one behavioural knob
+added is `ClinicalStrip(hideEmptyAntibiotics)`, defaulted off, which the drawer turns on
+because the web hides the stewardship badge at zero in the drawer and shows it on the
+audit screen. `RxAuditFilter` was already public in `RxAuditScreen`, so the drawer
+imports it instead of declaring a fifth enum with the same four members.
+
+**`PitchTarget` replaced the raw `EnrichedMedicine` in the shell.** The Doctor Pitch
+sheet used to read its Rx number and doctor from `scanVm.state`; the drawer opens it for
+a saved prescription, where there is no scan in progress, so those fields travel with
+the substitution now.
+
+*Not ported, deliberately:* the web's hover preview of the prescription crop (see open
+work), and the `title=` tooltips on the NEML / DGDA / TRIPS badges - `dgdaReason` is
+carried on the line for it, but Android has no tooltip and the detail needs a long-press
+affordance to land somewhere.
 
 ### Parity directive, module 2 — generic substitution in the review stream
 

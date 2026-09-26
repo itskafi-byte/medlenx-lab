@@ -144,8 +144,17 @@ def used_symbols(code: str, symbol: str):
     for m in re.finditer(r"(?:\.|\bModifier\b\.)" + symbol + r"\s*\(", code):
         hits.append(m.group(0))
     if symbol not in CALL_ONLY:
-        # Capitalised API used bare: Stroke(, Offset(, Dialog(
-        for m in re.finditer(r"(?<![\w.])" + symbol + r"\s*[\(\.]", code):
+        # Bare API use: `Stroke(`, `Offset(`, `Dialog(`, and the trailing-lambda form
+        # `remember { ... }`.
+        #
+        # The `{` alternative is load-bearing. Without it, an API whose only use is a
+        # trailing lambda reads as *never used*, so deleting its import was invisible:
+        # `remember { mutableStateOf(...) }` is how this project writes every piece of
+        # composable-local state, and a missing `remember` import is a compile error.
+        # Found by hand on RxBreakdownSheet.kt, which had `remember` in use, its import
+        # deleted in the same edit session, and this check still reporting
+        # `no findings`.
+        for m in re.finditer(r"(?<![\w.])" + symbol + r"\s*[\(\.\{]", code):
             hits.append(m.group(0))
     return hits
 

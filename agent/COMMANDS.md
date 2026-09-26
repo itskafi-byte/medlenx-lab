@@ -56,7 +56,7 @@ python3 android/checks/deadparams.py  # a control whose callback nothing ever su
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 20 faults
+python3 android/checks/faulttest.py            # all 21 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 

@@ -54,6 +54,7 @@ HUB_SCREEN = "android/app/src/main/java/com/medlenx/lab/ui/screens/hub/HubScreen
 MEDLEN_VL = "android/app/src/main/java/com/medlenx/lab/data/remote/MedLenXVlClient.kt"
 DOCTOR_IDENTITY = "android/app/src/main/java/com/medlenx/lab/data/local/DoctorIdentity.kt"
 SCAN_SCREEN = "android/app/src/main/java/com/medlenx/lab/ui/screens/scan/ScanScreen.kt"
+DRAWER = "android/app/src/main/java/com/medlenx/lab/ui/screens/analytics/RxBreakdownSheet.kt"
 
 # The join every query appending RX_FILTER_SQL must carry.
 JOIN = '            "LEFT JOIN doctors d ON p.doctor_id = d.id " +\n'
@@ -212,6 +213,16 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "`upazila` TEXT NOT NULL, ",
         "`upazila` TEXT NOT NULL, `stray` TEXT NOT NULL, ",
         "is not on the entity",
+    ),
+    (
+        # The hole this closes: a symbol whose only use is a trailing lambda
+        # ("remember { ... }") used to read as never used, so dropping its import
+        # passed the check. Found by hand, not by the check.
+        "a trailing-lambda API whose import was dropped",
+        "imports.py", DRAWER,
+        "import androidx.compose.runtime.remember\n",
+        "",
+        "uses remember",
     ),
     (
         "an index Room would name differently",

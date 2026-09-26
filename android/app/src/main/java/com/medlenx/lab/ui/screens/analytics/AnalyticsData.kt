@@ -1,6 +1,11 @@
 package com.medlenx.lab.ui.screens.analytics
 
 import com.medlenx.lab.data.local.BrandDoctorRow
+import com.medlenx.lab.data.local.PrescriptionEntity
+import com.medlenx.lab.data.model.Substitution
+import com.medlenx.lab.data.repo.RxAuditLine
+import com.medlenx.lab.data.repo.RxMarketShare
+import com.medlenx.lab.ui.screens.rx.ClassSlice
 import com.medlenx.lab.data.local.DrillCountRow
 /**
  * Analytics models and the figures the dashboard renders.
@@ -128,6 +133,41 @@ data class RecentRxRow(
     val area: String,
     val mr: String,
     val duplicate: Boolean,
+)
+
+/**
+ * Everything the Prescription Audit Summary drawer renders, assembled in one pass.
+ *
+ * The web fetches this as a single payload from `GET /api/prescriptions/{id}`
+ * (`main.py:928`) and then renders it in four places: the header, the toolbar pill
+ * counts, the clinical strip, and the item table with its footer. Assembling it once
+ * here rather than letting the sheet query as it composes keeps the drawer's numbers
+ * consistent with each other - the pill counts and the footer share are computed from
+ * the same list, in the same pass.
+ *
+ * [lines] and [portfolios] are parallel: `portfolios[i]` is the competitor-to-own-brand
+ * match for `lines[i]`, or null when there is none. A list rather than a map because
+ * position is the identity the web uses (`data-idx`), and two lines of the same brand
+ * at different strengths are different rows.
+ */
+data class RxAuditDrawer(
+    val prescription: PrescriptionEntity,
+    val lines: List<RxAuditLine>,
+    val portfolios: List<Substitution?>,
+    /** Blank when no officer profile is saved; the drawer then shows no own brand. */
+    val ownCompany: String,
+    val marketShare: RxMarketShare,
+    /** Therapeutic-class split for the stacked bar, largest first. */
+    val slices: List<ClassSlice>,
+    /**
+     * The prescription this one is a repeat scan of, loaded so the drawer can name it.
+     *
+     * The web resolves `duplicate_of` through a second `get_prescription_by_id` inside
+     * the endpoint (`main.py:1014`) and renders "first captured as Rx #N (MR x, time)".
+     * Loading it here rather than in the sheet keeps the drawer to one query pass and
+     * keeps the date formatting out of the UI.
+     */
+    val duplicateOf: PrescriptionEntity? = null,
 )
 
 data class KpiDatum(
