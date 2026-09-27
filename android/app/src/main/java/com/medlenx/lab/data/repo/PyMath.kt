@@ -32,7 +32,7 @@ object PyMath {
      * Locale.US is explicit: a device in a comma-decimal locale would otherwise
      * render "7,50 BDT" inside an English pitch sentence.
      */
-    fun fixed2(v: Double): String = String.format(Locale.US, "%.2f", v)
+    fun fixed2(v: Number): String = String.format(Locale.US, "%.2f", v.toDouble())
 
     /**
      * `f"{x:.1f}"` — the percentages on the dashboards, the team screen and the exports.
@@ -43,11 +43,18 @@ object PyMath {
      * transcription: 24.5 formats as "25" here and as "24" in CPython, and JavaScript's
      * `toFixed` agrees with this, not with CPython - which is what matters, because the
      * string being mirrored is the one the web's browser draws.
+     *
+     * `Number`, not `Double`: Python's `f"{x:.1f}"` takes any numeric, and the Kotlin
+     * that mirrors it should too. The UI's own arithmetic is Float - `ownItems * 100f /
+     * items` is how the team hero computes its share - so a `Double` parameter made
+     * every such call site a type error in the compiler (`Argument type mismatch: actual
+     * type is 'Float', but 'Double' was expected`, TeamScreen.kt:186), i.e. a defect that
+     * ships as a broken build rather than as a wrong number.
      */
-    fun fixed1(v: Double): String = String.format(Locale.US, "%.1f", v)
+    fun fixed1(v: Number): String = String.format(Locale.US, "%.1f", v.toDouble())
 
     /** `f"{x:.0f}"`, with the same tie rule as [fixed1]. */
-    fun fixed0(v: Double): String = String.format(Locale.US, "%.0f", v)
+    fun fixed0(v: Number): String = String.format(Locale.US, "%.0f", v.toDouble())
 
     /**
      * `f"{lat:.4f}, {lng:.4f}"` for the scan's GPS pair.
@@ -56,8 +63,8 @@ object PyMath {
      * default locale renders "23,8106, 90,4123", which is two coordinates and three
      * commas, and nothing downstream can tell which is which.
      */
-    fun fixedCoords(lat: Double, lng: Double): String =
-        String.format(Locale.US, "%.4f, %.4f", lat, lng)
+    fun fixedCoords(lat: Number, lng: Number): String =
+        String.format(Locale.US, "%.4f, %.4f", lat.toDouble(), lng.toDouble())
 
     /**
      * `f"{x}"` for a float.

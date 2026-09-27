@@ -88,6 +88,19 @@ REQUIRED = {
     "aspectRatio": "androidx.compose.foundation.layout.aspectRatio",
     "offset": "androidx.compose.foundation.layout.offset",
     "padding": "androidx.compose.foundation.layout.padding",
+    # window insets - all `Modifier` extensions in this one package. Absent from this
+    # table until the user's build reported `Unresolved reference 'statusBarsPadding'`
+    # at RxBreakdownSheet.kt:140: the call was written without its import, and nothing
+    # here knew the name, because it is lowercase, library-side and after a dot.
+    "statusBarsPadding": "androidx.compose.foundation.layout.statusBarsPadding",
+    "navigationBarsPadding": "androidx.compose.foundation.layout.navigationBarsPadding",
+    "systemBarsPadding": "androidx.compose.foundation.layout.systemBarsPadding",
+    "displayCutoutPadding": "androidx.compose.foundation.layout.displayCutoutPadding",
+    "safeDrawingPadding": "androidx.compose.foundation.layout.safeDrawingPadding",
+    "safeContentPadding": "androidx.compose.foundation.layout.safeContentPadding",
+    "imePadding": "androidx.compose.foundation.layout.imePadding",
+    "windowInsetsPadding": "androidx.compose.foundation.layout.windowInsetsPadding",
+    "consumedWindowInsets": "androidx.compose.foundation.layout.consumedWindowInsets",
     # NB: `weight` is deliberately absent - it is a MEMBER of RowScope/ColumnScope,
     # not an extension, so it resolves with no import inside a Row or Column.
     # drawing

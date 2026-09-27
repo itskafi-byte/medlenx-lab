@@ -370,6 +370,19 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "append(\"%.4f, %.4f\".format(state.lat, state.lng))",
         "locale",
     ),
+    (
+        # The user's next build, verbatim: `Unresolved reference 'statusBarsPadding'` at
+        # RxBreakdownSheet.kt:140. The inset calls were written in the freeze round and
+        # the imports were not, and nothing here knew the name - it is lowercase,
+        # library-side, and sits after a dot, where a reference normally means a member.
+        # The window-inset modifiers are in REQUIRED now; this is the real defect.
+        "a window-inset modifier used without its import",
+        "imports.py",
+        "android/app/src/main/java/com/medlenx/lab/ui/screens/analytics/RxBreakdownSheet.kt",
+        "import androidx.compose.foundation.layout.statusBarsPadding\n",
+        "",
+        "statusBarsPadding",
+    ),
 ]
 
 

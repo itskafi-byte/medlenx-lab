@@ -57,7 +57,7 @@ python3 android/checks/refcheck.py    # a Type.member or param.field that does n
 `faulttest.py` runs on its own, because it edits the tree on purpose:
 
 ```bash
-python3 android/checks/faulttest.py            # all 31 faults
+python3 android/checks/faulttest.py            # all 32 faults
 python3 android/checks/faulttest.py roomcheck  # one check's faults
 ```
 
