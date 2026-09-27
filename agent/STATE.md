@@ -262,6 +262,19 @@ flagged, not folded in, because module 2 was the substitution card.
   | `:671:45` `Certificate` | the same icon, the same fix | — |
   | `:753:70` `em` | `0.2.em` needs `androidx.compose.ui.unit.em`; the file imported `dp` only | import written |
 
+  **Two more of the same shape came back a round later** (`c4d9642`), which is why the
+  table is here and not just a fix:
+
+  | Error | Cause | Fix |
+  |---|---|---|
+  | `RxBreakdownSheet.kt:140:22` `statusBarsPadding` | the inset calls from the freeze round were written without their imports | `statusBarsPadding` + `navigationBarsPadding` imported, and the whole window-inset family added to `imports.py`'s `REQUIRED` table so the suite catches the next one |
+  | `TeamScreen.kt:186:49` `Argument type mismatch: actual type is 'Float', but 'Double' was expected` | `PyMath.fixed0` took `Double`; the team hero's share is `ownItems * 100f / items`, a `Float` | the helpers take `Number` and widen inside, as the Python they transcribe does |
+
+  The first of the two is the `em` defect again - a lowercase, library-side,
+  dot-received name - and it is now a rule rather than a habit. The second could
+  not have been caught by any check here (it needed the compiler) and is closed
+  by construction instead: one signature per helper, no overload to pick wrong.
+
   Sweeping every icon name in the tree against the last device-built tree leaves
   `Certificate` as the only name introduced since that never existed - so that
   defect class is now empty, and it was also invisible to every check here,
