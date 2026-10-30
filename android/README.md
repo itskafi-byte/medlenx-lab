@@ -177,10 +177,10 @@ Preview requires paid API access. The app sends the original prescription image 
 the model not to output patient details does not anonymize the uploaded image;
 ensure you have permission and follow applicable patient privacy requirements.
 
-Scanning uses `gemini-3.1-pro-preview` with low thinking to reduce latency, and
-compresses images before upload. This may affect accuracy; verify the extracted
-medicine information in the review screen. Actual speed depends on network and
-provider conditions. No automatic fallback to a different model is enabled.
+Scanning uses `gemini-3.1-pro-preview` with high thinking for more thorough reasoning, and
+compresses images before upload. No AI model guarantees accuracy; verify the
+extracted medicine information in the review screen. High thinking may increase
+latency and cost; actual speed depends on network and provider conditions. No automatic fallback to a different model is enabled.
 
 ## Versions
 

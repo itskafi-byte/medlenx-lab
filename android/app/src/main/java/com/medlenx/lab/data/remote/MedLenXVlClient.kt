@@ -96,7 +96,7 @@ class MedLenXVlClient(
             })
             put("generationConfig", buildJsonObject {
                 put("responseMimeType", "application/json")
-                put("thinkingConfig", buildJsonObject { put("thinkingLevel", "low") })
+                put("thinkingConfig", buildJsonObject { put("thinkingLevel", "high") })
             })
         }.toString()
 
