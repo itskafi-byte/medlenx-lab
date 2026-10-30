@@ -3,17 +3,16 @@ package com.medlenx.lab.data.remote
 import android.util.Base64
 import com.medlenx.lab.BuildConfig
 import com.medlenx.lab.data.model.VlScanResult
-import com.medlenx.lab.data.remote.dto.ChatMessage
-import com.medlenx.lab.data.remote.dto.ChatRequest
-import com.medlenx.lab.data.remote.dto.ChatResponse
-import com.medlenx.lab.data.remote.dto.ImagePart
-import com.medlenx.lab.data.remote.dto.ImageUrl
-import com.medlenx.lab.data.remote.dto.TextPart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,23 +31,15 @@ sealed class VlOutcome {
 /**
  * MedLenX VL client.
  *
- * Direct Kotlin port of app/medlenx_client.py. The system prompt, the user prompt,
- * the request headers, max_tokens and temperature are copied verbatim so the Android
- * app produces byte-identical requests to the web backend.
- *
- * SECURITY: BuildConfig.OPENROUTER_API_KEY is compiled into the APK and is extractable
- * by anyone who unpacks it. Use a rate-limited key, or proxy through your own server
- * before shipping publicly.
+ * Direct Gemini API client for personal testing only. The key embedded in
+ * BuildConfig can be extracted from the APK; use a backend before distribution.
  */
 class MedLenXVlClient(
     private val httpClient: OkHttpClient,
     private val json: Json,
-    private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
-    private val baseUrl: String = BuildConfig.OPENROUTER_BASE_URL,
+    private val apiKey: String = BuildConfig.GEMINI_API_KEY,
+    private val baseUrl: String = BuildConfig.GEMINI_BASE_URL,
     private val primaryModel: String = BuildConfig.VL_MODEL_PRIMARY,
-    // build.gradle declared VL_MODEL_FALLBACK but nothing ever read it, so a rate
-    // limit or timeout on the big model failed the read outright.
-    private val fallbackModel: String = BuildConfig.VL_MODEL_FALLBACK,
 ) {
 
     val hasKey: Boolean get() = apiKey.isNotBlank()
@@ -60,7 +51,7 @@ class MedLenXVlClient(
      * Reads a Bangladeshi prescription image.
      *
      * @param imageBytes JPEG/PNG/WEBP bytes from the camera or gallery.
-     * @param mimeType used to build the `data:` URI exactly as the Python client does.
+     * @param mimeType MIME type of the image sent to Gemini.
      */
     suspend fun scanPrescription(
         imageBytes: ByteArray,
@@ -71,20 +62,7 @@ class MedLenXVlClient(
         // Shrink before encoding: a raw 12MP capture is a multi-megabyte base64 body.
         val (uploadBytes, uploadMime) = prepareUpload(imageBytes, mimeType)
 
-        val first = call(uploadBytes, uploadMime, primaryModel)
-
-        // Retry once on the smaller model. The 235B endpoint rate-limits and times
-        // out far more readily than the 30B one, and a failed read costs the officer
-        // the whole scan. Only a failure is retried - a successful but empty read is
-        // a real answer and is returned as-is.
-        if (first is VlOutcome.Failure &&
-            fallbackModel.isNotBlank() &&
-            fallbackModel != primaryModel
-        ) {
-            val retry = call(uploadBytes, uploadMime, fallbackModel)
-            if (retry !is VlOutcome.Failure) return@withContext retry
-        }
-        return@withContext first
+        call(uploadBytes, uploadMime, primaryModel)
     }
 
     /** Re-encodes for upload, keeping the original bytes if the image cannot be decoded. */
@@ -98,69 +76,55 @@ class MedLenXVlClient(
         mimeType: String,
         model: String,
     ): VlOutcome {
-        val dataUri = "data:$mimeType;base64," +
-            Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-
-        val content = buildJsonArray {
-            add(json.encodeToJsonElement(ImagePart(imageUrl = ImageUrl(url = dataUri))))
-            add(json.encodeToJsonElement(TextPart(text = USER_PROMPT)))
-        }
-
-        val messages = listOf(
-            ChatMessage(role = "system", content = json.encodeToJsonElement(SYSTEM_PROMPT)),
-            ChatMessage(role = "user", content = content),
-        )
-
-        val payload = json.encodeToString(
-            ChatRequest.serializer(),
-            ChatRequest(
-                model = model,
-                messages = messages,
-                maxTokens = 4000,
-                temperature = 0.1,
-            ),
-        )
+        val payload = buildJsonObject {
+            put("systemInstruction", buildJsonObject {
+                put("parts", buildJsonArray { add(buildJsonObject { put("text", SYSTEM_PROMPT) }) })
+            })
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject { put("text", USER_PROMPT) })
+                        add(buildJsonObject {
+                            put("inlineData", buildJsonObject {
+                                put("mimeType", mimeType)
+                                put("data", Base64.encodeToString(imageBytes, Base64.NO_WRAP))
+                            })
+                        })
+                    })
+                })
+            })
+            put("generationConfig", buildJsonObject {
+                put("responseMimeType", "application/json")
+                put("thinkingConfig", buildJsonObject { put("thinkingLevel", "low") })
+            })
+        }.toString()
 
         val request = Request.Builder()
-            .url(baseUrl)
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            // Same attribution headers the Python client sends.
-            .addHeader("HTTP-Referer", "https://medlenx-lab.local")
-            .addHeader("X-Title", "MedLenX Lab")
+            .url("$baseUrl/$model:generateContent")
+            .header("x-goog-api-key", apiKey)
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
 
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    return@use VlOutcome.Failure("MedLenX VL HTTP ${response.code}: ${body.take(200)}")
+                    return@use VlOutcome.Failure("Gemini request failed (HTTP ${response.code}). Check API access, billing, and quota.")
                 }
-                val parsed = json.decodeFromString(ChatResponse.serializer(), body)
-                parsed.error?.let { return@use VlOutcome.Failure(it.message) }
-                val choice = parsed.choices.firstOrNull()
-                val text = choice?.message?.content.orEmpty()
-                if (text.isBlank()) {
-                    VlOutcome.Failure("MedLenX VL returned an empty completion")
-                } else {
-                    val outcome = parseScanJson(text)
-                    // A reply cut off at max_tokens can decode to a valid object that
-                    // simply ends after the doctor block - medicines silently empty.
-                    // Surface that instead of handing the officer a blank panel.
-                    if (outcome is VlOutcome.Success &&
-                        choice?.finishReason == "length" &&
-                        outcome.result.medicines.isEmpty()
-                    ) {
-                        VlOutcome.Failure(
-                            "The model reply was cut off before the medicine list. Retry."
-                        )
-                    } else {
-                        outcome
-                    }
+                val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
+                val candidate = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+                    ?: return@use VlOutcome.Failure("Gemini returned no scan result; try another image.")
+                val reason = candidate["finishReason"]?.jsonPrimitive?.contentOrNull
+                if (reason != "STOP") {
+                    return@use VlOutcome.Failure("Gemini could not complete the scan (${reason ?: "unknown reason"}). Retry.")
                 }
+                val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray
+                val text = parts?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
+                    ?.joinToString("").orEmpty()
+                if (text.isBlank()) VlOutcome.Failure("Gemini returned an empty scan result.")
+                else parseScanJson(text)
             }
-        }.getOrElse { VlOutcome.Failure(it.message ?: "MedLenX VL request failed") }
+        }.getOrElse { VlOutcome.Failure("Gemini request failed. Check your connection and try again.") }
     }
 
     /**
@@ -253,7 +217,7 @@ Return ONLY JSON:
       "dosage_bengali": "১+০+১",
       "dosage_normalized": "1+0+1",
       "frequency": "Before meal",
-      "company": "Square Pharmaceuticals Ltd.",
+      "company": "",
       "confidence": 0.92
     }
   ],

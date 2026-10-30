@@ -2,10 +2,10 @@
 #   sdk.dir is written automatically by Android Studio.
 sdk.dir=/absolute/path/to/Android/sdk
 
-# Your OpenRouter key - https://openrouter.ai/keys
-# Also accepted as the OPENROUTER_API_KEY environment variable.
+# Your Gemini API key - https://aistudio.google.com/apikey
+# Also accepted as the GEMINI_API_KEY environment variable.
 # WARNING: compiled into the APK and extractable. Use a rate-limited key.
-OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
+GEMINI_API_KEY=your-gemini-api-key
 
 # OPTIONAL - Mapbox public access token - https://console.mapbox.com/account/access-tokens/
 # Also accepted as the MAPBOX_ACCESS_TOKEN environment variable.
@@ -14,3 +14,8 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
 # Supply a pk.* token to switch the heatmap to Mapbox tile maps, matching the
 # web app's Leaflet/OpenStreetMap panel. Requires network for tiles.
 MAPBOX_ACCESS_TOKEN=pk.xxxxxxxxxxxxxxxx
+
+# Firebase project configuration (from Firebase console, project settings).
+FIREBASE_API_KEY=
+FIREBASE_APP_ID=
+FIREBASE_PROJECT_ID=

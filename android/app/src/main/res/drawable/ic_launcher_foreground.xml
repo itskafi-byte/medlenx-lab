@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Simplified microscope mark, centred in the 72dp safe zone of the 108dp canvas. -->
+<!-- A medical cross framed by a lens: a single mark shared by launcher and app. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <group android:scaleX="2.2" android:scaleY="2.2" android:translateX="27.6" android:translateY="27.6">
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M9.5,2 L12.5,2 L12.5,4 L9.5,4 Z M10,5 L13,5 L15,11 L12,11 Z M6,12 L18,12 L18,14 L6,14 Z M11,14 L13,14 L13,16 L11,16 Z M4,16 L20,16 L20,18 L4,18 Z M17,6 A5,5 0 0,1 17,16 L17,14 A3,3 0 0,0 17,8 Z" />
-    </group>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M51,24 A25,25 0,1 0,51 74 A25,25 0,1 0,51 24 M51,30 A19,19 0,1 1,51 68 A19,19 0,1 1,51 30" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M48,37 L54,37 L54,46 L63,46 L63,52 L54,52 L54,61 L48,61 L48,52 L39,52 L39,46 L48,46 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M67,65 L84,82 L80,86 L63,69 Z" />
 </vector>

@@ -205,7 +205,7 @@ private fun SearchField(
 /**
  * Status chips — Figma `AppBar` shows Online · queued · company; latency is an
  * Android-only addition (the web header has no such chip) and is kept because it is
- * the only place the user sees OpenRouter round-trip cost.
+ * the only place the user sees vision-model round-trip time.
  *
  * The Online pill carries a 6dp #047857 dot, matching the Figma markup.
  */

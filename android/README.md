@@ -134,7 +134,7 @@ whether Studio accepts AGP 9.3.2 as-is. If it does not:
 ```bash
 cd android
 cp local.properties.example local.properties
-# set sdk.dir, and OPENROUTER_API_KEY if you want real scans instead of demo mode
+# set sdk.dir, and GEMINI_API_KEY if you want real scans instead of demo mode
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
@@ -163,11 +163,24 @@ a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.
 
 ## API key handling
 
-`OPENROUTER_API_KEY` is read from `android/local.properties` (git-ignored) or the
+`GEMINI_API_KEY` is read from `android/local.properties` (git-ignored) or the
 environment, and compiled into `BuildConfig`.
 
 > **Warning.** `BuildConfig` values are extractable from an unpacked APK. Use a
 > rate-limited key, or proxy the call through your own backend before a public release.
+
+To obtain a key, create or select a project at https://aistudio.google.com/apikey,
+create an API key, enable Gemini API billing for that project, and add
+`GEMINI_API_KEY=your-key` to `android/local.properties` (do not share the key).
+Google AI Pro subscriptions and API usage are billed separately; Gemini 3.1 Pro
+Preview requires paid API access. The app sends the original prescription image (after resizing) to Google. Asking
+the model not to output patient details does not anonymize the uploaded image;
+ensure you have permission and follow applicable patient privacy requirements.
+
+Scanning uses `gemini-3.1-pro-preview` with low thinking to reduce latency, and
+compresses images before upload. This may affect accuracy; verify the extracted
+medicine information in the review screen. Actual speed depends on network and
+provider conditions. No automatic fallback to a different model is enabled.
 
 ## Versions
 
@@ -180,3 +193,20 @@ sample. If Android Studio offers upgrades, take them together or codegen will br
 `ui/theme/` holds the palette, type scale, shapes and dimensions ported 1:1 from the
 web app's `tailwind.config` and CSS. See `FIGMA_ANDROID_UI_PROMPT.md` in the repository
 root for the full mapping and the anti-truncation contract.
+
+## Firebase sign-in setup
+
+This build uses Firebase Authentication email/password accounts. In the Firebase
+console, create a project, add an Android app with package `com.medlenx.lab`, and
+turn on **Authentication → Sign-in method → Email/Password**. Download the app's
+`google-services.json` for reference. Copy `project_info.project_id`,
+`client[0].client_info.mobilesdk_app_id`, and `client[0].api_key[0].current_key`
+into `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, and `FIREBASE_API_KEY` respectively
+in `android/local.properties`. The Firebase API key is a project identifier, not
+the Gemini API key. Restrict it appropriately in Google Cloud; never paste the
+Gemini key into Firebase settings. Rebuild after changing the values.
+
+This is a **single-user device** configuration: sign-out does not delete or
+isolate existing local scans, settings, and analytics. Another account signing in
+on the same device can see that data. Firebase sign-in does not sync or back up
+these local records. Do not use this mode on a shared device.

@@ -28,7 +28,7 @@ sealed class ScanProgress {
     data class Failed(val message: String) : ScanProgress()
     data object QueuedOffline : ScanProgress()
 
-    /** No OpenRouter key configured — the app runs in demo mode like the web build. */
+    /** No Gemini key configured — the app runs in demo mode like the web build. */
     data object NeedsApiKey : ScanProgress()
 }
 

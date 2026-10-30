@@ -55,6 +55,9 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(MlxD.SectionGap),
     ) {
+        androidx.compose.material3.TextButton(onClick = { com.google.firebase.auth.FirebaseAuth.getInstance().signOut() }) {
+            Text("Sign out")
+        }
         MlxCard {
             Text(
                 text = "Enterprise Settings & Officer Profile",
