@@ -100,8 +100,8 @@ class MedLenXVlClient(
                     })
                 })
             })
-            // OpenRouter translates high effort to Gemini 3's high thinking level.
-            put("reasoning", buildJsonObject { put("effort", "high") })
+            // Nemotron supports reasoning; it does not document Gemini-style thinking levels.
+            put("reasoning", buildJsonObject { put("enabled", true) })
             put("response_format", buildJsonObject { put("type", "json_object") })
             put("provider", buildJsonObject { put("require_parameters", true) })
         }.toString()
@@ -118,6 +118,7 @@ class MedLenXVlClient(
                     val detail = when (response.code) {
                         401, 403 -> "Check your OpenRouter API key and account permissions."
                         402 -> "Check your OpenRouter credits or spending limit."
+                        404 -> "No matching endpoint found. Check model availability and OpenRouter privacy settings."
                         429 -> "Rate limit or quota reached. Check OpenRouter limits and try again later."
                         else -> "Check OpenRouter model availability and account status."
                     }

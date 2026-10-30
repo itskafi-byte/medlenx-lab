@@ -171,17 +171,19 @@ environment, and compiled into `BuildConfig`.
 
 Create an OpenRouter key at https://openrouter.ai/settings/keys and add
 `OPENROUTER_API_KEY=your-key` to `android/local.properties` (do not share it).
-Add sufficient OpenRouter credits for the paid `google/gemini-3.1-pro-preview`
-model; Google AI Pro subscriptions and Google AI Studio quota do not pay for it.
+Scanning uses `nvidia/nemotron-3.5-super-vl:free`, an image-capable free
+OpenRouter endpoint. Free endpoints can be unavailable, rate limited or subject
+to provider-specific data policies; check OpenRouter availability and privacy
+settings if requests fail. No paid fallback is enabled.
 
 The app sends the prescription image (after resizing) to OpenRouter and its model
 provider. Asking the model not to output patient details does not anonymize the
 image. Review their data policies, obtain permission, and follow applicable
 patient privacy requirements before sending it.
 
-Scanning requests high reasoning effort for more thorough analysis. No AI model
-guarantees accuracy; verify all medicines before saving. High reasoning can
-increase latency and cost. No automatic fallback to a different model is enabled.
+Scanning requests reasoning. Handwriting recognition, particularly Bengali
+prescriptions, has not been validated with this model; no AI model guarantees
+accuracy. Verify all medicines before saving. Reasoning can increase latency.
 
 ## Versions
 

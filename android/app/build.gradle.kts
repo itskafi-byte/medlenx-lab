@@ -72,7 +72,7 @@ android {
         // since it is generated from local.properties at build time.
         resValue("string", "mapbox_access_token", mapboxToken)
         buildConfigField("String", "OPENROUTER_BASE_URL", "\"https://openrouter.ai/api/v1/chat/completions\"")
-        buildConfigField("String", "VL_MODEL_PRIMARY", "\"google/gemini-3.1-pro-preview\"")
+        buildConfigField("String", "VL_MODEL_PRIMARY", "\"nvidia/nemotron-3.5-super-vl:free\"")
         buildConfigField("String", "VL_DISPLAY_NAME", "\"MedLenX VL\"")
         buildConfigField("String", "VL_VERSION", "\"1.0-Pro\"")
     }
