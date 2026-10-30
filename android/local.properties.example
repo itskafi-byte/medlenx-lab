@@ -2,10 +2,10 @@
 #   sdk.dir is written automatically by Android Studio.
 sdk.dir=/absolute/path/to/Android/sdk
 
-# Your Gemini API key - https://aistudio.google.com/apikey
-# Also accepted as the GEMINI_API_KEY environment variable.
+# Your OpenRouter API key - https://openrouter.ai/settings/keys
+# Also accepted as the OPENROUTER_API_KEY environment variable.
 # WARNING: compiled into the APK and extractable. Use a rate-limited key.
-GEMINI_API_KEY=your-gemini-api-key
+OPENROUTER_API_KEY=your-openrouter-api-key
 
 # OPTIONAL - Mapbox public access token - https://console.mapbox.com/account/access-tokens/
 # Also accepted as the MAPBOX_ACCESS_TOKEN environment variable.

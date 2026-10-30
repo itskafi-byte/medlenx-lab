@@ -6,6 +6,7 @@ import com.medlenx.lab.data.model.VlScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -31,14 +32,14 @@ sealed class VlOutcome {
 /**
  * MedLenX VL client.
  *
- * Direct Gemini API client for personal testing only. The key embedded in
+ * OpenRouter client for personal testing only. The key embedded in
  * BuildConfig can be extracted from the APK; use a backend before distribution.
  */
 class MedLenXVlClient(
     private val httpClient: OkHttpClient,
     private val json: Json,
-    private val apiKey: String = BuildConfig.GEMINI_API_KEY,
-    private val baseUrl: String = BuildConfig.GEMINI_BASE_URL,
+    private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
+    private val baseUrl: String = BuildConfig.OPENROUTER_BASE_URL,
     private val primaryModel: String = BuildConfig.VL_MODEL_PRIMARY,
 ) {
 
@@ -51,7 +52,7 @@ class MedLenXVlClient(
      * Reads a Bangladeshi prescription image.
      *
      * @param imageBytes JPEG/PNG/WEBP bytes from the camera or gallery.
-     * @param mimeType MIME type of the image sent to Gemini.
+     * @param mimeType MIME type of the image sent through OpenRouter.
      */
     suspend fun scanPrescription(
         imageBytes: ByteArray,
@@ -77,33 +78,37 @@ class MedLenXVlClient(
         model: String,
     ): VlOutcome {
         val payload = buildJsonObject {
-            put("systemInstruction", buildJsonObject {
-                put("parts", buildJsonArray { add(buildJsonObject { put("text", SYSTEM_PROMPT) }) })
-            })
-            put("contents", buildJsonArray {
+            put("model", model)
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "system")
+                    put("content", SYSTEM_PROMPT)
+                })
                 add(buildJsonObject {
                     put("role", "user")
-                    put("parts", buildJsonArray {
-                        add(buildJsonObject { put("text", USER_PROMPT) })
+                    put("content", buildJsonArray {
                         add(buildJsonObject {
-                            put("inlineData", buildJsonObject {
-                                put("mimeType", mimeType)
-                                put("data", Base64.encodeToString(imageBytes, Base64.NO_WRAP))
+                            put("type", "text")
+                            put("text", USER_PROMPT)
+                        })
+                        add(buildJsonObject {
+                            put("type", "image_url")
+                            put("image_url", buildJsonObject {
+                                put("url", "data:$mimeType;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP))
                             })
                         })
                     })
                 })
             })
-            put("generationConfig", buildJsonObject {
-                put("responseMimeType", "application/json")
-                // Gemini 2.5 uses a token budget, not Gemini 3's thinkingLevel.
-                put("thinkingConfig", buildJsonObject { put("thinkingBudget", 32768) })
-            })
+            // OpenRouter translates high effort to Gemini 3's high thinking level.
+            put("reasoning", buildJsonObject { put("effort", "high") })
+            put("response_format", buildJsonObject { put("type", "json_object") })
+            put("provider", buildJsonObject { put("require_parameters", true) })
         }.toString()
 
         val request = Request.Builder()
-            .url("$baseUrl/$model:generateContent")
-            .header("x-goog-api-key", apiKey)
+            .url(baseUrl)
+            .header("Authorization", "Bearer $apiKey")
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -111,26 +116,28 @@ class MedLenXVlClient(
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     val detail = when (response.code) {
-                        429 -> "Quota or rate limit reached. Check Gemini API usage and limits in AI Studio, then retry."
-                        404 -> "Gemini 2.5 Pro may not be available to this project. Check model access in AI Studio."
-                        else -> "Check API access, billing, and quota in AI Studio."
+                        401, 403 -> "Check your OpenRouter API key and account permissions."
+                        402 -> "Check your OpenRouter credits or spending limit."
+                        429 -> "Rate limit or quota reached. Check OpenRouter limits and try again later."
+                        else -> "Check OpenRouter model availability and account status."
                     }
-                    return@use VlOutcome.Failure("Gemini request failed (HTTP ${response.code}). $detail")
+                    return@use VlOutcome.Failure("OpenRouter request failed (HTTP ${response.code}). $detail")
                 }
                 val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
-                val candidate = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
-                    ?: return@use VlOutcome.Failure("Gemini returned no scan result; try another image.")
-                val reason = candidate["finishReason"]?.jsonPrimitive?.contentOrNull
-                if (reason != "STOP") {
-                    return@use VlOutcome.Failure("Gemini could not complete the scan (${reason ?: "unknown reason"}). Retry.")
+                if (root["error"] != null && root["error"] != JsonNull) {
+                    return@use VlOutcome.Failure("OpenRouter could not complete the scan. Check your account and try again.")
                 }
-                val parts = candidate["content"]?.jsonObject?.get("parts")?.jsonArray
-                val text = parts?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
-                    ?.joinToString("").orEmpty()
-                if (text.isBlank()) VlOutcome.Failure("Gemini returned an empty scan result.")
+                val choice = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject
+                    ?: return@use VlOutcome.Failure("OpenRouter returned no scan result; try again.")
+                val reason = choice["finish_reason"]?.jsonPrimitive?.contentOrNull
+                if (reason != "stop") {
+                    return@use VlOutcome.Failure("OpenRouter did not complete the scan (${reason ?: "unknown reason"}). Retry.")
+                }
+                val text = choice["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull.orEmpty()
+                if (text.isBlank()) VlOutcome.Failure("OpenRouter returned an empty scan result.")
                 else parseScanJson(text)
             }
-        }.getOrElse { VlOutcome.Failure("Gemini request failed. Check your connection and try again.") }
+        }.getOrElse { VlOutcome.Failure("OpenRouter request failed. Check your connection and try again.") }
     }
 
     /**

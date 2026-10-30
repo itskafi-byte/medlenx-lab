@@ -11,7 +11,7 @@ plugins {
 }
 
 /**
- * The Gemini key is read from android/local.properties (git-ignored) so it never
+ * The OpenRouter key is read from android/local.properties (git-ignored) so it never
  * lands in version control.
  *
  * SECURITY: BuildConfig fields are compiled into the APK and are trivially extractable
@@ -25,14 +25,14 @@ val localProps = Properties().apply {
 fun secret(key: String): String =
     (localProps.getProperty(key) ?: System.getenv(key) ?: "").trim()
 
-val geminiKey: String = secret("GEMINI_API_KEY")
+val openRouterKey: String = secret("OPENROUTER_API_KEY")
 val firebaseApiKey = secret("FIREBASE_API_KEY")
 val firebaseAppId = secret("FIREBASE_APP_ID")
 val firebaseProjectId = secret("FIREBASE_PROJECT_ID")
 
 /**
  * Mapbox public access token, read from the same local.properties (git-ignored) as
- * the Gemini key so it never reaches version control.
+ * the OpenRouter key so it never reaches version control.
  *
  * LEFT BLANK ON PURPOSE. With no token the heatmap falls back to the offline
  * Canvas dot map and the rest of the app is unaffected, so a bare checkout still
@@ -58,7 +58,7 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
@@ -71,8 +71,8 @@ android {
         // consumer's compile classpath. A resValue also keeps the token out of git,
         // since it is generated from local.properties at build time.
         resValue("string", "mapbox_access_token", mapboxToken)
-        buildConfigField("String", "GEMINI_BASE_URL", "\"https://generativelanguage.googleapis.com/v1beta/models\"")
-        buildConfigField("String", "VL_MODEL_PRIMARY", "\"gemini-2.5-pro\"")
+        buildConfigField("String", "OPENROUTER_BASE_URL", "\"https://openrouter.ai/api/v1/chat/completions\"")
+        buildConfigField("String", "VL_MODEL_PRIMARY", "\"google/gemini-3.1-pro-preview\"")
         buildConfigField("String", "VL_DISPLAY_NAME", "\"MedLenX VL\"")
         buildConfigField("String", "VL_VERSION", "\"1.0-Pro\"")
     }

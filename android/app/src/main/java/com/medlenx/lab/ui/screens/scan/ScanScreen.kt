@@ -594,7 +594,7 @@ private fun VerificationArea(state: ScanUiState) {
         }
 
         ScanPhase.NeedsKey -> MlxEmptyState(
-            message = "No Gemini key configured. Add GEMINI_API_KEY to " +
+            message = "No OpenRouter key configured. Add OPENROUTER_API_KEY to " +
                 "android/local.properties and rebuild to enable MedLenX VL.",
             icon = Icons.Filled.FileUpload,
         )

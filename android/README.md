@@ -134,7 +134,7 @@ whether Studio accepts AGP 9.3.2 as-is. If it does not:
 ```bash
 cd android
 cp local.properties.example local.properties
-# set sdk.dir, and GEMINI_API_KEY if you want real scans instead of demo mode
+# set sdk.dir, and OPENROUTER_API_KEY if you want real scans instead of demo mode
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
@@ -163,30 +163,25 @@ a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.
 
 ## API key handling
 
-`GEMINI_API_KEY` is read from `android/local.properties` (git-ignored) or the
+`OPENROUTER_API_KEY` is read from `android/local.properties` (git-ignored) or the
 environment, and compiled into `BuildConfig`.
 
 > **Warning.** `BuildConfig` values are extractable from an unpacked APK. Use a
 > rate-limited key, or proxy the call through your own backend before a public release.
 
-To obtain a key, create or select a project at https://aistudio.google.com/apikey,
-create an API key, and add `GEMINI_API_KEY=your-key` to `android/local.properties`
-(do not share the key). Google AI Pro subscriptions and Gemini API usage are
-separate. Gemini 2.5 Pro has a free tier subject to project access and quota;
-Google limits 2.5 models to users who previously used them. New projects may not
-have access. HTTP 429 can mean quota exhaustion or rate limiting; check the
-project's usage and limits in AI Studio. Paid API use may require billing.
+Create an OpenRouter key at https://openrouter.ai/settings/keys and add
+`OPENROUTER_API_KEY=your-key` to `android/local.properties` (do not share it).
+Add sufficient OpenRouter credits for the paid `google/gemini-3.1-pro-preview`
+model; Google AI Pro subscriptions and Google AI Studio quota do not pay for it.
 
-The app sends the prescription image (after resizing) to Google. Asking the model
-not to output patient details does not anonymize the uploaded image. Google's
-pricing page says free-tier content may be used to improve its products. Obtain
-permission and follow applicable patient privacy requirements before sending it.
+The app sends the prescription image (after resizing) to OpenRouter and its model
+provider. Asking the model not to output patient details does not anonymize the
+image. Review their data policies, obtain permission, and follow applicable
+patient privacy requirements before sending it.
 
-Scanning uses `gemini-2.5-pro` with a 32768-token thinking budget, the model's
-maximum for generateContent. This is a ceiling, not a guarantee of accuracy or
-that every token will be used. Verify extracted medicines before saving. High
-thinking can increase latency and, on a paid tier, cost. No automatic fallback to
-a different model is enabled.
+Scanning requests high reasoning effort for more thorough analysis. No AI model
+guarantees accuracy; verify all medicines before saving. High reasoning can
+increase latency and cost. No automatic fallback to a different model is enabled.
 
 ## Versions
 
@@ -209,8 +204,8 @@ turn on **Authentication → Sign-in method → Email/Password**. Download the a
 `client[0].client_info.mobilesdk_app_id`, and `client[0].api_key[0].current_key`
 into `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, and `FIREBASE_API_KEY` respectively
 in `android/local.properties`. The Firebase API key is a project identifier, not
-the Gemini API key. Restrict it appropriately in Google Cloud; never paste the
-Gemini key into Firebase settings. Rebuild after changing the values.
+the OpenRouter API key. Restrict it appropriately in Google Cloud; never paste the
+OpenRouter key into Firebase settings. Rebuild after changing the values.
 
 This is a **single-user device** configuration: sign-out does not delete or
 isolate existing local scans, settings, and analytics. Another account signing in
