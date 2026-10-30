@@ -170,17 +170,23 @@ environment, and compiled into `BuildConfig`.
 > rate-limited key, or proxy the call through your own backend before a public release.
 
 To obtain a key, create or select a project at https://aistudio.google.com/apikey,
-create an API key, enable Gemini API billing for that project, and add
-`GEMINI_API_KEY=your-key` to `android/local.properties` (do not share the key).
-Google AI Pro subscriptions and API usage are billed separately; Gemini 3.1 Pro
-Preview requires paid API access. The app sends the original prescription image (after resizing) to Google. Asking
-the model not to output patient details does not anonymize the uploaded image;
-ensure you have permission and follow applicable patient privacy requirements.
+create an API key, and add `GEMINI_API_KEY=your-key` to `android/local.properties`
+(do not share the key). Google AI Pro subscriptions and Gemini API usage are
+separate. Gemini 2.5 Pro has a free tier subject to project access and quota;
+Google limits 2.5 models to users who previously used them. New projects may not
+have access. HTTP 429 can mean quota exhaustion or rate limiting; check the
+project's usage and limits in AI Studio. Paid API use may require billing.
 
-Scanning uses `gemini-3.1-pro-preview` with high thinking for more thorough reasoning, and
-compresses images before upload. No AI model guarantees accuracy; verify the
-extracted medicine information in the review screen. High thinking may increase
-latency and cost; actual speed depends on network and provider conditions. No automatic fallback to a different model is enabled.
+The app sends the prescription image (after resizing) to Google. Asking the model
+not to output patient details does not anonymize the uploaded image. Google's
+pricing page says free-tier content may be used to improve its products. Obtain
+permission and follow applicable patient privacy requirements before sending it.
+
+Scanning uses `gemini-2.5-pro` with a 32768-token thinking budget, the model's
+maximum for generateContent. This is a ceiling, not a guarantee of accuracy or
+that every token will be used. Verify extracted medicines before saving. High
+thinking can increase latency and, on a paid tier, cost. No automatic fallback to
+a different model is enabled.
 
 ## Versions
 

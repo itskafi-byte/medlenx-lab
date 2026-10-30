@@ -96,7 +96,8 @@ class MedLenXVlClient(
             })
             put("generationConfig", buildJsonObject {
                 put("responseMimeType", "application/json")
-                put("thinkingConfig", buildJsonObject { put("thinkingLevel", "high") })
+                // Gemini 2.5 uses a token budget, not Gemini 3's thinkingLevel.
+                put("thinkingConfig", buildJsonObject { put("thinkingBudget", 32768) })
             })
         }.toString()
 
@@ -109,7 +110,12 @@ class MedLenXVlClient(
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@use VlOutcome.Failure("Gemini request failed (HTTP ${response.code}). Check API access, billing, and quota.")
+                    val detail = when (response.code) {
+                        429 -> "Quota or rate limit reached. Check Gemini API usage and limits in AI Studio, then retry."
+                        404 -> "Gemini 2.5 Pro may not be available to this project. Check model access in AI Studio."
+                        else -> "Check API access, billing, and quota in AI Studio."
+                    }
+                    return@use VlOutcome.Failure("Gemini request failed (HTTP ${response.code}). $detail")
                 }
                 val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
                 val candidate = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
@@ -232,10 +238,10 @@ a guessed company is a data error.
 Output JSON only, no markdown.
 """
 
-        /** OkHttp tuned for a 120s vision-model round trip, as in the Python client. */
+        /** Allow extra time for a high-thinking vision-model round trip. */
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(240, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
