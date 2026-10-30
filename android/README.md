@@ -174,7 +174,10 @@ Create an OpenRouter key at https://openrouter.ai/settings/keys and add
 Scanning uses `nvidia/nemotron-3.5-super-vl:free`, an image-capable free
 OpenRouter endpoint. Free endpoints can be unavailable, rate limited or subject
 to provider-specific data policies; check OpenRouter availability and privacy
-settings if requests fail. No paid fallback is enabled.
+settings if requests fail. For an unavailable endpoint, quota or a transient
+connection error, the app tries `google/gemma-4-31b-it:free` once. No paid
+fallback is enabled. The alternative sends the image to Google AI Studio through
+OpenRouter; review both providers’ data policies before use.
 
 The app sends the prescription image (after resizing) to OpenRouter and its model
 provider. Asking the model not to output patient details does not anonymize the

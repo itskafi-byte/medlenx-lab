@@ -6,7 +6,6 @@ import com.medlenx.lab.data.model.VlScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -18,12 +17,13 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** Outcome of a single MedLenX VL call. */
 sealed class VlOutcome {
     data class Success(val result: VlScanResult, val rawContent: String) : VlOutcome()
-    data class Failure(val message: String) : VlOutcome()
+    data class Failure(val message: String, val retryable: Boolean = false) : VlOutcome()
 
     /** No API key configured — mirrors the web app's demo mode. */
     data object NoKey : VlOutcome()
@@ -63,7 +63,15 @@ class MedLenXVlClient(
         // Shrink before encoding: a raw 12MP capture is a multi-megabyte base64 body.
         val (uploadBytes, uploadMime) = prepareUpload(imageBytes, mimeType)
 
-        call(uploadBytes, uploadMime, primaryModel)
+        val first = call(uploadBytes, uploadMime, primaryModel)
+        if (first !is VlOutcome.Failure || !first.retryable) return@withContext first
+
+        // Both models are explicitly free. Retry once with the user's chosen
+        // alternative only for availability, quota or transient network failures.
+        val fallback = call(uploadBytes, uploadMime, FREE_FALLBACK_MODEL)
+        if (fallback is VlOutcome.Failure) {
+            VlOutcome.Failure("Primary: ${first.message} Alternative: ${fallback.message}")
+        } else fallback
     }
 
     /** Re-encodes for upload, keeping the original bytes if the image cannot be decoded. */
@@ -100,7 +108,7 @@ class MedLenXVlClient(
                     })
                 })
             })
-            // Nemotron supports reasoning; it does not document Gemini-style thinking levels.
+            // Both free models support reasoning. Avoid requiring a model-specific effort level.
             put("reasoning", buildJsonObject { put("enabled", true) })
             put("response_format", buildJsonObject { put("type", "json_object") })
             put("provider", buildJsonObject { put("require_parameters", true) })
@@ -114,20 +122,12 @@ class MedLenXVlClient(
 
         return runCatching {
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val detail = when (response.code) {
-                        401, 403 -> "Check your OpenRouter API key and account permissions."
-                        402 -> "Check your OpenRouter credits or spending limit."
-                        404 -> "No matching endpoint found. Check model availability and OpenRouter privacy settings."
-                        429 -> "Rate limit or quota reached. Check OpenRouter limits and try again later."
-                        else -> "Check OpenRouter model availability and account status."
-                    }
-                    return@use VlOutcome.Failure("OpenRouter request failed (HTTP ${response.code}). $detail")
+                val body = response.body?.string().orEmpty()
+                val problem = OpenRouterErrors.fromResponse(json, body, response.code)
+                if (problem != null) {
+                    return@use VlOutcome.Failure(problem.message, problem.retryable)
                 }
-                val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
-                if (root["error"] != null && root["error"] != JsonNull) {
-                    return@use VlOutcome.Failure("OpenRouter could not complete the scan. Check your account and try again.")
-                }
+                val root = json.parseToJsonElement(body).jsonObject
                 val choice = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject
                     ?: return@use VlOutcome.Failure("OpenRouter returned no scan result; try again.")
                 val reason = choice["finish_reason"]?.jsonPrimitive?.contentOrNull
@@ -138,7 +138,12 @@ class MedLenXVlClient(
                 if (text.isBlank()) VlOutcome.Failure("OpenRouter returned an empty scan result.")
                 else parseScanJson(text)
             }
-        }.getOrElse { VlOutcome.Failure("OpenRouter request failed. Check your connection and try again.") }
+        }.getOrElse { error ->
+            if (error is IOException) VlOutcome.Failure(
+                "OpenRouter connection failed or timed out. Check your connection and try again.",
+                retryable = true,
+            ) else VlOutcome.Failure("OpenRouter returned an unreadable response. Please try again.")
+        }
     }
 
     /**
@@ -164,6 +169,7 @@ class MedLenXVlClient(
     }
 
     companion object {
+        private const val FREE_FALLBACK_MODEL = "google/gemma-4-31b-it:free"
 
         /** Verbatim from MedLenXVLClient.scan_prescription_pure(). */
         private const val SYSTEM_PROMPT =
