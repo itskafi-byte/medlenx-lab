@@ -1,0 +1,72 @@
+# Firebase team sharing: setup and current status
+
+**Not yet functional.** The repository currently contains the Firestore dependency
+and a proposed rules baseline, not the upload pipeline, team feed, legacy-scan
+migration, or account-safe cache handling. Do not use this as a production sync
+feature or deploy these rules without testing and integrating them with your
+project's other rules. The app still saves audits locally and does not upload them.
+
+## Initial project setup
+
+1. In the Firebase console, create or select a project. Register an Android app
+   with package name `com.medlenx.lab`.
+2. Enable **Authentication → Sign-in method → Email/Password**. Create the
+   necessary accounts. Self-registration alone must not grant company access.
+3. Create a Cloud Firestore database in the appropriate region. Select production
+   mode; do not use open test-mode rules. Consider retention, access auditing,
+   consent and applicable prescription-data privacy requirements before storing
+   any real audit data.
+4. From Firebase project settings, obtain the Android app's API key, app ID and
+   project ID. Set `FIREBASE_API_KEY`, `FIREBASE_APP_ID` and
+   `FIREBASE_PROJECT_ID` in the ignored `android/local.properties`, following
+   `android/local.properties.example`. These values identify the project; they
+   are embedded in the APK and are **not secrets**. Never put service-account
+   credentials in the app or in Git.
+
+## Membership and proposed rules
+
+5. Choose a stable, unique company document ID. Do not use a freely editable
+   display name as proof of membership. A display name is neither guaranteed to
+   be unique nor safe as a Firestore document path (for example, it may contain
+   `/`). An eventual implementation needs an administrator-assigned mapping
+   from the local company selection to this ID.
+6. A trusted administrator can provision
+   `companies/{companyId}/members/{firebaseUid}` in the Firebase console or
+   using a trusted Admin SDK. Set `active` to boolean `true` and `displayName`
+   to the approved officer name/ID. Obtain the UID from the Authentication
+   Users page after account creation. Clients cannot create or modify membership
+   documents under the proposed rules. To revoke membership, set `active` to
+   `false` or delete the document. Offline copies already downloaded to devices
+   cannot be remotely erased immediately.
+7. Review `firestore.rules`. It grants team-scan reads only to active members of
+   that company and permits only authenticated, attributed creates. The rules
+   are a **baseline for a future client**, not a tested deployment: they deny
+   all unmatched paths and could break other applications sharing this database.
+   Merge them carefully into any existing rules and test with the Firestore
+   emulator, including cross-company access, revoked members, forged identity,
+   malformed payloads and offline/reconnect behavior, before publishing.
+
+The rules disallow an image field at the top level, but Firestore rules cannot
+iterate over an arbitrary medicine list to fully validate each nested object.
+Do not rely on these rules alone to prevent malicious clients from placing
+sensitive content inside medicine fields. Production validation and any stronger
+content restrictions require a trusted server-side ingestion path.
+
+## Work still required before enabling sync
+
+- Bind the signed-in UID to approved membership, and observe membership changes.
+- Atomically save each new audit and a UID/company-bound durable outbox record;
+  handle retries, rejected writes, process death and account changes without
+  dropping or misattributing records. Firestore persistence alone cannot make a
+  Room write and a Firestore write atomic.
+- Add an explicit, reviewed migration for historical local scans. The existing
+  local database is shared across sign-ins, so its rows cannot automatically
+  be attributed to the current account or company.
+- Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
+  results and pending writes require deliberate treatment on shared devices;
+  server rules cannot revoke data already cached offline.
+- Implement the real-time feed, read-only audit details, visible failure/status
+  handling, and update existing “cloud sync unavailable” labels only when the
+  behavior is actually working.
+- Build and run emulator/security tests plus two-account, two-company, offline,
+  restart, revocation and shared-device tests before production rollout.
