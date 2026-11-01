@@ -100,6 +100,13 @@ object Migrations {
         }
     }
 
+    /** Preserve historical audits without guessing which account owns them. */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

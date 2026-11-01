@@ -64,8 +64,9 @@ content restrictions require a trusted server-side ingestion path.
   terminated before clearing persistence; clearing it deletes pending writes.
 - Partition all user-local data by authenticated UID, including profile, scans,
   medicines, targets, queue, preferences and images. The current database is
-  shared across sign-ins and is not yet partitioned. Quarantine or purge legacy
-  rows rather than silently attributing them to an account; any later cloud
+  shared across sign-ins and is not yet partitioned. New prescription rows now
+  record the signed-in UID, while historical rows are marked `legacy_user`; most
+  queries do not filter by UID, so this is **not isolation**. Any later cloud
   upload of existing local scans requires a deliberate migration.
 - Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
   results and pending writes require deliberate treatment on shared devices;

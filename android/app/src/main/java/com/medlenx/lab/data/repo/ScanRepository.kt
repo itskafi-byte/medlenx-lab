@@ -1,5 +1,6 @@
 package com.medlenx.lab.data.repo
 
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.DoctorDao
 import com.medlenx.lab.data.local.DoctorEntity
@@ -147,8 +148,11 @@ class ScanRepository(
         ownCompany: String?,
         enriched: List<EnrichedMedicine> = emptyList(),
     ): Long {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+            ?: throw IllegalStateException("Sign in before saving a prescription")
         val id = prescriptionDao.insert(
             prescription.copy(
+                userId = uid,
                 totalMedicines = result.medicines.size,
                 mrId = mrId,
                 createdAt = prescription.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),

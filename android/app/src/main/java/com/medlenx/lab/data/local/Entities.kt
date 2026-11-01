@@ -74,6 +74,9 @@ data class DoctorEntity(
 )
 data class PrescriptionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    // Existing rows remain unassigned until a deliberate migration; this field
+    // alone does not isolate the many other queries and related tables.
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "rx_no") val rxNo: String,
     @ColumnInfo(name = "image_path") val imagePath: String,
     @ColumnInfo(name = "image_hash") val imageHash: String?,
