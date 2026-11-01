@@ -83,34 +83,8 @@ fun ScanScreen(
     val context = LocalContext.current
     val state = vm.state
     val transform = remember(state.imageUri) { ViewerTransform() }
-    // Live region-of-interest for the medicine being edited.
-    //
-    // The VL model returns a per-medicine `bbox` when it can localise a line. When it
-    // cannot, falling back to a single fixed centred rectangle made the box look
-    // frozen: every medicine lit up the same patch of paper, so it read as decoration
-    // rather than as detection. The fallback instead spreads the medicines down the
-    // page in detection order, so selecting a different medicine visibly moves the
-    // box onto that medicine's line even when the model gave no coordinates.
-    val medicineCount = state.cards.size
-    val selectedIndex = state.selectedMedicine.coerceIn(0, (medicineCount - 1).coerceAtLeast(0))
-    val roi = state.cards.getOrNull(selectedIndex)?.bbox
-        ?.takeIf { it.size == 4 && it[2] > 0f && it[3] > 0f }
-        ?: if (medicineCount > 0) {
-            val band = (1f / medicineCount).coerceAtMost(0.5f)
-            listOf(0.06f, (band * selectedIndex).coerceIn(0f, 1f - band), 0.88f, band)
-        } else {
-            null
-        }
-
-    // The shell lets this screen start at y=0 so it scrolls *under* the blurred app
-    // bar. The offset is therefore carried by the screen itself: inside the scroll
-    // container for the scrolling phases (so content disappears behind the bar), and
-    // as a plain offset for the non-scrolling empty state.
-    // The app bar is an overlay that content scrolls under, so this offset is what
-    // holds the first card clear of it at rest. AppBarHeight alone would tuck the card
-    // against the bar; adding a full SectionGap left a 24dp band that reads as a
-    // layout fault rather than as breathing room.
-    val topInset = MlxD.AppBarHeight + MlxD.Space2
+    // The shell already reserves the status and app-bar height.
+    val topInset = 0.dp
 
     // Camera capture writes into the FileProvider path declared in the manifest.
     //
@@ -239,7 +213,6 @@ fun ScanScreen(
             medicineCount = state.cards.size,
             imageUri = state.imageUri,
             transform = transform,
-            roi = roi,
             onThumbnailAction = { action ->
                 when (action) {
                     ViewerAction.ZoomIn -> transform.zoomIn()
@@ -263,7 +236,6 @@ fun ScanScreen(
             onSave = vm::gotoGps,
             imageUri = state.imageUri,
             transform = transform,
-            roi = roi,
             selectedMedicine = state.selectedMedicine,
             onSelectMedicine = vm::selectMedicine,
             suggestions = state.brandSuggestions,
@@ -279,7 +251,9 @@ fun ScanScreen(
             modifier = modifier.padding(top = topInset),
         )
 
-        ScanPhase.VerifyGps -> Column {
+        ScanPhase.VerifyGps -> Column(
+            modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        ) {
             // Surfaces a failed save in place, so the officer can retry instead of
             // losing the verified prescription.
             state.error?.let {
@@ -307,7 +281,6 @@ fun ScanScreen(
                 onBack = vm::backToMedicines,
                 onSave = vm::save,
                 saving = vm.saving,
-                modifier = modifier.padding(top = topInset),
             )
         }
 
@@ -341,8 +314,7 @@ fun ScanScreen(
                 state = state,
                 transform = transform,
                 onClear = vm::clear,
-                roi = roi,
-            )
+                )
             GeoStrip(
                 state = state.geo,
                 onUpazilaChange = { vm.onGeoChange(upazila = it) },
@@ -478,7 +450,6 @@ private fun ViewerCard(
     state: ScanUiState,
     transform: ViewerTransform,
     onClear: () -> Unit,
-    roi: List<Float>? = null,
 ) {
     MlxCard(padding = 0.dp) {
         Column(
@@ -525,11 +496,7 @@ private fun ViewerCard(
                 .background(Mlx.Brand100),
         ) {
             state.imageUri?.let { uri ->
-                // The single live region box. MedicineBoundingBox used to be drawn
-                // here as well, with `lineIndex = 0` hard-coded — a second orange box
-                // pinned to the first line that never moved no matter which medicine
-                // was selected. Everything now goes through [roi].
-                PrescriptionImageViewer(imageUri = uri, transform = transform, roi = roi)
+                PrescriptionImageViewer(imageUri = uri, transform = transform)
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(

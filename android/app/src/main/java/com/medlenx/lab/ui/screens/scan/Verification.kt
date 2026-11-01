@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,8 +62,6 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.Stroke
 import com.medlenx.lab.ui.components.MlxIconButton
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -266,7 +265,7 @@ private fun MlxSelect(
 
 /**
  * The 180dp prescription thumbnail that heads the verification panel — Figma
- * `VerifyDoctor` (App.tsx:569-583). Amber bounding box, six viewer controls, and the
+ * `VerifyDoctor` (App.tsx:569-583). Viewer controls and the
  * zoom/pan hint pill over a dark scrim.
  */
 @Composable
@@ -281,7 +280,6 @@ private fun VerifyThumbnail(
     zoomLabel: String,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
-    roi: List<Float>? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -307,11 +305,6 @@ private fun VerifyThumbnail(
         // The officer must be able to see the prescription they are verifying; the
         // earlier placeholder-only box made the photo "vanish" on the review panel.
         if (imageUri != null) {
-            // Read in composition: draw scopes do not observe snapshot state, so a
-            // late-arriving aspect would otherwise never repaint the region box.
-            val aspect = transform?.imageAspect ?: 0f
-            // Image and region box share ONE transformed layer, so the box is pinned
-            // to the medicine line instead of drifting away from it under zoom/pan.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -327,30 +320,12 @@ private fun VerifyThumbnail(
                         } else {
                             Modifier
                         },
-                    )
-                    .drawWithContent {
-                        drawContent()
-                        if (roi != null && roi.size == 4) {
-                            val (topLeft, boxSize) = roiRect(size.width, size.height, aspect, roi)
-                            drawRect(
-                                color = Mlx.GuessLight,
-                                topLeft = topLeft,
-                                size = boxSize,
-                                style = Stroke(width = 3f),
-                            )
-                        }
-                    },
+                    ),
             ) {
                 AsyncImage(
                     model = imageUri,
                     contentDescription = "Prescription scan",
                     contentScale = ContentScale.Fit,
-                    onSuccess = { state ->
-                        val intrinsic = state.painter.intrinsicSize
-                        if (transform != null && intrinsic.height > 0f && intrinsic.width > 0f) {
-                            transform.imageAspect = intrinsic.width / intrinsic.height
-                        }
-                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -364,10 +339,6 @@ private fun VerifyThumbnail(
                     .size(48.dp),
             )
         }
-        // Deliberately no hard-coded amber box here. The web draw (App.tsx:572) is a
-        // static decorative rectangle that never moves; porting it verbatim put a
-        // second, frozen orange box on screen next to the real per-medicine region
-        // box. The single live [roi] box below the image is the real one.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -436,7 +407,6 @@ fun VerifyDoctorSection(
     medicineCount: Int,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
-    roi: List<Float>? = null,
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
@@ -450,7 +420,6 @@ fun VerifyDoctorSection(
             FullscreenPrescriptionViewer(
                 imageUri = imageUri,
                 transform = transform,
-                roi = roi,
                 onDismiss = { fullscreen = false },
             )
         }
@@ -465,7 +434,6 @@ fun VerifyDoctorSection(
             zoomLabel = zoomLabel,
             imageUri = imageUri,
             transform = transform,
-            roi = roi,
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
@@ -658,13 +626,12 @@ enum class ViewerAction { ZoomIn, ZoomOut, RotateLeft, RotateRight, Contrast, Fi
  * the form and the medicine cards around them. This is the escape hatch that gives
  * the zoom the whole display. It reuses the caller's [ViewerTransform], so the
  * officer's zoom, pan and rotation survive expanding *and* collapsing — and the
- * orange region box comes along, because the box is drawn from the same transform.
+ * same transform is used in both views.
  */
 @Composable
 private fun FullscreenPrescriptionViewer(
     imageUri: String,
     transform: ViewerTransform,
-    roi: List<Float>?,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -678,7 +645,6 @@ private fun FullscreenPrescriptionViewer(
             PrescriptionImageViewer(
                 imageUri = imageUri,
                 transform = transform,
-                roi = roi,
                 modifier = Modifier.fillMaxSize(),
             )
             Row(
@@ -731,7 +697,6 @@ fun VerifyMedicinesSection(
     onSave: () -> Unit,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
-    roi: List<Float>? = null,
     selectedMedicine: Int = 0,
     onSelectMedicine: (Int) -> Unit = {},
     suggestions: List<com.medlenx.lab.data.model.MedexProduct> = emptyList(),
@@ -752,31 +717,27 @@ fun VerifyMedicinesSection(
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val viewerHeight = maxHeight * 0.28f
+    Column(modifier = Modifier.fillMaxSize()) {
         if (fullscreen && imageUri != null) {
             FullscreenPrescriptionViewer(
                 imageUri = imageUri,
                 transform = transform ?: remember { ViewerTransform() },
-                roi = roi,
                 onDismiss = { fullscreen = false },
             )
         }
-        // Full-featured review of the prescription while editing, with the live
-        // per-medicine orange region box.
+        // Keep the clean prescription visible while reviewing medicines.
         imageUri?.let { uri ->
             val t = transform ?: remember { ViewerTransform() }
             Column(modifier = Modifier.padding(bottom = 12.dp)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(240.dp)
+                        .height(viewerHeight)
                         .background(Mlx.Brand100, MlxShape.Medium),
                 ) {
-                    PrescriptionImageViewer(imageUri = uri, transform = t, roi = roi)
+                    PrescriptionImageViewer(imageUri = uri, transform = t)
                 }
                 Row(
                     modifier = Modifier
@@ -796,10 +757,13 @@ fun VerifyMedicinesSection(
             }
         }
 
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+        ) {
         MlxCard(modifier = Modifier.padding(bottom = 12.dp)) {
             SectionHeader(title = "Medicines Order & Confidence Review")
             Text(
-                text = "Green \u2713 high confidence · Orange \uD83E\uDD16 AI Guess <80% · Tap a name to highlight it on the scan",
+                text = "Green \u2713 high confidence · Orange \uD83E\uDD16 AI Guess <80% · Tap a medicine to edit it",
                 style = MlxType.MicroPill.copy(fontWeight = FontWeight.Normal),
                 color = Mlx.Text600,
                 modifier = Modifier.padding(bottom = 12.dp),
@@ -878,6 +842,8 @@ fun VerifyMedicinesSection(
                 modifier = Modifier.weight(1f),
             )
         }
+        }
+    }
     }
 }
 
@@ -903,22 +869,27 @@ fun VerifyGpsSection(
     MlxCard(modifier = modifier.fillMaxWidth()) {
         SectionHeader(title = "GPS & Territory")
 
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+            val compact = maxWidth < 560.dp
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             GpsField("Upazila", gps.upazila, { onChange(gps.copy(upazila = it)) }, Modifier.weight(1f))
             GpsField("District", gps.district, { onChange(gps.copy(district = it)) }, Modifier.weight(1f))
             GpsField("Territory", gps.territory, { onChange(gps.copy(territory = it)) }, Modifier.weight(1f))
-            MlxButton(
+            if (!compact) MlxButton(
                 text = "GPS",
                 tone = ButtonTone.Outline,
                 onClick = onCaptureGps,
                 icon = Icons.Filled.LocationOn,
             )
+        }
+            if (compact) MlxButton(text = "GPS", tone = ButtonTone.Outline,
+                onClick = onCaptureGps, icon = Icons.Filled.LocationOn)
+            }
         }
 
         val coords = gps.latitude?.let { lat ->

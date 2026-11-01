@@ -24,11 +24,13 @@ import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.repo.MedicineEnricher
 import com.medlenx.lab.data.repo.MedicineMatcher
+import com.medlenx.lab.data.repo.Intelligence
 import com.medlenx.lab.data.repo.PHash
 import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Job
@@ -407,7 +409,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onBrandChange(index: Int, brand: String) {
-        updateCard(index) { it.copy(brand = brand) }
+        updateCard(index) {
+            if (it.brand == brand) it else it.copy(
+                brand = brand, ingredient = "", company = "", strength = "", type = "",
+                companyVerification = CompanyVerification.None, packImage = null,
+                alternatives = emptyList(), catalogueNote = null, matchType = null, substitution = null,
+            )
+        }
+        refreshSubstitution(index)
         state = state.copy(selectedMedicine = index)
         refreshSuggestions(index, brand)
     }
@@ -436,6 +445,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     ?: product.imageUrl,
             )
         }
+        updateCard(index) { it.copy(substitution = null) }
+        refreshSubstitution(index)
         suggestionJob?.cancel()
         state = state.copy(brandSuggestions = emptyList())
     }
@@ -483,7 +494,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     CompanyVerification.None
                 },
-                ingredient = product.generic.ifBlank { it.ingredient },
+                ingredient = product.generic.ifBlank { product.ingredient },
                 strength = product.strength.ifBlank { it.strength },
                 // The web reads the catalogue's `type` first (`data-type` on the button),
                 // so that field leads here too rather than `form`.
@@ -501,6 +512,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 catalogueNote = null,
             )
         }
+        updateCard(index) { it.copy(substitution = null) }
+        refreshSubstitution(index)
         suggestionJob?.cancel()
         state = state.copy(brandSuggestions = emptyList())
     }
@@ -540,10 +553,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 showToast("No MedEx match for \"$brand\".")
                 return@launch
             }
+            if (state.cards.getOrNull(index)?.brand?.trim() != brand) return@launch
             updateCard(index) {
                 it.copy(
                     brand = pick.brandName,
-                    ingredient = pick.generic.ifBlank { pick.ingredient }.ifBlank { it.ingredient },
+                    ingredient = pick.generic.ifBlank { pick.ingredient },
                     company = pick.company,
                     strength = pick.strength.ifBlank { it.strength },
                     type = pick.form.ifBlank { pick.type }.ifBlank { it.type },
@@ -568,6 +582,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     },
                 )
             }
+            updateCard(index) { it.copy(substitution = null) }
+            refreshSubstitution(index)
             showToast(
                 if (pick.company.isBlank()) "Matched ${pick.brandName}."
                 else "Matched ${pick.brandName} - ${pick.company}.",
@@ -728,6 +744,58 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             if (!isActive) return@launch
             if (state.cards.getOrNull(index)?.brand?.trim() == q) {
                 state = state.copy(brandSuggestions = matches)
+            }
+        }
+    }
+
+    private val substitutionJobs = mutableMapOf<Int, Job>()
+
+    /** Recompute only for an exact catalogue brand; never reuse the old generic. */
+    private fun refreshSubstitution(index: Int) {
+        substitutionJobs.remove(index)?.cancel()
+        val card = state.cards.getOrNull(index) ?: return
+        val scan = state.result ?: return
+        val company = MedicineMatcher.resolveOwnCompany(officerProfile?.company).name
+        substitutionJobs[index] = viewModelScope.launch {
+            val resolved = try { withContext(Dispatchers.Default) {
+                val catalogue = scanRepository.medexIndex()
+                val variants = catalogue.exact(card.brand.trim())
+                val product = catalogue.pickVariant(variants, card.strength, card.type)
+                if (product == null) null else product to Intelligence.genericSubstitution(
+                    data = app.graph.regulatoryRepository.data(),
+                    detectedBrand = product.brandName,
+                    detectedCompany = card.company.ifBlank { product.company },
+                    detectedGeneric = card.ingredient.ifBlank { product.generic.ifBlank { product.ingredient } },
+                    detectedStrength = card.strength.ifBlank { product.strength },
+                    detectedType = card.type.ifBlank { product.type.ifBlank { product.form } },
+                    detectedImageUrl = card.packImage ?: product.packImage ?: product.imageUrl,
+                    ownCompany = company,
+                    medex = catalogue,
+                )
+            } } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            val current = state.cards.getOrNull(index)
+            if (state.result === scan && current != null && current.brand == card.brand &&
+                current.ingredient == card.ingredient && current.company == card.company &&
+                current.strength == card.strength && current.type == card.type
+            ) updateCard(index) {
+                if (resolved == null) it.copy(substitution = null)
+                else if (it.ingredient.isNotBlank() || it.company.isNotBlank()) {
+                    it.copy(substitution = resolved.second)
+                } else {
+                    val product = resolved.first
+                    it.copy(
+                        ingredient = product.generic.ifBlank { product.ingredient },
+                        company = product.company,
+                        companyVerification = if (product.company.isBlank()) CompanyVerification.None else CompanyVerification.Verified,
+                        strength = product.strength, type = product.type.ifBlank { product.form },
+                        packImage = product.packImage ?: product.imageUrl,
+                        substitution = resolved.second,
+                    )
+                }
             }
         }
     }
@@ -954,6 +1022,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clear() {
+        substitutionJobs.values.forEach { it.cancel() }
+        substitutionJobs.clear()
         state = ScanUiState()
         duplicateOfRxIds = emptyList()
         // Nothing re-emits on `snapshotFlow { online }` unless the network actually
