@@ -107,6 +107,37 @@ object Migrations {
         }
     }
 
+    /** Preserve unattributed offline captures without assigning them to a user. */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `queued_scans` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+        }
+    }
+
+    /** Profiles and targets from before account scoping remain unassigned. */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `officer_profile_new` (" +
+                "`user_id` TEXT NOT NULL, `company` TEXT NOT NULL, `employee_id` TEXT NOT NULL, " +
+                "`full_name` TEXT NOT NULL, `role` TEXT NOT NULL, `division` TEXT NOT NULL, " +
+                "`territory` TEXT NOT NULL, `portfolio` TEXT NOT NULL, PRIMARY KEY(`user_id`))")
+            db.execSQL("INSERT INTO `officer_profile_new` (`user_id`, `company`, `employee_id`, `full_name`, `role`, `division`, `territory`, `portfolio`) " +
+                "SELECT 'legacy_user', `company`, `employee_id`, `full_name`, `role`, `division`, `territory`, `portfolio` FROM `officer_profile` WHERE `id` = 1")
+            db.execSQL("DROP TABLE `officer_profile`")
+            db.execSQL("ALTER TABLE `officer_profile_new` RENAME TO `officer_profile`")
+            db.execSQL("ALTER TABLE `brand_targets` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+        }
+    }
+
+    /** Keep older team and report records unassigned instead of guessing ownership. */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `doctor_targets` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+            db.execSQL("ALTER TABLE `doctor_visits` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+            db.execSQL("ALTER TABLE `error_reports` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

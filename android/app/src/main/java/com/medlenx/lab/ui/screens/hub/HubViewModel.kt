@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.model.DgdaPrices
 import com.medlenx.lab.data.model.HealthCalendar
 import com.medlenx.lab.data.local.ScannedItemRow
@@ -39,6 +40,7 @@ import java.time.LocalDate
 class HubViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as MedLenXApp
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     private val catalogue = app.graph.catalogue
     private val scanRepository = app.graph.scanRepository
     private val regulatory = app.graph.regulatoryRepository
@@ -181,7 +183,7 @@ class HubViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadScannedRows() {
         val windowMs = tripsDays.toLong() * MILLIS_PER_DAY
         val now = System.currentTimeMillis()
-        scannedRows = prescriptionDao.scannedSince(now - 2 * windowMs)
+        scannedRows = prescriptionDao.scannedSince(currentUid, now - 2 * windowMs)
         tripsBoundary = now - windowMs
     }
 

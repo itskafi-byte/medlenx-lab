@@ -438,8 +438,15 @@ def main() -> int:
                 ddl_lines = {k: v + off for k, v in ddl_lines.items()}
                 line_of.update(ddl_lines)
 
+                # Room rebuild migrations commonly create a temporary table and
+                # rename it after copying data. Validate that table against its
+                # final entity, rather than treating the temporary name as an entity.
+                renames = dict(re.findall(
+                    r"ALTER\s+TABLE\s+`?(\w+)`?\s+RENAME\s+TO\s+`?(\w+)`?", text,
+                    re.IGNORECASE,
+                ))
                 for create in parse_table_creates(text):
-                    table = create["table"]
+                    table = renames.get(create["table"], create["table"])
                     entity = entities.get(table)
                     if entity is None:
                         findings.append(

@@ -27,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
@@ -85,6 +86,7 @@ data class TrainingQueueStats(
 class HelpViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as MedLenXApp
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     var queued by mutableStateOf(false)
         private set
@@ -106,7 +108,7 @@ class HelpViewModel(application: Application) : AndroidViewModel(application) {
      * that stay meaningful without one, and the list shows everything, unsplit.
      */
     val queue: StateFlow<List<ErrorReportEntity>> =
-        app.graph.database.rsmDao().observeErrors()
+        app.graph.database.rsmDao().observeErrors(currentUid)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val stats: StateFlow<TrainingQueueStats> = queue
@@ -124,6 +126,7 @@ class HelpViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 app.graph.database.rsmDao().reportError(
                     ErrorReportEntity(
+                        userId = currentUid,
                         detectedBrand = detectedBrand.trim(),
                         correction = correction.trim(),
                         notes = notes.trim(),

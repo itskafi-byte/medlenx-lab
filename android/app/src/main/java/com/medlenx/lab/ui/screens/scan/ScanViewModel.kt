@@ -94,12 +94,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val locationRepository = app.graph.locationRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
     private val deviceState = app.graph.deviceState
-    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     /** Parked captures are replayed from disk, so the mime travels with the row. */
     private val mimeType = "image/jpeg"
 
-    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES, Context.MODE_PRIVATE)
+    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT))
         private set
     var todayCount by mutableStateOf(0)
@@ -168,7 +168,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // Separate launch: `observe()` never completes, so collecting it in the
             // same coroutine would stop the location cascade from ever being reached.
-            app.graph.profileDao.observe().collect { officerProfile = it }
+            app.graph.profileDao.observe(currentUid).collect { officerProfile = it }
         }
         viewModelScope.launch {
             // Also separate, and also never completes. This is what makes the header's
@@ -284,7 +284,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun parkForReplay(file: File) {
         val parked = runCatching {
-            scanRepository.queueForLater(file.absolutePath, mimeType)
+            scanRepository.queueForLater(currentUid, file.absolutePath, mimeType)
         }.isSuccess
         state = state.copy(
             phase = ScanPhase.Ready,
@@ -310,7 +310,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (!deviceState.online) return
         if (state.phase != ScanPhase.Empty) return
         viewModelScope.launch {
-            scanRepository.drainQueue { row -> replayQueued(row) }
+            scanRepository.drainQueue(currentUid) { row -> replayQueued(row) }
         }
     }
 
@@ -653,6 +653,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             .orEmpty()
         viewModelScope.launch {
             val row = ErrorReportEntity(
+                userId = currentUid,
                 detectedBrand = asRead.ifBlank { card.brand.trim() },
                 correction = card.brand.trim(),
                 notes = buildList {
@@ -697,6 +698,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             .orEmpty()
         viewModelScope.launch {
             val row = ErrorReportEntity(
+                userId = currentUid,
                 detectedBrand = asRead.ifBlank { card.brand.trim() },
                 correction = card.brand.trim(),
                 notes = buildList {

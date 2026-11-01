@@ -247,7 +247,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         // Never blank, and the flag says whether the rep picked it: a blank own company
         // would silently drop every portfolio match in the drawer, which is the pills and
         // the pitch button gone from every row (`main.py:102` always resolves one).
-        val own = MedicineMatcher.resolveOwnCompany(app.graph.profileDao.current()?.company)
+        val own = MedicineMatcher.resolveOwnCompany(app.graph.profileDao.current(currentUid)?.company)
         val ownCompany = own.name
         val lines = rows.map { RxAudit.lineOf(it) }
 
@@ -485,7 +485,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val span = filterSpan()
                 val since = now - span
                 val prevStart = since - span
-                val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+                val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
                 val ownLike = "%$ownToken%"
@@ -564,7 +564,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val span = filters.days?.let { it * 24L * 60 * 60 * 1000 }
                     ?: System.currentTimeMillis()
                 val since = System.currentTimeMillis() - span
-                val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+                val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
                 loadLeaderPageSync(since, "%$ownToken%")

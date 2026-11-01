@@ -18,7 +18,6 @@ import com.medlenx.lab.data.remote.VlOutcome
 import com.medlenx.lab.util.Bengali
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 /** Progress reported to the scan screen while a capture is in flight. */
@@ -50,8 +49,6 @@ class ScanRepository(
     private val catalogue: AssetCatalogue,
 ) {
 
-    val queued: Flow<List<QueuedScanEntity>> get() = queueDao.observeAll()
-
     suspend fun scan(imageBytes: ByteArray, mimeType: String = "image/jpeg"): ScanProgress {
         if (!vlClient.hasKey) return ScanProgress.NeedsApiKey
         return when (val outcome = vlClient.scanPrescription(imageBytes, mimeType)) {
@@ -62,14 +59,19 @@ class ScanRepository(
     }
 
     /** Parks a capture for replay when connectivity returns. */
-    suspend fun queueForLater(imagePath: String, payload: String): Long =
-        queueDao.enqueue(
+    suspend fun queueForLater(currentUid: String, imagePath: String, payload: String): Long {
+        check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid) {
+            "Sign in before queuing a capture"
+        }
+        return queueDao.enqueue(
             QueuedScanEntity(
+                userId = currentUid,
                 imagePath = imagePath,
                 payload = payload,
                 createdAt = System.currentTimeMillis(),
             ),
         )
+    }
 
     /**
      * The [DoctorEntity] id this prescription belongs to, creating it if needed.
@@ -206,19 +208,21 @@ class ScanRepository(
      *
      * @return how many rows were drained - 0 or 1.
      */
-    suspend fun drainQueue(handler: suspend (QueuedScanEntity) -> Boolean): Int {
+    suspend fun drainQueue(currentUid: String, handler: suspend (QueuedScanEntity) -> Boolean): Int {
         var drained = 0
         // Snapshot the queue once, then process: observeAll() is a Flow and must not
         // be collected while entries are being removed from it.
-        val pending = queueDao.observeAll().first()
+        if (currentUid.isBlank() || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return 0
+        val pending = queueDao.observeAll(currentUid).first()
         for (row in pending) {
+            if (FirebaseAuth.getInstance().currentUser?.uid != currentUid) break
             if (row.attempts >= MAX_QUEUE_ATTEMPTS) {
-                queueDao.remove(row)
+                queueDao.remove(currentUid, row.id)
                 continue
             }
-            queueDao.markAttempt(row.id)
+            queueDao.markAttempt(currentUid, row.id)
             if (handler(row)) {
-                queueDao.remove(row)
+                queueDao.remove(currentUid, row.id)
                 drained++
                 break
             }

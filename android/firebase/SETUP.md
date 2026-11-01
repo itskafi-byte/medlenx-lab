@@ -59,17 +59,20 @@ content restrictions require a trusted server-side ingestion path.
   yet perform this lookup.
 - Make the local Room write and cloud submission crash-safe. Firestore
   persistence alone cannot make a Room write and a Firestore write atomic.
-  Surface rejected writes and preserve the selected sign-out policy: block
-  sign-out until pending writes are acknowledged. A Firestore instance must be
-  terminated before clearing persistence; clearing it deletes pending writes.
+  Surface rejected writes. Sign-out currently retains local data and must not
+  delete unsynced work. A Firestore instance must be terminated before clearing
+  persistence; clearing it deletes pending writes, so that cannot be added to
+  sign-out without a durable alternative for pending uploads.
 - Partition all user-local data by authenticated UID, including profile, scans,
   medicines, targets, queue, preferences and images. The current database is
   shared across sign-ins and is not yet partitioned. New prescription rows now
   record the signed-in UID, while historical rows are marked `legacy_user`.
-  Recent-audit and Analytics queries have UID predicates, but Team, shared
-  profiles, targets, queue, legacy images, and other paths are not yet isolated;
-  this is **not total isolation**. Any later cloud
-  upload of existing local scans requires a deliberate migration.
+  Recent-audit, Analytics and several Team queries, profiles, brand targets and
+  the image-processing queue now use UID predicates. The shared doctor table,
+  legacy-image migration, and other paths still need a complete isolation audit;
+  this is **not total isolation**. Legacy images are retained, but recent capture
+  previews only open images in the current user's scoped directory. Any later
+  cloud upload of existing local scans requires a deliberate migration.
 - Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
   results and pending writes require deliberate treatment on shared devices;
   server rules cannot revoke data already cached offline.

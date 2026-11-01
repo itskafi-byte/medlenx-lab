@@ -41,6 +41,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.BuildConfig
+import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.ui.shell.BrandLockup
 import com.medlenx.lab.ui.theme.Mlx
 
@@ -66,6 +67,11 @@ fun AuthGate(content: @Composable () -> Unit) {
         onDispose { auth?.removeAuthStateListener(listener) }
     }
     val currentUid = uid
+    DisposableEffect(currentUid) {
+        val graph = (context.applicationContext as MedLenXApp).graph
+        graph.deviceState.bindUser(currentUid, graph.scope)
+        onDispose { graph.deviceState.bindUser(null, graph.scope) }
+    }
     if (currentUid == null) {
         AuthScreen(auth)
     } else {

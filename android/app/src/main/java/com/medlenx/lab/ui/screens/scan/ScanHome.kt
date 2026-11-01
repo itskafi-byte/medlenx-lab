@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -57,6 +58,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.medlenx.lab.data.local.PrescriptionEntity
+import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.repo.PharmaHub
 import com.medlenx.lab.ui.screens.analytics.RecentRxRow
 import com.medlenx.lab.ui.screens.analytics.toRecentRxRows
@@ -77,6 +79,7 @@ fun ScanHome(
     onOpenHub: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var selected by remember { mutableStateOf<PrescriptionEntity?>(null) }
     selected?.let { rx ->
         val image = remember(rx.imagePath) { File(rx.imagePath) }
@@ -88,12 +91,12 @@ fun ScanHome(
                     Text("Prescription ${rx.rxNo}", modifier = Modifier.weight(1f), style = MlxType.CardTitle)
                     IconButton(onClick = { selected = null }) { Icon(Icons.Filled.Close, "Close") }
                 }
-                if (rx.imagePath.isNotBlank() && image.isFile) {
+                if (rx.imagePath.isNotBlank() && image.isFile && UserCaptureFiles.ownsStored(context, vm.currentUid, image)) {
                     Box(Modifier.fillMaxWidth().height(300.dp)) {
                         PrescriptionImageViewer(imageUri = Uri.fromFile(image).toString(), transform = transform)
                     }
                     Text("Pinch to zoom · Drag to pan", style = MlxType.Footnote)
-                } else Text("The local prescription image is no longer available.", style = MlxType.BodySmall)
+                } else Text("This image is unavailable or requires legacy review.", style = MlxType.BodySmall)
                 OutlinedButton(onClick = { selected = null; onOpenAudit(listOf(rx).toRecentRxRows().first()) },
                     modifier = Modifier.fillMaxWidth()) { Text("View saved audit") }
             }
@@ -111,7 +114,7 @@ fun ScanHome(
                     DailyTargetCard(vm)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    RecentCaptures(vm.recentCaptures) { selected = it }
+                    RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
                     HubFeed(hubVm, onOpenUrl, onOpenHub)
                 }
             }
@@ -122,7 +125,7 @@ fun ScanHome(
             ) {
                 CaptureHero(vm, onCamera, onGallery)
                 DailyTargetCard(vm)
-                RecentCaptures(vm.recentCaptures) { selected = it }
+                RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
                 HubFeed(hubVm, onOpenUrl, onOpenHub)
             }
         }
@@ -214,7 +217,8 @@ private fun DailyTargetCard(vm: ScanViewModel) {
 }
 
 @Composable
-private fun RecentCaptures(captures: List<PrescriptionEntity>, onSelect: (PrescriptionEntity) -> Unit) {
+private fun RecentCaptures(captures: List<PrescriptionEntity>, currentUid: String, onSelect: (PrescriptionEntity) -> Unit) {
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Recent Captures", style = MlxType.CardTitle)
         if (captures.isEmpty()) {
@@ -227,7 +231,7 @@ private fun RecentCaptures(captures: List<PrescriptionEntity>, onSelect: (Prescr
                 row.forEach { rx ->
                     Column(Modifier.weight(1f).clip(MlxShape.Medium).background(Color.White).clickable { onSelect(rx) }) {
                         Box(Modifier.fillMaxWidth().height(90.dp).background(Mlx.Brand100), contentAlignment = Alignment.Center) {
-                            if (rx.imagePath.isNotBlank() && File(rx.imagePath).isFile) {
+                            if (rx.imagePath.isNotBlank() && File(rx.imagePath).isFile && UserCaptureFiles.ownsStored(context, currentUid, File(rx.imagePath))) {
                                 AsyncImage(model = File(rx.imagePath), contentDescription = "Prescription ${rx.rxNo}",
                                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                             } else Icon(Icons.Filled.Image, contentDescription = "Image unavailable", tint = Mlx.Text400, modifier = Modifier.size(28.dp))

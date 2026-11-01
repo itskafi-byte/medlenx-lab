@@ -145,6 +145,7 @@ data class ScannedMedicineEntity(
 @Entity(tableName = "queued_scans")
 data class QueuedScanEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "image_path") val imagePath: String,
     val payload: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
@@ -154,7 +155,7 @@ data class QueuedScanEntity(
 /** Officer card — company, identity, territory, portfolio. */
 @Entity(tableName = "officer_profile")
 data class OfficerProfileEntity(
-    @PrimaryKey val id: Int = 1,
+    @PrimaryKey @ColumnInfo(name = "user_id") val userId: String,
     val company: String,
     @ColumnInfo(name = "employee_id") val employeeId: String,
     @ColumnInfo(name = "full_name") val fullName: String,
@@ -168,6 +169,7 @@ data class OfficerProfileEntity(
 @Entity(tableName = "brand_targets")
 data class BrandTargetEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     val brand: String,
     val target: Int,
 )
@@ -176,6 +178,7 @@ data class BrandTargetEntity(
 @Entity(tableName = "doctor_targets")
 data class DoctorTargetEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "mpo_id") val mpoId: String,
     @ColumnInfo(name = "mpo_name") val mpoName: String,
     @ColumnInfo(name = "doctor_name") val doctorName: String,
@@ -190,6 +193,7 @@ data class DoctorTargetEntity(
 )
 data class DoctorVisitEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "target_id") val targetId: Long,
     @ColumnInfo(name = "prescription_id") val prescriptionId: Long,
     @ColumnInfo(name = "doctor_name") val doctorName: String,
@@ -201,6 +205,7 @@ data class DoctorVisitEntity(
 @Entity(tableName = "error_reports")
 data class ErrorReportEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "detected_brand") val detectedBrand: String,
     val correction: String,
     val notes: String,

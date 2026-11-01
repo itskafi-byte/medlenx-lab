@@ -18,7 +18,7 @@ import androidx.room.RoomDatabase
         DoctorVisitEntity::class,
         ErrorReportEntity::class,
     ],
-    version = 4,
+    version = 7,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
@@ -39,14 +39,8 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 MedLenXDatabase::class.java,
                 "medlenx.db",
             )
-                // Kept as the fallback for any *other* version change, but v1->v2
-                // is a real migration: see [Migrations.MIGRATION_1_2]. Room prefers
-                // a registered migration over the destructive path, so this only
-                // fires for a version it has no route for -- and a wipe is the
-                // right answer there, since the rest of the schema is derived data
-                // that the next scan rebuilds.
-                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4)
-                .fallbackToDestructiveMigration(dropAllTables = true)
+                // Never silently wipe unsynced local data on an unknown schema.
+                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7)
                 .build()
                 .also { instance = it }
         }

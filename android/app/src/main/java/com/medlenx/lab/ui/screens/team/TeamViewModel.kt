@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.local.DoctorTargetRow
 import com.medlenx.lab.data.local.DoctorTierRow
 import com.medlenx.lab.data.local.DoctorVisitRow
@@ -40,6 +41,7 @@ import kotlinx.coroutines.launch
 class TeamViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as MedLenXApp
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     private val prescriptionDao = app.graph.database.prescriptionDao()
 
     /** `get_doctor_tiers(days=30)`. */
@@ -128,7 +130,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
     /** Removes an RSM doctor detailing target and reloads the tracker. */
     fun removeDoctorTarget(targetId: Long) {
         viewModelScope.launch {
-            runCatching { app.graph.profileDao.deleteDoctorTarget(targetId) }
+            runCatching { app.graph.profileDao.deleteDoctorTarget(currentUid, targetId) }
                 .onFailure { error = it.message ?: "Could not remove the target" }
             load()
         }
@@ -148,38 +150,38 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 // `init` kicks off the first load, and reading the stale field
                 // would silently tier every brand against the Python default
                 // company instead of the officer's own.
-                val ownCompany = app.graph.profileDao.current()?.company.orEmpty()
+                val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 ownCompanyUsed = ownCompany
                 // `own_token = own_company.split()[0]`, then `%token%`.
                 val ownToken = ownCompany.ifBlank { TeamMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
-                tierRows = prescriptionDao.doctorTierRows(
+                tierRows = prescriptionDao.doctorTierRows(currentUid,
                     since = since,
                     ownLike = "%$ownToken%",
                     minRx = 1,
                     limit = 200,
                 )
-                stewardshipRows = prescriptionDao.stewardshipRows(since = since)
+                stewardshipRows = prescriptionDao.stewardshipRows(currentUid, since = since)
 
                 val centroids = app.graph.locationRepository.geo().districts
                     .mapValues { Centroid(it.value.lat, it.value.lng) }
                 // Same `%token%` own-brand matcher the tiering query above uses.
                 val ownLike = "%$ownToken%"
                 geoRegions = TeamMetrics.geoHeatmap(
-                    rows = prescriptionDao.geoRegionRows(since = since, ownLike = ownLike),
+                    rows = prescriptionDao.geoRegionRows(currentUid, since = since, ownLike = ownLike),
                     centroids = centroids,
                 )
                 scanPoints = TeamMetrics.scanPoints(
-                    rows = prescriptionDao.scanPointRows(since = since, limit = 2000),
+                    rows = prescriptionDao.scanPointRows(currentUid, since = since, limit = 2000),
                     centroids = centroids,
                 )
                 trends = TeamMetrics.rsmTrends(
-                    rows = prescriptionDao.trendRows(since = since),
+                    rows = prescriptionDao.trendRows(currentUid, since = since),
                     ownCompany = ownCompany,
                     days = days,
                     baseMillis = since,
                 )
-                offTerritory = prescriptionDao.offTerritoryRows(since = since, limit = 50)
+                offTerritory = prescriptionDao.offTerritoryRows(currentUid, since = since, limit = 50)
 
                 // `get_target_progress` measures the calendar month, not a rolling
                 // 30 days, so it gets its own boundary.
@@ -191,13 +193,13 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 val month = LocalDate.now()
                     .format(DateTimeFormatter.ofPattern("yyyy-MM", Locale.US))
                 targetProgress = TeamMetrics.targetProgress(
-                    targets = app.graph.profileDao.observeTargets().first()
+                    targets = app.graph.profileDao.observeTargets(currentUid).first()
                         .map { BrandTarget(it.brand, it.target) },
-                    captured = prescriptionDao.brandCapturedRows(since = monthStart),
+                    captured = prescriptionDao.brandCapturedRows(currentUid, since = monthStart),
                     month = month,
                 )
-                doctorTargets = app.graph.profileDao.doctorTargetRows()
-                visitLog = app.graph.profileDao.recentVisits(limit = 20)
+                doctorTargets = app.graph.profileDao.doctorTargetRows(currentUid)
+                visitLog = app.graph.profileDao.recentVisits(currentUid, limit = 20)
             }.onFailure { e ->
                 error = e.message ?: "Could not load team aggregates"
             }
@@ -207,7 +209,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            app.graph.profileDao.observe().collect { profile ->
+            app.graph.profileDao.observe(currentUid).collect { profile ->
                 officerProfile = profile
                 // The own-brand token feeds the tiering SQL, so changing the
                 // company on the Settings screen has to re-run the aggregates.

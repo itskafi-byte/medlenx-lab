@@ -112,10 +112,10 @@ interface PrescriptionDao {
                p.created_at AS createdAt
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.created_at >= :since
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
         """
     )
-    suspend fun scannedSince(since: Long): List<ScannedItemRow>
+    suspend fun scannedSince(currentUid: String, since: Long): List<ScannedItemRow>
 
     /**
      * Per-doctor prescribing volumes for the tiering matrix — `get_doctor_tiers`
@@ -135,23 +135,23 @@ interface PrescriptionDao {
     @Query(
         """
         SELECT p.doctor_name AS doctorName,
-               IFNULL(d.specialty, '') AS specialty,
-               IFNULL(d.district, '') AS district,
-               IFNULL(d.territory, '') AS territory,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(p.district, '') AS district,
+               IFNULL(p.territory, '') AS territory,
                COUNT(DISTINCT p.id) AS rx,
                COUNT(sm.id) AS items,
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
         FROM prescriptions p
         LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
         GROUP BY p.doctor_id
         HAVING rx >= :minRx
         ORDER BY rx DESC
         LIMIT :limit
         """
     )
-    suspend fun doctorTierRows(
+    suspend fun doctorTierRows(currentUid: String,
         since: Long,
         ownLike: String,
         minRx: Int,
@@ -163,17 +163,17 @@ interface PrescriptionDao {
         """
         SELECT p.id AS prescriptionId,
                p.doctor_name AS doctorName,
-               IFNULL(d.specialty, '') AS specialty,
-               IFNULL(d.district, '') AS district,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               IFNULL(p.district, '') AS district,
                sm.generic AS generic,
                sm.brand_name AS brandName
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
         LEFT JOIN doctors d ON p.doctor_id = d.id
-        WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
         """
     )
-    suspend fun stewardshipRows(since: Long): List<StewardshipRow>
+    suspend fun stewardshipRows(currentUid: String, since: Long): List<StewardshipRow>
 
     /**
      * `find_off_territory_audits`: geofence failures, newest first.
@@ -191,12 +191,12 @@ interface PrescriptionDao {
                upazila, district, territory, lat, lng,
                territory_note AS territoryNote, total_medicines AS totalMedicines
         FROM prescriptions
-        WHERE off_territory = 1 AND created_at >= :since
+        WHERE user_id = :currentUid AND off_territory = 1 AND created_at >= :since
         ORDER BY created_at DESC
         LIMIT :limit
         """
     )
-    suspend fun offTerritoryRows(since: Long, limit: Int): List<OffTerritoryRow>
+    suspend fun offTerritoryRows(currentUid: String, since: Long, limit: Int): List<OffTerritoryRow>
 
     /** `get_scan_points`: point-level scan locations for the density map. */
     @Query(
@@ -208,12 +208,12 @@ interface PrescriptionDao {
                (SELECT COUNT(*) FROM scanned_medicines sm
                  WHERE sm.prescription_id = p.id) AS items
         FROM prescriptions p
-        WHERE p.created_at >= :since
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
         ORDER BY p.id DESC
         LIMIT :limit
         """
     )
-    suspend fun scanPointRows(since: Long, limit: Int): List<ScanPointRow>
+    suspend fun scanPointRows(currentUid: String, since: Long, limit: Int): List<ScanPointRow>
 
     /** `get_rsm_trends`: one row per scanned item with its captured company. */
     @Query(
@@ -221,10 +221,10 @@ interface PrescriptionDao {
         SELECT p.created_at AS createdAt, sm.company_name AS companyName
         FROM prescriptions p
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.created_at >= :since
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
         """
     )
-    suspend fun trendRows(since: Long): List<TrendItemRow>
+    suspend fun trendRows(currentUid: String, since: Long): List<TrendItemRow>
 
     /**
      * `get_target_progress`: this calendar month's captured count per brand.
@@ -237,11 +237,11 @@ interface PrescriptionDao {
         SELECT sm.brand_name AS brand, COUNT(*) AS captured
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.created_at >= :since
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
         GROUP BY sm.brand_name COLLATE NOCASE
         """
     )
-    suspend fun brandCapturedRows(since: Long): List<BrandCapturedRow>
+    suspend fun brandCapturedRows(currentUid: String, since: Long): List<BrandCapturedRow>
 
     /**
      * `get_geo_heatmap`: prescriptions aggregated by district + upazila with the
@@ -256,12 +256,12 @@ interface PrescriptionDao {
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
         FROM prescriptions p
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.created_at >= :since AND IFNULL(p.district, '') != ''
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.district, '') != ''
         GROUP BY p.district, p.upazila
         ORDER BY items DESC
         """
     )
-    suspend fun geoRegionRows(since: Long, ownLike: String): List<GeoRegionRow>
+    suspend fun geoRegionRows(currentUid: String, since: Long, ownLike: String): List<GeoRegionRow>
 
     // ---- Analytics aggregates ------------------------------------------
 
@@ -846,17 +846,17 @@ interface QueueDao {
     @Insert
     suspend fun enqueue(row: QueuedScanEntity): Long
 
-    @Query("SELECT * FROM queued_scans ORDER BY created_at ASC")
-    fun observeAll(): Flow<List<QueuedScanEntity>>
+    @Query("SELECT * FROM queued_scans WHERE user_id = :currentUid ORDER BY created_at ASC")
+    fun observeAll(currentUid: String): Flow<List<QueuedScanEntity>>
 
-    @Query("SELECT COUNT(*) FROM queued_scans")
-    fun observeCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM queued_scans WHERE user_id = :currentUid")
+    fun observeCount(currentUid: String): Flow<Int>
 
-    @Delete
-    suspend fun remove(row: QueuedScanEntity)
+    @Query("DELETE FROM queued_scans WHERE user_id = :currentUid AND id = :id")
+    suspend fun remove(currentUid: String, id: Long)
 
-    @Query("UPDATE queued_scans SET attempts = attempts + 1 WHERE id = :id")
-    suspend fun markAttempt(id: Long)
+    @Query("UPDATE queued_scans SET attempts = attempts + 1 WHERE user_id = :currentUid AND id = :id")
+    suspend fun markAttempt(currentUid: String, id: Long)
 }
 
 @Dao
@@ -864,32 +864,33 @@ interface ProfileDao {
     @Upsert
     suspend fun save(profile: OfficerProfileEntity)
 
-    @Query("SELECT * FROM officer_profile WHERE id = 1")
-    fun observe(): Flow<OfficerProfileEntity?>
+    @Query("SELECT * FROM officer_profile WHERE user_id = :currentUid")
+    fun observe(currentUid: String): Flow<OfficerProfileEntity?>
 
-    @Query("SELECT * FROM officer_profile WHERE id = 1")
-    suspend fun current(): OfficerProfileEntity?
+    @Query("SELECT * FROM officer_profile WHERE user_id = :currentUid")
+    suspend fun current(currentUid: String): OfficerProfileEntity?
 
-    @Query("SELECT * FROM brand_targets ORDER BY brand")
-    fun observeTargets(): Flow<List<BrandTargetEntity>>
+    @Query("SELECT * FROM brand_targets WHERE user_id = :currentUid ORDER BY brand")
+    fun observeTargets(currentUid: String): Flow<List<BrandTargetEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveTargets(targets: List<BrandTargetEntity>)
 
-    @Query("DELETE FROM brand_targets")
-    suspend fun clearTargets()
+    @Query("DELETE FROM brand_targets WHERE user_id = :currentUid")
+    suspend fun clearTargets(currentUid: String)
 
     /** RSM-attached doctor detailing targets with their auto-logged visit counts. */
     @Query(
         """
         SELECT t.id AS targetId, t.doctor_name AS doctorName, t.specialty AS specialty,
                t.monthly_target AS monthlyTarget,
-               (SELECT COUNT(*) FROM doctor_visits v WHERE v.target_id = t.id) AS visits
+               (SELECT COUNT(*) FROM doctor_visits v WHERE v.target_id = t.id AND v.user_id = :currentUid) AS visits
         FROM doctor_targets t
+        WHERE t.user_id = :currentUid
         ORDER BY t.doctor_name
         """
     )
-    suspend fun doctorTargetRows(): List<DoctorTargetRow>
+    suspend fun doctorTargetRows(currentUid: String): List<DoctorTargetRow>
 
     /** Auto-logged visits, newest first, with the Rx that produced each one. */
     @Query(
@@ -897,43 +898,44 @@ interface ProfileDao {
         SELECT v.doctor_name AS doctorName, v.mr_id AS mrId,
                v.visited_at AS visitedAt, IFNULL(p.rx_no, '') AS rxNo
         FROM doctor_visits v
-        LEFT JOIN prescriptions p ON p.id = v.prescription_id
+        LEFT JOIN prescriptions p ON p.id = v.prescription_id AND p.user_id = :currentUid
+        WHERE v.user_id = :currentUid
         ORDER BY v.visited_at DESC
         LIMIT :limit
         """
     )
-    suspend fun recentVisits(limit: Int): List<DoctorVisitRow>
+    suspend fun recentVisits(currentUid: String, limit: Int): List<DoctorVisitRow>
 
-    @Query("DELETE FROM doctor_targets WHERE id = :targetId")
-    suspend fun deleteDoctorTarget(targetId: Long)
+    @Query("DELETE FROM doctor_targets WHERE user_id = :currentUid AND id = :targetId")
+    suspend fun deleteDoctorTarget(currentUid: String, targetId: Long)
 }
 
 @Dao
 interface RsmDao {
-    @Query("SELECT * FROM doctor_targets ORDER BY mpo_name, doctor_name")
-    fun observeTargets(): Flow<List<DoctorTargetEntity>>
+    @Query("SELECT * FROM doctor_targets WHERE user_id = :currentUid ORDER BY mpo_name, doctor_name")
+    fun observeTargets(currentUid: String): Flow<List<DoctorTargetEntity>>
 
     @Insert
     suspend fun addTarget(target: DoctorTargetEntity): Long
 
-    @Query("DELETE FROM doctor_targets WHERE id = :id")
-    suspend fun removeTarget(id: Long)
+    @Query("DELETE FROM doctor_targets WHERE user_id = :currentUid AND id = :id")
+    suspend fun removeTarget(currentUid: String, id: Long)
 
-    @Query("SELECT * FROM doctor_targets WHERE doctor_name = :doctor COLLATE NOCASE")
-    suspend fun targetsForDoctor(doctor: String): List<DoctorTargetEntity>
+    @Query("SELECT * FROM doctor_targets WHERE user_id = :currentUid AND doctor_name = :doctor COLLATE NOCASE")
+    suspend fun targetsForDoctor(currentUid: String, doctor: String): List<DoctorTargetEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun logVisit(visit: DoctorVisitEntity): Long
 
-    @Query("SELECT * FROM doctor_visits WHERE target_id = :targetId")
-    suspend fun visitsFor(targetId: Long): List<DoctorVisitEntity>
+    @Query("SELECT * FROM doctor_visits WHERE user_id = :currentUid AND target_id = :targetId")
+    suspend fun visitsFor(currentUid: String, targetId: Long): List<DoctorVisitEntity>
 
-    @Query("SELECT * FROM doctor_visits ORDER BY visited_at DESC LIMIT :limit")
-    suspend fun recentVisits(limit: Int = 25): List<DoctorVisitEntity>
+    @Query("SELECT * FROM doctor_visits WHERE user_id = :currentUid ORDER BY visited_at DESC LIMIT :limit")
+    suspend fun recentVisits(currentUid: String, limit: Int = 25): List<DoctorVisitEntity>
 
     @Insert
     suspend fun reportError(row: ErrorReportEntity): Long
 
-    @Query("SELECT * FROM error_reports ORDER BY created_at DESC")
-    fun observeErrors(): Flow<List<ErrorReportEntity>>
+    @Query("SELECT * FROM error_reports WHERE user_id = :currentUid ORDER BY created_at DESC")
+    fun observeErrors(currentUid: String): Flow<List<ErrorReportEntity>>
 }

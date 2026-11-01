@@ -10,8 +10,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.local.BrandTargetEntity
 import com.medlenx.lab.data.local.DailyTargetSettings
+import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
@@ -26,9 +28,10 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as MedLenXApp
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     private val profileDao = app.graph.profileDao
 
-    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES, Context.MODE_PRIVATE)
+    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString())
         private set
     fun updateDailyTarget(value: String) { if (value.length <= 4 && value.all { it.isDigit() }) dailyTarget = value }
@@ -130,7 +133,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             runCatching {
                 locations = app.graph.locationRepository.locations()
                 allCompanies = app.graph.database.medexDao().companies()
-                profileDao.current()?.let { p ->
+                profileDao.current(currentUid)?.let { p ->
                     company = p.company
                     employeeId = p.employeeId
                     fullName = p.fullName
@@ -140,9 +143,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     portfolio = p.portfolio
                 }
                 val captured = app.graph.database.prescriptionDao()
-                    .brandCapturedRows(since = startOfMonth())
+                    .brandCapturedRows(currentUid, since = startOfMonth())
                     .associateBy({ it.brand.lowercase() }, { it.captured })
-                targets = profileDao.observeTargets().first().map { t ->
+                targets = profileDao.observeTargets(currentUid).first().map { t ->
                     TargetDraft(
                         brand = t.brand,
                         monthlyTarget = t.target,
@@ -163,10 +166,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 return@launch
             }
             runCatching {
-                val existing = profileDao.current()
+                check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid) { "Sign in to save your profile" }
                 profileDao.save(
                     OfficerProfileEntity(
-                        id = existing?.id ?: 1,
+                        userId = currentUid,
                         company = company,
                         employeeId = employeeId,
                         fullName = fullName,
@@ -178,8 +181,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 )
                 val rows = targets
                     .filter { it.brand.isNotBlank() }
-                    .map { BrandTargetEntity(brand = it.brand, target = it.monthlyTarget) }
-                profileDao.clearTargets()
+                    .map { BrandTargetEntity(userId = currentUid, brand = it.brand, target = it.monthlyTarget) }
+                profileDao.clearTargets(currentUid)
                 profileDao.saveTargets(rows)
             }.onFailure {
                 error = it.message ?: "Could not save the officer card"
