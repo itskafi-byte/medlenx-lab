@@ -251,6 +251,9 @@ fun MedLenXShell(
                             when (dest) {
                                 Destination.Scan -> ScanScreen(
                                     vm = scanVm,
+                                    hubVm = hubVm,
+                                    onOpenHub = { navController.navigate(Destination.Hub.route) },
+                                    onOpenUrl = { url -> openUrl(context, url) },
                                     onOpenAudit = {
                                         navController.navigate(Destination.RxAudit.route)
                                     },

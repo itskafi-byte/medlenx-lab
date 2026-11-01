@@ -1,6 +1,8 @@
 package com.medlenx.lab.ui.screens.scan
 
 import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.local.DailyTargetSettings
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.PrescriptionEntity
@@ -30,6 +33,7 @@ import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -92,6 +96,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     /** Parked captures are replayed from disk, so the mime travels with the row. */
     private val mimeType = "image/jpeg"
 
+    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES, Context.MODE_PRIVATE)
+    var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT))
+        private set
+    var todayCount by mutableStateOf(0)
+        private set
+    var recentCaptures by mutableStateOf<List<PrescriptionEntity>>(emptyList())
+        private set
+    private val targetListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == DailyTargetSettings.KEY) dailyTarget = prefs.getInt(key, DailyTargetSettings.DEFAULT)
+    }
+
     /** Header-chip state, surfaced so the scan tab can render the offline queue banner. */
     val online: Boolean get() = deviceState.online
     val queuedScans: Int get() = deviceState.queuedScans
@@ -124,6 +139,24 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     init {
+        targetPrefs.registerOnSharedPreferenceChangeListener(targetListener)
+        viewModelScope.launch { prescriptionDao.observeRecent(4).collect { recentCaptures = it } }
+        viewModelScope.launch {
+            var day: java.time.LocalDate? = null
+            var counter: Job? = null
+            while (isActive) {
+                val now = java.time.LocalDate.now()
+                if (day != now) {
+                    day = now
+                    counter?.cancel()
+                    val zone = java.time.ZoneId.systemDefault()
+                    val start = now.atStartOfDay(zone).toInstant().toEpochMilli()
+                    val end = now.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    counter = launch { prescriptionDao.observeCountBetween(start, end).collect { todayCount = it } }
+                }
+                delay(30_000)
+            }
+        }
         viewModelScope.launch {
             // Loads the district/upazila/territory cascade and the geo centroids.
             locationRepository.locations()
@@ -1019,6 +1052,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 pinnedDistrict = verdict.gpsDistrict.ifBlank { geo.pinnedDistrict },
             ),
         )
+    }
+
+    override fun onCleared() {
+        targetPrefs.unregisterOnSharedPreferenceChangeListener(targetListener)
+        super.onCleared()
     }
 
     fun clear() {

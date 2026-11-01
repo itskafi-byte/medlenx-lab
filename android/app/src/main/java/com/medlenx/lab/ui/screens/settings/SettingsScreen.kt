@@ -159,6 +159,11 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(MlxD.Space4))
 
+            FieldLabel("Daily Scan Target")
+            MlxTextField(value = vm.dailyTarget, onValueChange = vm::updateDailyTarget,
+                keyboardType = KeyboardType.Number, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(MlxD.Space4))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

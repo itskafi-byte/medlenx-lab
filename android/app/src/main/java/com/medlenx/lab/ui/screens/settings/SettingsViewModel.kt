@@ -1,6 +1,7 @@
 package com.medlenx.lab.ui.screens.settings
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.BrandTargetEntity
+import com.medlenx.lab.data.local.DailyTargetSettings
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
@@ -25,6 +27,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val app = application as MedLenXApp
     private val profileDao = app.graph.profileDao
+
+    private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES, Context.MODE_PRIVATE)
+    var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString())
+        private set
+    fun updateDailyTarget(value: String) { if (value.length <= 4 && value.all { it.isDigit() }) dailyTarget = value }
 
     val roles = listOf("MPO", "RSO", "RSM", "Territory Manager", "Product Manager")
     val roleLabels = mapOf(
@@ -150,6 +157,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             error = null
             saved = false
+            val target = dailyTarget.toIntOrNull()
+            if (target == null || target <= 0) {
+                error = "Enter a daily scan target greater than zero."
+                return@launch
+            }
             runCatching {
                 val existing = profileDao.current()
                 profileDao.save(
@@ -173,6 +185,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 error = it.message ?: "Could not save the officer card"
                 return@launch
             }
+            targetPrefs.edit().putInt(DailyTargetSettings.KEY, target).apply()
             saved = true
             load()
         }

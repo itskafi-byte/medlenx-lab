@@ -86,6 +86,9 @@ interface PrescriptionDao {
     @Query("SELECT * FROM prescriptions ORDER BY created_at DESC LIMIT :limit")
     fun observeRecent(limit: Int = 10): Flow<List<PrescriptionEntity>>
 
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE created_at >= :start AND created_at < :end")
+    fun observeCountBetween(start: Long, end: Long): Flow<Int>
+
     @Query("SELECT * FROM prescriptions WHERE id = :id")
     suspend fun byId(id: Long): PrescriptionEntity?
 

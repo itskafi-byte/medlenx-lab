@@ -18,18 +18,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.MedicalInformation
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Icon
@@ -48,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.medlenx.lab.data.repo.MedicineMatcher
+import com.medlenx.lab.ui.screens.hub.HubViewModel
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
@@ -75,7 +72,10 @@ import java.io.File
 @Composable
 fun ScanScreen(
     vm: ScanViewModel,
+    hubVm: HubViewModel,
     onOpenAudit: () -> Unit,
+    onOpenHub: () -> Unit,
+    onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
     recentRows: List<com.medlenx.lab.ui.screens.analytics.RecentRxRow> = emptyList(),
     onSelectPrescription: (com.medlenx.lab.ui.screens.analytics.RecentRxRow) -> Unit = {},
@@ -173,8 +173,13 @@ fun ScanScreen(
     }
 
     when (state.phase) {
-        ScanPhase.Empty -> UploadZone(
-            onChooseFile = {
+        ScanPhase.Empty -> ScanHome(
+            vm = vm,
+            hubVm = hubVm,
+            onOpenAudit = onSelectPrescription,
+            onOpenHub = onOpenHub,
+            onOpenUrl = onOpenUrl,
+            onGallery = {
                 galleryLauncher.launch(
                     // Builder, not the constructor: the PickVisualMediaRequest(mediaType)
                     // ctor is deprecated and is gone from the current androidx API surface.
@@ -184,7 +189,7 @@ fun ScanScreen(
                         .build(),
                 )
             },
-            onOpenCamera = {
+            onCamera = {
                 if (ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.CAMERA,
@@ -286,7 +291,7 @@ fun ScanScreen(
 
         ScanPhase.Saved -> ScanSavedSection(
             receipt = state.receipt ?: SavedReceipt("", 0, "", ""),
-            toastMessage = "Prescription saved and synced — Rx #" +
+            toastMessage = "Prescription saved on this device — Rx #" +
                 (state.receipt?.rxNumber.orEmpty()),
             onScanAnother = vm::scanAnother,
             onOpenAudit = onOpenAudit,
@@ -329,81 +334,6 @@ fun ScanScreen(
 }
 
 /**
- * Empty state hero.
- *
- * Web: `#workspaceEmpty` — white card, 2px dashed #BFDBFE border, 80dp gradient tile
- * with the file-medical glyph, "Drop prescription image here" and the two buttons.
- */
-@Composable
-fun UploadZone(
-    onChooseFile: () -> Unit,
-    onOpenCamera: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Mlx.Surface, MlxShape.Large)
-            .padding(vertical = 48.dp, horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .background(
-                    androidx.compose.ui.graphics.Brush.linearGradient(
-                        listOf(Mlx.Brand900, Mlx.Brand700),
-                    ),
-                    RoundedCornerShape(16.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.MedicalInformation,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(36.dp),
-            )
-        }
-        Text(
-            text = "Drop prescription image here",
-            style = MlxType.HeroTitle,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-        Text(
-            text = "Drag & drop or click to upload. Supports camera capture, rotation, " +
-                "contrast adjustment for cursive handwriting.",
-            style = MlxType.Body,
-            color = Mlx.Text500,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Row(
-            modifier = Modifier.padding(top = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MlxButton(
-                text = "Choose File",
-                onClick = onChooseFile,
-                icon = Icons.Filled.UploadFile,
-            )
-            MlxButton(
-                text = "Open Camera",
-                onClick = onOpenCamera,
-                tone = ButtonTone.Outline,
-                icon = Icons.Filled.AddAPhoto,
-            )
-        }
-        Text(
-            text = "Offline-first — scans cache on-device when the rural network drops, " +
-                "then sync on reconnect.",
-            style = MlxType.Meta,
-            color = Mlx.Text400,
-            modifier = Modifier.padding(top = 20.dp),
-        )
-    }
-}
-
-/**
  * The web app's offline banner (App.tsx:2147) - "Offline - 3 scans queued. They will sync
  * when you reconnect."
  *
@@ -433,9 +363,9 @@ private fun OfflineQueueBanner(queued: Int, online: Boolean, parked: Boolean) {
                 text = when {
                     !online && queued > 0 ->
                         "Offline - $queued scan$plural queued. " +
-                            "They will sync when you reconnect."
+                            "They can be scanned when you reconnect."
                     queued > 0 -> "$queued scan$plural queued for replay."
-                    else -> "Scan cached on-device. It will sync when you reconnect."
+                    else -> "Scan cached on-device for scanning when connected."
                 },
                 style = MlxType.Meta,
                 color = Mlx.Warn600,
