@@ -5,10 +5,20 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -133,7 +143,7 @@ fun MedLenXShell(
         factory = SearchViewModelFactory(context.applicationContext as Application),
     )
 
-    /** Global search overlay; the top bar's search field drives it. */
+    /** Floating search is available from every destination. */
     var searchOpen by remember { mutableStateOf(false) }
 
     // Export plumbing. The saver owns the two CreateDocument launchers and the
@@ -162,15 +172,10 @@ fun MedLenXShell(
         modifier = modifier.fillMaxSize(),
         containerColor = Mlx.Screen,
         topBar = {
-            Column(Modifier.statusBarsPadding()) {
+            Column(Modifier.background(Mlx.Surface).statusBarsPadding()
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
                 MlxTopBar(
-                    query = query,
-                    onQueryChange = {
-                        query = it
-                        searchVm.search(it)
-                        searchOpen = true
-                    },
-                    onSearchClick = { searchOpen = true },
+                    onSearchClick = { searchOpen = !searchOpen },
                     state = topBarState,
                     hazeState = hazeState,
                 )
@@ -197,9 +202,8 @@ fun MedLenXShell(
             Modifier
                 .fillMaxSize()
                 .background(Mlx.Screen)
-                // Deliberately NOT .padding(inner): content has to reach y=0 and pass
-                // *behind* the app bar, or the backdrop blur has nothing to sample.
-                // Only the bottom-bar inset is applied, so nothing hides under the nav.
+                // Apply the measured top and bottom bar sizes once. The top slot
+                // already includes the status-bar inset and responsive header height.
                 .hazeSource(state = hazeState)
                 .padding(
                     top = inner.calculateTopPadding(),
@@ -217,7 +221,7 @@ fun MedLenXShell(
                 Destination.bottomBar.forEach { dest ->
                     composable(dest.route) {
                         // NO top inset here. Scaffold measures the topBar slot and
-                        // reports its full height (status bar + 63dp bar + 1dp divider)
+                        // reports its full height (status bar + responsive bar + divider)
                         // through inner.calculateTopPadding(), which the Box below
                         // already applies. Adding AppBarHeight on top of that offset
                         // the content a second time and produced the uniform ~64dp
@@ -239,6 +243,7 @@ fun MedLenXShell(
                                 PaddingValues(
                                     start = MlxD.ScreenMargin,
                                     end = MlxD.ScreenMargin,
+                                    top = 20.dp,
                                     bottom = MlxD.ContentBottomClearance,
                                 ),
                             ),
@@ -551,9 +556,15 @@ fun MedLenXShell(
                 )
             }
 
-            if (searchOpen) {
+            AnimatedVisibility(
+                visible = searchOpen,
+                enter = fadeIn() + expandVertically(expandFrom = androidx.compose.ui.Alignment.Top),
+                exit = fadeOut() + shrinkVertically(shrinkTowards = androidx.compose.ui.Alignment.Top),
+            ) {
                 SearchOverlay(
                     vm = searchVm,
+                    query = query,
+                    onQueryChange = { query = it; searchVm.search(it) },
                     onClose = { searchOpen = false },
                     modifier = Modifier.fillMaxSize(),
                 )

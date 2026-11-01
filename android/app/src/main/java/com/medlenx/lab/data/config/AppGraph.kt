@@ -77,6 +77,7 @@ class AppGraph private constructor(
                     context = appContext,
                     queueDao = db.queueDao(),
                     profileDao = db.profileDao(),
+                    prescriptionDao = db.prescriptionDao(),
                 ),
                 locationRepository = LocationRepository(
                     context = appContext,

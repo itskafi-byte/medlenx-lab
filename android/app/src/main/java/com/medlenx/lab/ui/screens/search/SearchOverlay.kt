@@ -1,6 +1,7 @@
 package com.medlenx.lab.ui.screens.search
 
 import android.app.Application
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,9 +25,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
@@ -98,20 +109,29 @@ class SearchViewModelFactory(private val application: Application) : ViewModelPr
 @Composable
 fun SearchOverlay(
     vm: SearchViewModel,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    BackHandler(onBack = onClose)
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Mlx.Text900.copy(alpha = 0.35f))
+            .imePadding()
             .clickable(onClick = onClose),
     ) {
         Column(
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .padding(horizontal = MlxD.ScreenMargin, vertical = MlxD.Space3)
+                .widthIn(max = 640.dp)
                 .fillMaxWidth()
-                .heightIn(max = 320.dp)
+                .heightIn(max = 440.dp)
+                .shadow(16.dp, RoundedCornerShape(12.dp))
                 .clip(RoundedCornerShape(12.dp))
                 .background(Mlx.Surface)
                 .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(12.dp))
@@ -121,81 +141,92 @@ fun SearchOverlay(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { }
-                .verticalScroll(rememberScrollState()),
+                ) { },
         ) {
-            when {
-                vm.searching -> Text(
-                    text = "Searching the catalogue…",
-                    style = MlxType.BodySmall,
-                    color = Mlx.Text500,
-                    modifier = Modifier.padding(12.dp),
-                )
-                vm.results.isEmpty() && vm.searched -> MlxEmptyState(
-                    message = "No medicine matched. Try a generic name or the manufacturer.",
-                    icon = Icons.Filled.Medication,
-                    modifier = Modifier.padding(12.dp),
-                )
-                vm.results.isEmpty() -> Text(
-                    text = "Search 25,105 bundled brands, generics and manufacturers.",
-                    style = MlxType.BodySmall,
-                    color = Mlx.Text500,
-                    modifier = Modifier.padding(12.dp),
-                )
-                else -> vm.results.forEachIndexed { i, r ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onClose() }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Mlx.Screen)
-                                .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Medication,
-                                contentDescription = null,
-                                tint = Mlx.Text400,
-                                modifier = Modifier.size(MlxD.IconSmall),
-                            )
-                        }
-                        Spacer(Modifier.width(MlxD.Space3))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = r.brandName,
-                                style = MlxType.BodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Mlx.Text900,
-                            )
-                            Text(
-                                text = listOf(
-                                    listOf(r.type, r.strength).filter { it.isNotBlank() }
-                                        .joinToString(" "),
-                                    r.company,
-                                ).filter { it.isNotBlank() }.joinToString(" • "),
-                                style = MlxType.Footnote,
-                                color = Mlx.Text500,
-                                maxLines = 1,
-                            )
-                        }
-                        if (r.type.isNotBlank()) {
-                            StatusPill(text = r.type, tone = PillTone.Blue)
-                        }
-                    }
-                    if (i < vm.results.lastIndex) {
-                        Box(
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                label = { Text("Search medicines") },
+                placeholder = { Text("Brand, generic or manufacturer") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close search") } },
+                modifier = Modifier.fillMaxWidth().padding(12.dp).focusRequester(focusRequester),
+            )
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                when {
+                    vm.searching -> Text(
+                        text = "Searching the catalogue…",
+                        style = MlxType.BodySmall,
+                        color = Mlx.Text500,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                    vm.results.isEmpty() && vm.searched -> MlxEmptyState(
+                        message = "No medicine matched. Try a generic name or the manufacturer.",
+                        icon = Icons.Filled.Medication,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                    vm.results.isEmpty() -> Text(
+                        text = "Search 25,105 bundled brands, generics and manufacturers.",
+                        style = MlxType.BodySmall,
+                        color = Mlx.Text500,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                    else -> vm.results.forEachIndexed { i, r ->
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp)
-                                .height(1.dp)
-                                .background(Mlx.Brand100),
-                        )
+                                .clickable { onClose() }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Mlx.Screen)
+                                    .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Medication,
+                                    contentDescription = null,
+                                    tint = Mlx.Text400,
+                                    modifier = Modifier.size(MlxD.IconSmall),
+                                )
+                            }
+                            Spacer(Modifier.width(MlxD.Space3))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = r.brandName,
+                                    style = MlxType.BodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Mlx.Text900,
+                                )
+                                Text(
+                                    text = listOf(
+                                        listOf(r.type, r.strength).filter { it.isNotBlank() }
+                                            .joinToString(" "),
+                                        r.company,
+                                    ).filter { it.isNotBlank() }.joinToString(" • "),
+                                    style = MlxType.Footnote,
+                                    color = Mlx.Text500,
+                                    maxLines = 1,
+                                )
+                            }
+                            if (r.type.isNotBlank()) {
+                                StatusPill(text = r.type, tone = PillTone.Blue)
+                            }
+                        }
+                        if (i < vm.results.lastIndex) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp)
+                                    .height(1.dp)
+                                    .background(Mlx.Brand100),
+                            )
+                        }
                     }
                 }
             }

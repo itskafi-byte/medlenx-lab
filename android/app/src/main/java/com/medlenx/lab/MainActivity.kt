@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.ui.auth.AuthGate
 import com.medlenx.lab.ui.shell.MedLenXShell
 import com.medlenx.lab.ui.shell.TopBarState
@@ -24,9 +25,7 @@ class MainActivity : ComponentActivity() {
                 MedLenXShell(
                     topBarState = TopBarState(
                         online = deviceState.online,
-                        queuedScans = deviceState.queuedScans,
-                        companyName = deviceState.companyName,
-                        latencyMs = null,
+                        pendingUploads = deviceState.pendingUploadsFor(FirebaseAuth.getInstance().currentUser?.uid),
                     ),
                     appGraph = graph,
                 )
