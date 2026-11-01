@@ -3,6 +3,8 @@ package com.medlenx.lab.ui.screens.settings
 import android.app.Application
 import android.content.Context
 import androidx.room.withTransaction
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,8 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import com.medlenx.lab.data.sync.ProfileCloudSync
+import com.medlenx.lab.data.sync.UploadScheduling
 import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -100,6 +104,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     var pendingUploads by mutableStateOf<Int?>(null)
         private set
+    var syncTrouble by mutableStateOf(false)
+        private set
     var signOutBusy by mutableStateOf(false)
         private set
     var signOutError by mutableStateOf<String?>(null)
@@ -122,7 +128,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid)
-                purgeSnapshot = app.graph.database.prescriptionDao().trappedAudits(currentUid)
+                purgeSnapshot = app.graph.database.prescriptionDao().trappedAudits()
                 if (purgeSnapshot.isNotEmpty()) purgeConfirmationCount = purgeSnapshot.size
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { purgeMessage = "Could not check trapped local data." }
@@ -144,12 +150,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val db = app.graph.database
                 deleted = db.withTransaction {
                     check(FirebaseAuth.getInstance().currentUser?.uid == currentUid && currentUid.isNotBlank())
-                    val rows = db.prescriptionDao().trappedAudits(currentUid).filter { it.id in confirmedIds }
+                    val rows = db.prescriptionDao().trappedAudits().filter { it.id in confirmedIds }
                     rows.chunked(500).forEach { chunk ->
                         val ids = chunk.map { it.id }
                         db.prescriptionDao().deleteMedicinesForAudits(ids)
                         db.prescriptionDao().deleteVisitsForAudits(ids)
-                        check(db.prescriptionDao().deleteTrappedAudits(currentUid, ids) == ids.size)
+                        check(db.prescriptionDao().deleteTrappedAudits(ids) == ids.size)
                     }
                     rows
                 }
@@ -172,7 +178,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                             val parents = if (legacy) listOf(
                                 File(app.filesDir, "prescriptions/legacy_user").canonicalFile,
                                 File(app.filesDir, "rx").canonicalFile,
-                            ) else listOf(UserCaptureFiles.stored(app, currentUid).canonicalFile)
+                            ) else listOf(UserCaptureFiles.stored(app, row.userId).canonicalFile)
                             if (!raw.isAbsolute || file.parentFile !in parents || file in references) {
                                 retained++
                             } else if (file.exists()) {
@@ -334,10 +340,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     init {
         viewModelScope.launch {
+            val manager = WorkManager.getInstance(app)
+            // Unique periodic work also observes jobs created before per-user tags
+            // were added; one-shot jobs created from now on carry the same tag.
+            combine(
+                manager.getWorkInfosByTagFlow(UploadScheduling.workTag(currentUid)),
+                manager.getWorkInfosForUniqueWorkFlow(UploadScheduling.periodicName(currentUid)),
+            ) { tagged, periodic ->
+                (tagged + periodic).any { info ->
+                    info.state == WorkInfo.State.FAILED ||
+                        ((info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.RUNNING) &&
+                            info.runAttemptCount >= 2)
+                }
+            }.collect { syncTrouble = it }
+        }
+        viewModelScope.launch {
             app.graph.database.prescriptionDao().observePendingUploads(currentUid).collect { pendingUploads = it }
         }
         viewModelScope.launch {
-            app.graph.database.prescriptionDao().observeTrappedCount(currentUid).collect { trappedCount = it }
+            app.graph.database.prescriptionDao().observeTrappedCount().collect { trappedCount = it }
         }
         viewModelScope.launch { ProfileCloudSync.restored.collect { if (it == currentUid && !editing) load() } }
         viewModelScope.launch { ProfileCloudSync.errors.collect { if (it.first == currentUid) error = it.second } }

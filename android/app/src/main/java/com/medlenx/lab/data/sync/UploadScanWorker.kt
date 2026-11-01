@@ -112,21 +112,23 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
 object UploadScheduling {
     private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+    fun workTag(uid: String): String = "rx-upload-user-" + UserCaptureFiles.key(uid)
+    fun periodicName(uid: String): String = "rx-upload-" + UserCaptureFiles.key(uid)
 
     /** Periodic work rescues a crash between Room commit and one-shot enqueue. */
     fun start(context: Context, uid: String) {
         if (uid.isBlank() || uid == "legacy_user") return
         val manager = WorkManager.getInstance(context)
         val periodic = PeriodicWorkRequestBuilder<UploadScanWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(network).setInputData(workDataOf("uid" to uid)).build()
-        manager.enqueueUniquePeriodicWork("rx-upload-" + UserCaptureFiles.key(uid), ExistingPeriodicWorkPolicy.KEEP, periodic)
+            .setConstraints(network).setInputData(workDataOf("uid" to uid)).addTag(workTag(uid)).build()
+        manager.enqueueUniquePeriodicWork(periodicName(uid), ExistingPeriodicWorkPolicy.KEEP, periodic)
         enqueue(context, uid)
     }
 
     fun enqueue(context: Context, uid: String) {
         if (uid.isBlank() || uid == "legacy_user") return
         val request = OneTimeWorkRequestBuilder<UploadScanWorker>()
-            .setConstraints(network).setInputData(workDataOf("uid" to uid)).build()
+            .setConstraints(network).setInputData(workDataOf("uid" to uid)).addTag(workTag(uid)).build()
         WorkManager.getInstance(context).enqueue(request)
     }
 }

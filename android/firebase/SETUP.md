@@ -82,6 +82,9 @@ content restrictions require a trusted server-side ingestion path.
   the append-only rules. Sign-out retains local records and does not clear
   Firestore persistence or delete pending writes. Sign-out is blocked while
   this account has any pending uploads, including those that require review.
+  Settings shows a warning for a failed or repeatedly retried upload work request
+  while pending scans remain. A failed request may be from an earlier attempt;
+  work waiting for a network constraint has not failed yet.
 - Audits saved before this implementation have no company snapshot. They remain
   pending or local-only and are never automatically assigned to the currently
   selected company. Audits saved before the first verified company lookup also
@@ -96,11 +99,14 @@ content restrictions require a trusted server-side ingestion path.
   still block sign-out. A lost upload acknowledgement can mean a rejected audit
   already exists in the cloud; local cleanup does not delete cloud records.
 - Settings offers a separately confirmed Clear Trapped Local Data action when
-  applicable. It removes device-wide unassigned `legacy_user` audits and this
-  signed-in account's rejected audits, plus safely deletable, unshared local
-  image files. It never removes other accounts' rejected audits. Shared or unsafe
-  image paths are retained and reported; an interruption after the Room commit
-  can leave orphaned files. Sign-out itself never performs this cleanup.
+  applicable. With explicit confirmation, it removes all device-wide `LOCAL_ONLY`,
+  `PENDING`, and `FAILED_REJECTED` audits across every account, as well as all
+  `legacy_user` audits, plus safely deletable, unshared local image files. New
+  or no-longer-eligible records after confirmation are not removed. A write
+  already in flight may still reach Firestore; cleanup does not delete cloud
+  records. Shared or unsafe image paths are retained and reported; an interruption
+  after the Room commit can leave orphaned files. Sign-out itself never performs
+  this cleanup.
 - Team activity displays server-confirmed results only. It deliberately hides
   cached feed results while offline to avoid exposing Firestore's shared disk
   cache after an account switch. Other local features remain offline-first.

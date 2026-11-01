@@ -69,7 +69,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = vm::cancelPurge,
             title = { Text("Clear Trapped Local Data?") },
-            text = { Text("Permanently delete $count local audits and their photos where safe? This includes unassigned legacy records from this device and rejected records for your signed-in account. Shared photos may be retained. Cloud records are not deleted. This cannot be undone.") },
+            text = { Text("Permanently delete $count local audits and their photos where safe? This includes ALL pending, local-only, and rejected audits for EVERY account on this device, plus all unassigned legacy audits. Unsynced data will be lost, including other users' data. Shared photos may be retained. Cloud records are not deleted, and an upload already in progress may still finish. This cannot be undone.") },
             confirmButton = { TextButton(onClick = vm::confirmPurge) { Text("Delete permanently") } },
             dismissButton = { TextButton(onClick = vm::cancelPurge) { Text("Cancel") } },
         )
@@ -284,7 +284,11 @@ fun SettingsScreen(
             } else if (pending > 0) {
                 Text("Sync in progress. Please wait for $pending pending scans to upload before signing out.",
                     style = MlxType.BodySmall, color = Mlx.Warn600)
-                Text("If scans have no assigned company, use Assign & Sync on the Scan screen. For an old company assignment, contact your administrator.",
+                if (vm.syncTrouble) {
+                    Text("A sync attempt failed or has repeatedly retried. Check your connection, or use Clear Trapped Local Data below to remove unsynced scans before signing out.",
+                        style = MlxType.BodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                Text("If scans have no assigned company, use Assign & Sync on the Scan screen. You can also clear unsynced local data under Advanced.",
                     style = MlxType.Footnote, color = Mlx.Text500)
             }
             vm.signOutError?.let { Text(it, style = MlxType.BodySmall, color = MaterialTheme.colorScheme.error) }
@@ -307,7 +311,7 @@ fun SettingsScreen(
             MlxCard {
                 Text("Advanced", style = MlxType.CardTitle, color = Mlx.Text900)
                 if (vm.trappedCount > 0) {
-                    Text("${vm.trappedCount} trapped local audits", style = MlxType.BodySmall, color = Mlx.Text500)
+                    Text("${vm.trappedCount} unsynced or legacy local audits across this device", style = MlxType.BodySmall, color = Mlx.Text500)
                     OutlinedButton(onClick = vm::preparePurge, enabled = !vm.purgeBusy && !vm.signOutBusy) {
                         Text("Clear Trapped Local Data")
                     }
