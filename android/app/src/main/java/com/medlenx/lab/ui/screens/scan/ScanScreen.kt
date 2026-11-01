@@ -9,7 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -23,13 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.automirrored.filled.RotateLeft
-import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -226,7 +219,6 @@ fun ScanScreen(
             districts = vm.districtNames(),
             upazilas = vm.upazilasFor(state.doctor.district),
             territories = vm.territoriesFor(state.doctor.district),
-            zoomLabel = "${transform.zoomPercent}%",
             onDoctorChange = vm::onDoctorChange,
             onDistrictChange = vm::onDistrictChange,
             onBack = vm::clear,
@@ -235,16 +227,6 @@ fun ScanScreen(
             medicineCount = state.cards.size,
             imageUri = state.imageUri,
             transform = transform,
-            onThumbnailAction = { action ->
-                when (action) {
-                    ViewerAction.ZoomIn -> transform.zoomIn()
-                    ViewerAction.ZoomOut -> transform.zoomOut()
-                    ViewerAction.RotateLeft -> transform.rotateLeft()
-                    ViewerAction.RotateRight -> transform.rotateRight()
-                    ViewerAction.Contrast -> transform.cycleContrast()
-                    ViewerAction.Fit -> transform.fit()
-                }
-            },
             modifier = modifier.padding(top = topInset),
         )
 
@@ -398,6 +380,10 @@ private fun ViewerCard(
     transform: ViewerTransform,
     onClear: () -> Unit,
 ) {
+    var fullscreen by remember { mutableStateOf(false) }
+    if (fullscreen && state.imageUri != null) {
+        FullscreenPrescriptionViewer(state.imageUri, transform, onDismiss = { fullscreen = false })
+    }
     MlxCard(padding = 0.dp) {
         Column(
             modifier = Modifier
@@ -411,6 +397,7 @@ private fun ViewerCard(
                 Box(Modifier.weight(1f)) {
                     SectionHeader(title = "Prescription Image Viewer")
                 }
+                if (state.imageUri != null) ViewerTools(transform) { fullscreen = true }
                 MlxIconButton(
                     icon = Icons.Filled.Close,
                     contentDescription = "Clear workspace",
@@ -418,19 +405,6 @@ private fun ViewerCard(
                     background = Mlx.Brand100,
                     border = Mlx.Brand100,
                 )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
-                MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
-                MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
-                MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
-                MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
-                MlxIconButton(Icons.Filled.Expand, "Fit", transform::fit)
             }
         }
 

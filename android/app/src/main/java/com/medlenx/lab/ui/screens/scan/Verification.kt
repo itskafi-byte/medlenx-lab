@@ -16,23 +16,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.Expand
 import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.automirrored.filled.RotateLeft
-import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -58,14 +52,8 @@ import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.CompanyVerification
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import com.medlenx.lab.ui.components.MlxIconButton
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
 import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.SectionHeader
@@ -263,122 +251,23 @@ private fun MlxSelect(
     }
 }
 
-/**
- * The 180dp prescription thumbnail that heads the verification panel — Figma
- * `VerifyDoctor` (App.tsx:569-583). Viewer controls and the
- * zoom/pan hint pill over a dark scrim.
- */
+/** Compact prescription thumbnail with shared touch gestures and fullscreen access. */
 @Composable
 private fun VerifyThumbnail(
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    onRotateLeft: () -> Unit,
-    onRotateRight: () -> Unit,
-    onContrast: () -> Unit,
-    onFit: () -> Unit,
     onFullscreen: () -> Unit,
-    zoomLabel: String,
-    imageUri: String? = null,
-    transform: ViewerTransform? = null,
+    imageUri: String?,
+    transform: ViewerTransform,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(180.dp)
-            // Clipped to the card's top corners: a zoomed scan magnifies inside the
-            // thumbnail instead of spilling over the doctor form underneath it.
-            .clip(MlxShape.Sheet)
-            .background(Mlx.Brand100)
-            .pointerInput(transform) {
-                if (transform != null) {
-                    detectTransformGestures { _, pan, zoom, rotationDelta ->
-                        transform.scale = (transform.scale * zoom)
-                            .coerceIn(ViewerTransform.MIN_SCALE, ViewerTransform.MAX_SCALE)
-                        transform.offsetX += pan.x
-                        transform.offsetY += pan.y
-                        transform.rotation += rotationDelta
-                    }
-                }
-            },
-    ) {
-        // The officer must be able to see the prescription they are verifying; the
-        // earlier placeholder-only box made the photo "vanish" on the review panel.
+    Box(modifier.fillMaxWidth().height(180.dp).clip(MlxShape.Sheet).background(Mlx.Brand100)) {
         if (imageUri != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (transform != null) {
-                            Modifier.graphicsLayer {
-                                scaleX = transform.scale
-                                scaleY = transform.scale
-                                translationX = transform.offsetX
-                                translationY = transform.offsetY
-                                rotationZ = transform.rotation
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
-                AsyncImage(
-                    model = imageUri,
-                    contentDescription = "Prescription scan",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            PrescriptionImageViewer(imageUri = imageUri, transform = transform)
+            Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
+                ViewerTools(transform, onFullscreen)
             }
         } else {
-            Icon(
-                Icons.Filled.CropFree,
-                contentDescription = null,
-                tint = Mlx.Brand400.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(48.dp),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val tools = listOf(
-                Icons.Filled.ZoomIn to onZoomIn,
-                Icons.Filled.ZoomOut to onZoomOut,
-                Icons.AutoMirrored.Filled.RotateLeft to onRotateLeft,
-                Icons.AutoMirrored.Filled.RotateRight to onRotateRight,
-                Icons.Filled.Contrast to onContrast,
-                Icons.Filled.CropFree to onFit,
-                Icons.Filled.Fullscreen to onFullscreen,
-            )
-            tools.forEach { (icon, action) ->
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .background(Mlx.Surface, MlxShape.Chip)
-                        .border(1.dp, Mlx.Brand200, MlxShape.Chip)
-                        .clickable(onClick = action),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(icon, contentDescription = null, tint = Mlx.Text600, modifier = Modifier.size(13.dp))
-                }
-            }
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-                .background(Mlx.Brand900.copy(alpha = 0.7f), MlxShape.Pill)
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-        ) {
-            Text(
-                text = "Pinch to zoom · Drag to pan · $zoomLabel",
-                style = MlxType.MicroPill,
-                color = Color.White,
-            )
+            Icon(Icons.Filled.CropFree, contentDescription = null, tint = Mlx.Brand400.copy(alpha = 0.4f),
+                modifier = Modifier.align(Alignment.Center).size(48.dp))
         }
     }
 }
@@ -397,43 +286,36 @@ fun VerifyDoctorSection(
     districts: List<String>,
     upazilas: List<String>,
     territories: List<String>,
-    zoomLabel: String,
     onDoctorChange: (DoctorVerification) -> Unit,
     onDistrictChange: (String) -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit,
     onClose: () -> Unit,
-    onThumbnailAction: (ViewerAction) -> Unit,
     medicineCount: Int,
     imageUri: String? = null,
     transform: ViewerTransform? = null,
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
+    val fallbackTransform = remember { ViewerTransform() }
+    val viewerTransform = transform ?: fallbackTransform
     Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .background(Mlx.Surface, MlxShape.Large),
     ) {
-        if (fullscreen && imageUri != null && transform != null) {
+        if (fullscreen && imageUri != null) {
             FullscreenPrescriptionViewer(
                 imageUri = imageUri,
-                transform = transform,
+                transform = viewerTransform,
                 onDismiss = { fullscreen = false },
             )
         }
         VerifyThumbnail(
-            onZoomIn = { onThumbnailAction(ViewerAction.ZoomIn) },
-            onZoomOut = { onThumbnailAction(ViewerAction.ZoomOut) },
-            onRotateLeft = { onThumbnailAction(ViewerAction.RotateLeft) },
-            onRotateRight = { onThumbnailAction(ViewerAction.RotateRight) },
-            onContrast = { onThumbnailAction(ViewerAction.Contrast) },
-            onFit = { onThumbnailAction(ViewerAction.Fit) },
             onFullscreen = { fullscreen = true },
-            zoomLabel = zoomLabel,
             imageUri = imageUri,
-            transform = transform,
+            transform = viewerTransform,
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
@@ -616,9 +498,6 @@ fun VerifyDoctorSection(
     }
 }
 
-/** The six viewer controls, so the thumbnail and the full viewer share one vocabulary. */
-enum class ViewerAction { ZoomIn, ZoomOut, RotateLeft, RotateRight, Contrast, Fit }
-
 /**
  * Full-screen review surface for a prescription.
  *
@@ -629,7 +508,7 @@ enum class ViewerAction { ZoomIn, ZoomOut, RotateLeft, RotateRight, Contrast, Fi
  * same transform is used in both views.
  */
 @Composable
-private fun FullscreenPrescriptionViewer(
+fun FullscreenPrescriptionViewer(
     imageUri: String,
     transform: ViewerTransform,
     onDismiss: () -> Unit,
@@ -648,32 +527,11 @@ private fun FullscreenPrescriptionViewer(
                 modifier = Modifier.fillMaxSize(),
             )
             Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", transform::zoomIn)
-                MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", transform::zoomOut)
-                MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", transform::rotateLeft)
-                MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", transform::rotateRight)
-                MlxIconButton(Icons.Filled.Contrast, "Contrast", transform::cycleContrast)
-                MlxIconButton(Icons.Filled.CropFree, "Fit", transform::fit)
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .size(36.dp)
-                    .background(Color.Black.copy(alpha = 0.55f), MlxShape.Chip)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Exit fullscreen",
-                    tint = Color.White,
-                )
+                ViewerTools(transform)
+                MlxIconButton(Icons.Filled.Close, "Exit fullscreen", onDismiss)
             }
         }
     }
@@ -717,19 +575,21 @@ fun VerifyMedicinesSection(
     modifier: Modifier = Modifier,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
+    val fallbackTransform = remember { ViewerTransform() }
+    val viewerTransform = transform ?: fallbackTransform
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
     val viewerHeight = maxHeight * 0.28f
     Column(modifier = Modifier.fillMaxSize()) {
         if (fullscreen && imageUri != null) {
             FullscreenPrescriptionViewer(
                 imageUri = imageUri,
-                transform = transform ?: remember { ViewerTransform() },
+                transform = viewerTransform,
                 onDismiss = { fullscreen = false },
             )
         }
         // Keep the clean prescription visible while reviewing medicines.
         imageUri?.let { uri ->
-            val t = transform ?: remember { ViewerTransform() }
+            val t = viewerTransform
             Column(modifier = Modifier.padding(bottom = 12.dp)) {
                 Box(
                     modifier = Modifier
@@ -738,21 +598,9 @@ fun VerifyMedicinesSection(
                         .background(Mlx.Brand100, MlxShape.Medium),
                 ) {
                     PrescriptionImageViewer(imageUri = uri, transform = t)
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    MlxIconButton(Icons.Filled.ZoomIn, "Zoom in", t::zoomIn)
-                    MlxIconButton(Icons.Filled.ZoomOut, "Zoom out", t::zoomOut)
-                    MlxIconButton(Icons.AutoMirrored.Filled.RotateLeft, "Rotate left", t::rotateLeft)
-                    MlxIconButton(Icons.AutoMirrored.Filled.RotateRight, "Rotate right", t::rotateRight)
-                    MlxIconButton(Icons.Filled.Contrast, "Contrast", t::cycleContrast)
-                    MlxIconButton(Icons.Filled.Expand, "Fit", t::fit)
-                    MlxIconButton(Icons.Filled.Fullscreen, "Fullscreen", { fullscreen = true })
+                    Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+                        ViewerTools(t) { fullscreen = true }
+                    }
                 }
             }
         }
@@ -870,25 +718,24 @@ fun VerifyGpsSection(
         SectionHeader(title = "GPS & Territory")
 
         BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-            val compact = maxWidth < 560.dp
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            GpsField("Upazila", gps.upazila, { onChange(gps.copy(upazila = it)) }, Modifier.weight(1f))
-            GpsField("District", gps.district, { onChange(gps.copy(district = it)) }, Modifier.weight(1f))
-            GpsField("Territory", gps.territory, { onChange(gps.copy(territory = it)) }, Modifier.weight(1f))
-            if (!compact) MlxButton(
-                text = "GPS",
-                tone = ButtonTone.Outline,
-                onClick = onCaptureGps,
-                icon = Icons.Filled.LocationOn,
-            )
-        }
-            if (compact) MlxButton(text = "GPS", tone = ButtonTone.Outline,
-                onClick = onCaptureGps, icon = Icons.Filled.LocationOn)
+            if (maxWidth < 480.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GpsField("Upazila", gps.upazila, { onChange(gps.copy(upazila = it)) }, Modifier.weight(1f))
+                        GpsField("District", gps.district, { onChange(gps.copy(district = it)) }, Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        GpsField("Territory", gps.territory, { onChange(gps.copy(territory = it)) }, Modifier.weight(1f))
+                        GpsIconButton(onCaptureGps)
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    GpsField("Upazila", gps.upazila, { onChange(gps.copy(upazila = it)) }, Modifier.weight(1f))
+                    GpsField("District", gps.district, { onChange(gps.copy(district = it)) }, Modifier.weight(1f))
+                    GpsField("Territory", gps.territory, { onChange(gps.copy(territory = it)) }, Modifier.weight(1f))
+                    GpsIconButton(onCaptureGps)
+                }
             }
         }
 

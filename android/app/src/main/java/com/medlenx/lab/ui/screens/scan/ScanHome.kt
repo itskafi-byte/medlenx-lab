@@ -113,7 +113,7 @@ fun ScanHome(
                     Box(Modifier.fillMaxWidth().height(300.dp)) {
                         PrescriptionImageViewer(imageUri = Uri.fromFile(image).toString(), transform = transform)
                     }
-                    Text("Pinch to zoom · Drag to pan", style = MlxType.Footnote)
+                    Text("Pinch or double-tap to zoom · Two fingers to pan", style = MlxType.Footnote)
                 } else Text(
                     if (rx.restoreScanId != null) "Image not backed up to cloud. This restored summary contains only shared scan results."
                     else "This image is unavailable or requires legacy review.",

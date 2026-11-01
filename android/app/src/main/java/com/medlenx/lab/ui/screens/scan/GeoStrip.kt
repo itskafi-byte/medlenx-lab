@@ -16,8 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.repo.PyMath
-import com.medlenx.lab.ui.components.ButtonTone
-import com.medlenx.lab.ui.components.MlxButton
+import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.MlxTextField
 import com.medlenx.lab.ui.components.PillTone
 import com.medlenx.lab.ui.components.StatusPill
@@ -62,39 +61,24 @@ fun GeoStrip(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val compact = maxWidth < 560.dp
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-            MlxTextField(
-                value = state.upazila,
-                onValueChange = onUpazilaChange,
-                label = "Upazila",
-                modifier = Modifier.weight(1f),
-            )
-            MlxTextField(
-                value = state.district,
-                onValueChange = onDistrictChange,
-                label = "District",
-                modifier = Modifier.weight(1f),
-            )
-            MlxTextField(
-                value = state.territory,
-                onValueChange = onTerritoryChange,
-                label = "Territory",
-                modifier = Modifier.weight(1f),
-            )
-            if (!compact) MlxButton(
-                text = "GPS",
-                onClick = onPinGps,
-                tone = ButtonTone.Outline,
-                icon = Icons.Filled.LocationOn,
-                iconTint = Mlx.Ok500,
-            )
-        }
-            if (compact) MlxButton(
-                text = "GPS", onClick = onPinGps, tone = ButtonTone.Outline,
-                icon = Icons.Filled.LocationOn, iconTint = Mlx.Ok500,
-            )
+            if (maxWidth < 480.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MlxTextField(state.upazila, onUpazilaChange, Modifier.weight(1f), label = "Upazila")
+                        MlxTextField(state.district, onDistrictChange, Modifier.weight(1f), label = "District")
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        MlxTextField(state.territory, onTerritoryChange, Modifier.weight(1f), label = "Territory")
+                        GpsIconButton(onPinGps)
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    MlxTextField(state.upazila, onUpazilaChange, Modifier.weight(1f), label = "Upazila")
+                    MlxTextField(state.district, onDistrictChange, Modifier.weight(1f), label = "District")
+                    MlxTextField(state.territory, onTerritoryChange, Modifier.weight(1f), label = "Territory")
+                    GpsIconButton(onPinGps)
+                }
             }
         }
 
@@ -129,4 +113,11 @@ fun GeoStrip(
             )
         }
     }
+}
+
+/** Square accessible GPS action, aligned beside the territory field. */
+@Composable
+fun GpsIconButton(onClick: () -> Unit) {
+    MlxIconButton(icon = Icons.Filled.LocationOn, contentDescription = "Use GPS for location",
+        onClick = onClick, tint = Mlx.Ok500, background = Mlx.Ok50, border = Mlx.Ok200)
 }
