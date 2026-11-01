@@ -8,8 +8,15 @@ service cloud.firestore {
     }
     function isMember(companyId) {
       return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId &&
         exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)) &&
         membership(companyId).data.active == true;
+    }
+    // Only trusted administrators can create or update the company assignment.
+    match /users/{userId} {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list, create, update, delete: if false;
     }
     match /companies/{companyId}/members/{memberId} {
       allow get: if request.auth != null && request.auth.uid == memberId;

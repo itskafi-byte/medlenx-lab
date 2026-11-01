@@ -30,14 +30,14 @@ project's other rules. The app still saves audits locally and does not upload th
    be unique nor safe as a Firestore document path (for example, it may contain
    `/`). An eventual implementation needs an administrator-assigned mapping
    from the local company selection to this ID.
-6. A trusted administrator can provision
-   `companies/{companyId}/members/{firebaseUid}` in the Firebase console or
-   using a trusted Admin SDK. Set `active` to boolean `true` and `displayName`
-   to the approved officer name/ID. Obtain the UID from the Authentication
-   Users page after account creation. Clients cannot create or modify membership
-   documents under the proposed rules. To revoke membership, set `active` to
-   `false` or delete the document. Offline copies already downloaded to devices
-   cannot be remotely erased immediately.
+6. A trusted administrator must provision both `users/{firebaseUid}` with a
+   string `companyId` and `companies/{companyId}/members/{firebaseUid}` with
+   boolean `active: true` and string `displayName` in the Firebase console or
+   using a trusted Admin SDK. The company ID must be identical in both paths.
+   Obtain the UID from the Authentication Users page after account creation.
+   Clients cannot create or modify either document under the proposed rules.
+   To revoke membership, set `active` to `false` or delete the member document.
+   Offline copies already downloaded to devices cannot be remotely erased immediately.
 7. Review `firestore.rules`. It grants team-scan reads only to active members of
    that company and permits only authenticated, attributed creates. The rules
    are a **baseline for a future client**, not a tested deployment: they deny
@@ -54,14 +54,19 @@ content restrictions require a trusted server-side ingestion path.
 
 ## Work still required before enabling sync
 
-- Bind the signed-in UID to approved membership, and observe membership changes.
-- Atomically save each new audit and a UID/company-bound durable outbox record;
-  handle retries, rejected writes, process death and account changes without
-  dropping or misattributing records. Firestore persistence alone cannot make a
-  Room write and a Firestore write atomic.
-- Add an explicit, reviewed migration for historical local scans. The existing
-  local database is shared across sign-ins, so its rows cannot automatically
-  be attributed to the current account or company.
+- Bind the signed-in UID to the server-assigned `users/{uid}.companyId` and
+  approved membership, and observe membership changes. The current app does not
+  yet perform this lookup.
+- Make the local Room write and cloud submission crash-safe. Firestore
+  persistence alone cannot make a Room write and a Firestore write atomic.
+  Surface rejected writes and preserve the selected sign-out policy: block
+  sign-out until pending writes are acknowledged. A Firestore instance must be
+  terminated before clearing persistence; clearing it deletes pending writes.
+- Partition all user-local data by authenticated UID, including profile, scans,
+  medicines, targets, queue, preferences and images. The current database is
+  shared across sign-ins and is not yet partitioned. Quarantine or purge legacy
+  rows rather than silently attributing them to an account; any later cloud
+  upload of existing local scans requires a deliberate migration.
 - Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
   results and pending writes require deliberate treatment on shared devices;
   server rules cannot revoke data already cached offline.
