@@ -13,10 +13,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 /**
  * Navigation graph.
  *
- * The web sidebar has SIX destinations (workspace, dashboard, database, rsm,
- * settings, help). The mobile bottom bar in templates/index.html only carries FIVE —
- * `help` has no mobile slot. To avoid dropping a feature, Help & Guide keeps its own
- * route and is surfaced from Settings.
+ * Core destinations live in the bottom bar. Settings is opened from the profile
+ * menu, and Help & Guide remains accessible from Settings.
  */
 sealed class Destination(val route: String, val label: String, val icon: ImageVector) {
 
@@ -36,11 +34,12 @@ sealed class Destination(val route: String, val label: String, val icon: ImageVe
     data object RxAudit : Destination("rx-audit", "Prescription Audit", Icons.Filled.Description)
 
     companion object {
-        /** The five destinations rendered in the bottom navigation bar, in order. */
-        val bottomBar: List<Destination> = listOf(Scan, Analytics, Hub, Team, Settings)
+        /** The core destinations rendered in the bottom navigation bar, in order. */
+        val bottomBar: List<Destination> = listOf(Scan, Analytics, Hub, Team)
+        val primaryRoutes: List<Destination> = bottomBar + Settings
 
         fun fromRoute(route: String?): Destination? =
-            bottomBar.firstOrNull { it.route == route }
+            primaryRoutes.firstOrNull { it.route == route }
                 ?: Help.takeIf { it.route == route }
                 ?: RxAudit.takeIf { it.route == route }
     }

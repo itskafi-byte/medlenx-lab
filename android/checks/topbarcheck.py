@@ -19,7 +19,17 @@ search = (root/'ui/screens/search/SearchOverlay.kt').read_text()
 assert 'prescriptionDao.observePendingUploads(uid)' in state and 'it.first == uid' in state
 assert 'queueDao.observeCount(uid)' in state  # Processing queue remains independent.
 assert '"MedLenX Lab"' in bar and 'Icons.Filled.Search' in bar and 'OutlinedTextField' not in bar
-assert 'count == null' in bar and 'PillTone.Amber' in bar and 'PillTone.Slate' in bar
+assert 'count == null' in bar and 'count > 0' in bar and 'Icons.Filled.CloudOff' in bar
+assert 'Icons.Filled.Cloud' in bar and 'Icons.Filled.CloudUpload' in bar
+assert 'DropdownMenuItem(' in bar and 'onSettingsClick()' in bar
+nav = (root/'ui/navigation/Destination.kt').read_text()
+assert 'listOf(Scan, Analytics, Hub, Team)' in nav and 'primaryRoutes: List<Destination> = bottomBar + Settings' in nav
+assert 'Destination.primaryRoutes.forEach' in shell and 'navController.navigate(Destination.Settings.route)' in shell
+home = (root/'ui/screens/scan/ScanHome.kt').read_text()
+hero = home.split('private fun CaptureHero(')[1].split('private fun DailyTargetCard(')[0]
+assert 'Open Camera' in hero and 'Choose File' in hero and 'queued locally' not in hero and 'saved on this device' not in hero
+assert '.height(16.dp)' in home and '.background(Mlx.Cyan500)' in home
+assert 'DateUtils.getRelativeTimeSpanString' in home and 'Text("Processed"' in home
 assert 'statusBarsPadding()' in shell and 'WindowInsets.displayCutout' in shell and 'top = 20.dp' in shell
 assert 'AnimatedVisibility(' in shell and 'onQueryChange = { query = it; searchVm.search(it) }' in shell
 assert 'BackHandler(onBack = onClose)' in search and 'Icons.Filled.Close' in search and '.shadow(' in search

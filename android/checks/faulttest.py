@@ -353,11 +353,11 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         # delegates. The property the `by` belonged to is gone, so the import is dead.
         "a getValue import with no delegated property to serve",
         "imports.py",
-        # ScanHome has one delegated property: removing the `by` leaves the
-        # import with nothing to serve.
-        "android/app/src/main/java/com/medlenx/lab/ui/screens/scan/ScanHome.kt",
-        "var selected by remember { mutableStateOf<PrescriptionEntity?>(null) }",
-        "var selected = remember { mutableStateOf<PrescriptionEntity?>(null) }",
+        # SettingsScreen has one delegated property: removing the `by` leaves
+        # the import with nothing to serve.
+        "android/app/src/main/java/com/medlenx/lab/ui/screens/settings/SettingsScreen.kt",
+        "var expanded by remember { mutableStateOf(false) }",
+        "var expanded = remember { mutableStateOf(false) }",
         "no delegated property",
     ),
     (

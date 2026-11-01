@@ -10,26 +10,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.medlenx.lab.ui.components.PillTone
-import com.medlenx.lab.ui.components.StatusPill
 import com.medlenx.lab.ui.theme.Mlx
+import com.medlenx.lab.ui.theme.MlxType
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeEffect
@@ -46,36 +57,31 @@ data class TopBarState(val online: Boolean = true, val pendingUploads: Int? = nu
 @Composable
 fun MlxTopBar(
     onSearchClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     state: TopBarState,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().hazeEffect(state = hazeState, style = AppBarHaze),
-    ) {
-        // Keeping two rows on narrow screens or large text avoids overlapping or
-        // truncating the controls while retaining the same order and touch targets.
-        val compact = maxWidth < 460.dp || LocalDensity.current.fontScale > 1.15f
+    BoxWithConstraints(modifier = modifier.fillMaxWidth().hazeEffect(state = hazeState, style = AppBarHaze)) {
+        val compact = maxWidth < 340.dp || LocalDensity.current.fontScale > 1.3f
         if (compact) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                     BrandHeader(Modifier.weight(1f))
-                    SearchButton(onSearchClick)
                 }
-                Row(Modifier.fillMaxWidth().heightIn(min = 40.dp),
-                    horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    StatusGroup(state)
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    HeaderActions(state, onSearchClick, onSettingsClick)
                 }
             }
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 BrandHeader(Modifier.weight(1f))
-                SearchButton(onSearchClick)
-                StatusGroup(state)
+                HeaderActions(state, onSearchClick, onSettingsClick)
             }
         }
     }
@@ -91,30 +97,64 @@ private fun BrandHeader(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SearchButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        Icon(Icons.Filled.Search, contentDescription = "Search", tint = Mlx.Text900)
+private fun HeaderActions(state: TopBarState, onSearchClick: () -> Unit, onSettingsClick: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onSearchClick) {
+            Icon(Icons.Filled.Search, contentDescription = "Search", tint = Mlx.Text900)
+        }
+        CloudStatus(state)
+        ProfileMenu(onSettingsClick)
     }
 }
 
 @Composable
-private fun StatusGroup(state: TopBarState) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusPill(
-            text = if (state.online) "Online" else "Offline",
-            tone = if (state.online) PillTone.Emerald else PillTone.Red,
-            dotColor = if (state.online) Mlx.Ok600 else null,
-            maxLines = 1,
-        )
-        val count = state.pendingUploads
-        StatusPill(
-            text = if (count == null) "— Queued" else "$count Queued",
-            tone = if ((count ?: 0) > 0) PillTone.Amber else PillTone.Slate,
-            icon = Icons.Filled.CloudUpload,
-            maxLines = 1,
-        )
-        Box(Modifier.size(32.dp).background(Mlx.Brand900, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Person, contentDescription = "Profile", tint = Color.White, modifier = Modifier.size(16.dp))
+private fun CloudStatus(state: TopBarState) {
+    val count = state.pendingUploads
+    val status = when {
+        count == null -> if (state.online) "Online, checking upload queue" else "Offline, checking upload queue"
+        state.online -> "Online, $count scans pending upload"
+        else -> "Offline, $count scans pending upload"
+    }
+    val tint = when {
+        !state.online -> Mlx.Text500
+        count == null -> Mlx.Text400
+        count > 0 -> Mlx.Warn600
+        else -> Mlx.Ok500
+    }
+    Box(Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = status },
+        contentAlignment = Alignment.Center) {
+        val cloudIcon = when {
+            !state.online -> Icons.Filled.CloudOff
+            count == null -> Icons.Filled.Cloud
+            count > 0 -> Icons.Filled.CloudUpload
+            else -> Icons.Filled.Cloud
+        }
+        Icon(cloudIcon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        if (count != null && count > 0) {
+            Box(Modifier.align(Alignment.TopEnd).widthIn(min = 18.dp).heightIn(min = 18.dp)
+                .background(Mlx.Warn600, CircleShape).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                Text(if (count > 99) "99+" else count.toString(), style = MlxType.MicroPill,
+                    color = Color.White, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMenu(onSettingsClick: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Box(Modifier.size(32.dp).background(Mlx.Brand900, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Person, contentDescription = "Profile menu", tint = Color.White, modifier = Modifier.size(16.dp))
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Settings") },
+                leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                onClick = { expanded = false; onSettingsClick() },
+            )
         }
     }
 }

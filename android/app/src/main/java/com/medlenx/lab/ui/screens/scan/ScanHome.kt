@@ -1,6 +1,7 @@
 package com.medlenx.lab.ui.screens.scan
 
 import android.net.Uri
+import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.progressSemantics
@@ -19,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Public
@@ -37,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +72,8 @@ import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 import java.io.File
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun ScanHome(
@@ -127,7 +132,7 @@ fun ScanHome(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    CaptureHero(vm, onCamera, onGallery)
+                    CaptureHero(onCamera, onGallery)
                     DailyTargetCard(vm)
                     ClaimAuditsCard(vm)
                 }
@@ -141,7 +146,7 @@ fun ScanHome(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                CaptureHero(vm, onCamera, onGallery)
+                CaptureHero(onCamera, onGallery)
                 DailyTargetCard(vm)
                 ClaimAuditsCard(vm)
                 RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
@@ -170,7 +175,7 @@ private fun ClaimAuditsCard(vm: ScanViewModel) {
 }
 
 @Composable
-private fun CaptureHero(vm: ScanViewModel, onCamera: () -> Unit, onGallery: () -> Unit) {
+private fun CaptureHero(onCamera: () -> Unit, onGallery: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxWidth().clip(MlxShape.Large)
             .background(Brush.linearGradient(listOf(Mlx.Brand900, Mlx.Brand800, Mlx.Brand700))),
@@ -198,32 +203,6 @@ private fun CaptureHero(vm: ScanViewModel, onCamera: () -> Unit, onGallery: () -
                 Icon(Icons.Filled.FolderOpen, contentDescription = null)
                 Text("  Choose File", color = Color.White)
             }
-            val pending = !vm.online || vm.queuedScans > 0
-            Row(
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-                    .clip(CircleShape).background(if (pending) Mlx.Warn100 else Mlx.Ok100)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(Modifier.size(9.dp).background(if (pending) Mlx.GuessAccent else Mlx.Ok500, CircleShape))
-                Text(
-                    text = when {
-                        !vm.online -> "Offline · ${vm.queuedScans} queued locally"
-                        vm.queuedScans > 0 -> "Online · ${vm.queuedScans} queued locally"
-                        else -> "Online · saved on this device"
-                    },
-                    style = MlxType.BodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = if (pending) Mlx.WarnDeep else Mlx.OkDeep,
-                )
-            }
-            Text(
-                if (vm.unroutableUploads > 0) "${vm.unroutableUploads} scans have no approved company snapshot and need review; ${vm.pendingUploads} total awaiting upload."
-                else if (vm.pendingUploads > 0) "${vm.pendingUploads} saved audits awaiting cloud upload."
-                else "Saved audits can sync after company approval.",
-                style = MlxType.Footnote, color = Color.White,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
         }
     }
 }
@@ -247,11 +226,11 @@ private fun DailyTargetCard(vm: ScanViewModel) {
                 Text("/ ${vm.dailyTarget}", style = MlxType.CardTitle, color = Mlx.Text500, modifier = Modifier.padding(bottom = 5.dp))
             }
             Box(
-                Modifier.fillMaxWidth().height(12.dp).clip(CircleShape).background(Mlx.Brand200)
+                Modifier.fillMaxWidth().height(16.dp).clip(CircleShape).background(Mlx.Brand200)
                     .progressSemantics(progress),
             ) {
-                Box(Modifier.fillMaxWidth(progress).height(12.dp).clip(CircleShape)
-                    .background(Brush.horizontalGradient(listOf(Mlx.Brand500, Mlx.Ok400))))
+                Box(Modifier.fillMaxWidth(progress).height(16.dp).clip(CircleShape)
+                    .background(Mlx.Cyan500))
             }
             Text("Your scans · change your target in Settings", style = MlxType.Footnote, color = Mlx.Text500)
         }
@@ -261,6 +240,10 @@ private fun DailyTargetCard(vm: ScanViewModel) {
 @Composable
 private fun RecentCaptures(captures: List<PrescriptionEntity>, currentUid: String, onSelect: (PrescriptionEntity) -> Unit) {
     val context = LocalContext.current
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (isActive) { delay(60_000); now = System.currentTimeMillis() }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Recent Captures", style = MlxType.CardTitle)
         if (captures.isEmpty()) {
@@ -280,8 +263,19 @@ private fun RecentCaptures(captures: List<PrescriptionEntity>, currentUid: Strin
                                 contentDescription = if (rx.restoreScanId != null) "Image not backed up to cloud" else "Image unavailable",
                                 tint = Mlx.Text400, modifier = Modifier.size(28.dp))
                         }
-                        Text(rx.doctorName.ifBlank { "Unknown doctor" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MlxType.BodySmall, modifier = Modifier.padding(8.dp))
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(rx.doctorName.ifBlank { "Unknown doctor" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MlxType.BodySmall, fontWeight = FontWeight.SemiBold)
+                            val relative = DateUtils.getRelativeTimeSpanString(rx.createdAt, now, DateUtils.MINUTE_IN_MILLIS).toString()
+                            Text(if (rx.restoreScanId != null) "Cloud date · $relative" else relative,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MlxType.Footnote, color = Mlx.Text500)
+                            // Recent Captures contains saved, verified audits. Upload
+                            // PENDING is not the same thing as an audit in progress.
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Mlx.Ok500, modifier = Modifier.size(13.dp))
+                                Text("Processed", style = MlxType.Footnote, color = Mlx.Ok600, maxLines = 1)
+                            }
+                        }
                     }
                 }
                 if (row.size == 1) Box(Modifier.weight(1f))

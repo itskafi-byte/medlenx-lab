@@ -34,10 +34,10 @@ import com.medlenx.lab.ui.theme.MlxType
  * label, centred inside the cell — not a full-cell rectangle. Active icon is 14dp and
  * the label 10sp/600; inactive icon is 16dp and the label 10sp/500, both #64748B.
  *
- * Five destinations, matching `navItems`. The web's sixth destination (Help) lives
- * behind Settings, exactly as the Figma export does it (App.tsx:2056).
+ * Four core destinations. Settings is accessible from the profile menu and Help
+ * remains accessible from Settings.
  *
- * The clickable cell keeps the full 60dp height and a fifth of the screen width, so
+ * The clickable cell keeps the full 60dp height and a quarter of the screen width, so
  * every target stays well above the 48dp minimum even though the visible pill is
  * much smaller.
  */

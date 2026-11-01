@@ -176,6 +176,10 @@ fun MedLenXShell(
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
                 MlxTopBar(
                     onSearchClick = { searchOpen = !searchOpen },
+                    onSettingsClick = {
+                        searchOpen = false
+                        navController.navigate(Destination.Settings.route) { launchSingleTop = true }
+                    },
                     state = topBarState,
                     hazeState = hazeState,
                 )
@@ -218,7 +222,7 @@ fun MedLenXShell(
                 startDestination = Destination.Scan.route,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                Destination.bottomBar.forEach { dest ->
+                Destination.primaryRoutes.forEach { dest ->
                     composable(dest.route) {
                         // NO top inset here. Scaffold measures the topBar slot and
                         // reports its full height (status bar + responsive bar + divider)
