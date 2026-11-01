@@ -4,7 +4,9 @@
 and a proposed rules baseline, not the upload pipeline, team feed, legacy-scan
 migration, or account-safe cache handling. Do not use this as a production sync
 feature or deploy these rules without testing and integrating them with your
-project's other rules. The app still saves audits locally and does not upload them.
+project's other rules. New verified audits are saved atomically with a UUID and
+`PENDING` status, but there is no upload worker or feed: the app does not upload
+them. Older audits remain `LOCAL_ONLY` and are not automatically queued.
 
 ## Initial project setup
 
@@ -57,8 +59,12 @@ content restrictions require a trusted server-side ingestion path.
 - Bind the signed-in UID to the server-assigned `users/{uid}.companyId` and
   approved membership, and observe membership changes. The current app does not
   yet perform this lookup.
-- Make the local Room write and cloud submission crash-safe. Firestore
-  persistence alone cannot make a Room write and a Firestore write atomic.
+- Implement a WorkManager uploader and durable scheduling/recovery. The Room
+  audit, medicines and pending status are saved in one transaction, but no work
+  is currently enqueued. PENDING rows do not yet record an approved company at
+  capture time; do not automatically route them to whatever company happens to
+  be assigned later. Firestore persistence alone cannot make a Room write and a
+  Firestore write atomic.
   Surface rejected writes. Sign-out currently retains local data and must not
   delete unsynced work. A Firestore instance must be terminated before clearing
   persistence; clearing it deletes pending writes, so that cannot be added to

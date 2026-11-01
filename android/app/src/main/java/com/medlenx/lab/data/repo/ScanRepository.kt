@@ -1,6 +1,8 @@
 package com.medlenx.lab.data.repo
 
 import com.google.firebase.auth.FirebaseAuth
+import androidx.room.withTransaction
+import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.DoctorDao
 import com.medlenx.lab.data.local.DoctorEntity
@@ -42,6 +44,7 @@ sealed class ScanProgress {
  * as pass-throughs rather than stubbed with fake logic.
  */
 class ScanRepository(
+    private val database: MedLenXDatabase,
     private val vlClient: MedLenXVlClient,
     private val prescriptionDao: PrescriptionDao,
     private val doctorDao: DoctorDao,
@@ -159,47 +162,51 @@ class ScanRepository(
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: throw IllegalStateException("Sign in before saving a prescription")
         check(uid == expectedUid && expectedUid.isNotBlank()) { "The signed-in user changed; capture the prescription again" }
-        val id = prescriptionDao.insert(
-            prescription.copy(
-                userId = uid,
-                totalMedicines = result.medicines.size,
-                mrId = mrId,
-                createdAt = prescription.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
-                doctorId = resolveDoctorId(prescription, uid),
-            ),
-        )
-        val rows = result.medicines.mapIndexed { index, med ->
-            val audit = enriched.getOrNull(index)
-            // The catalogue-resolved manufacturer wins. The VL is told never to guess a
-            // company, so `med.company` is blank in almost every read, and the analytics
-            // queries all filter on a non-empty company_name.
-            val company = audit?.company?.takeIf { it.isNotBlank() } ?: med.company
-            val dosage = med.dosageNormalized.ifBlank { Bengali.normalizeDosage(med.dosage) }
-            ScannedMedicineEntity(
-                prescriptionId = id,
-                lineNumber = index + 1,
-                brandName = med.brandName,
-                generic = med.genericName,
-                strength = med.strength,
-                dosageForm = med.type.ifBlank { med.form },
-                dosage = dosage,
-                raw = med.rawText,
-                companyName = company.takeIf { it.isNotBlank() },
-                companyVerified = audit?.companyVerified ?: false,
-                isOwn = ownCompany != null && company.equals(ownCompany, ignoreCase = true),
-                confidenceScore = med.confidence,
-                imageUrl = audit?.imageUrl,
-                matchType = audit?.matchType?.label ?: "pending",
-                isAntibiotic = audit?.isAntibiotic ?: false,
-                broadSpectrum = audit?.broadSpectrum ?: false,
-                therapeuticClass = audit?.therapeuticClass,
-                nemlListed = audit?.neml?.listed ?: false,
-                dgdaFlagged = audit?.dgdaAlert?.flagged ?: false,
-                tripsWatch = audit?.tripsWatch?.watch ?: false,
+        return database.withTransaction {
+            val id = prescriptionDao.insert(
+                prescription.copy(
+                    userId = uid,
+                    scanId = java.util.UUID.randomUUID().toString(),
+                    syncStatus = "PENDING",
+                    totalMedicines = result.medicines.size,
+                    mrId = mrId,
+                    createdAt = prescription.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
+                    doctorId = resolveDoctorId(prescription, uid),
+                ),
             )
+            val rows = result.medicines.mapIndexed { index, med ->
+                val audit = enriched.getOrNull(index)
+                // The catalogue-resolved manufacturer wins. The VL is told never to guess a
+                // company, so `med.company` is blank in almost every read, and the analytics
+                // queries all filter on a non-empty company_name.
+                val company = audit?.company?.takeIf { it.isNotBlank() } ?: med.company
+                val dosage = med.dosageNormalized.ifBlank { Bengali.normalizeDosage(med.dosage) }
+                ScannedMedicineEntity(
+                    prescriptionId = id,
+                    lineNumber = index + 1,
+                    brandName = med.brandName,
+                    generic = med.genericName,
+                    strength = med.strength,
+                    dosageForm = med.type.ifBlank { med.form },
+                    dosage = dosage,
+                    raw = med.rawText,
+                    companyName = company.takeIf { it.isNotBlank() },
+                    companyVerified = audit?.companyVerified ?: false,
+                    isOwn = ownCompany != null && company.equals(ownCompany, ignoreCase = true),
+                    confidenceScore = med.confidence,
+                    imageUrl = audit?.imageUrl,
+                    matchType = audit?.matchType?.label ?: "pending",
+                    isAntibiotic = audit?.isAntibiotic ?: false,
+                    broadSpectrum = audit?.broadSpectrum ?: false,
+                    therapeuticClass = audit?.therapeuticClass,
+                    nemlListed = audit?.neml?.listed ?: false,
+                    dgdaFlagged = audit?.dgdaAlert?.flagged ?: false,
+                    tripsWatch = audit?.tripsWatch?.watch ?: false,
+                )
+            }
+            if (rows.isNotEmpty()) prescriptionDao.insertMedicines(rows)
+            id
         }
-        if (rows.isNotEmpty()) prescriptionDao.insertMedicines(rows)
-        return id
     }
 
     /**

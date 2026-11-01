@@ -145,6 +145,14 @@ object Migrations {
         }
     }
 
+    /** Old audits require an explicit migration before any cloud upload. */
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `scan_id` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `sync_status` TEXT NOT NULL DEFAULT 'LOCAL_ONLY'")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *
