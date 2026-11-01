@@ -81,9 +81,9 @@ fun TeamScreen(
             onExportPdf = onExportPdf,
         )
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
-        vm.error?.let { MlxErrorLine(it, Modifier.padding(bottom = MlxD.SectionGap)) }
+        vm.error?.let { MlxErrorLine(it, Modifier.padding(bottom = 12.dp)) }
 
         TeamMapSection(
             regions = vm.geoRegions,
@@ -92,7 +92,7 @@ fun TeamScreen(
             onModeChange = vm::updateMapMode,
         )
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
         TeamTiersSection(
             doctors = tiering.doctors,
@@ -102,7 +102,7 @@ fun TeamScreen(
             onTierFilter = vm::updateTierFilter,
         )
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
         TeamLeaderboardSection(
             officerName = vm.officerProfile?.fullName.orEmpty(),
@@ -115,7 +115,7 @@ fun TeamScreen(
             ownItems = tiering.doctors.sumOf { it.ownItems },
         )
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
         TeamTargetsSection(
             brands = vm.targetProgress?.brands ?: emptyList(),
@@ -125,11 +125,11 @@ fun TeamScreen(
             onRemoveTarget = vm::removeDoctorTarget,
         )
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
         TeamOffTerritorySection(vm.offTerritory)
 
-        Spacer(Modifier.height(MlxD.SectionGap))
+        Spacer(Modifier.height(12.dp))
 
         TeamStewardshipSection(stewardship.doctors, stewardship.totals.abxSharePct)
     }

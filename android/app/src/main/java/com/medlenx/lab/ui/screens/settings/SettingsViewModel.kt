@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.BrandTargetEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
+import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -26,6 +27,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val profileDao = app.graph.profileDao
 
     val roles = listOf("MPO", "RSO", "RSM", "Territory Manager", "Product Manager")
+    val roleLabels = mapOf(
+        "MPO" to "MPO - Medical Promotion Officer",
+        "RSO" to "RSO - Regional Sales Officer",
+        "RSM" to "RSM - Regional Sales Manager",
+        "Territory Manager" to "Territory Manager",
+        "Product Manager" to "Product Manager",
+    )
+    val portfolios = listOf("Cardiology", "Gastroenterology", "Neuromedicine", "Diabetes", "Respiratory", "General Medicine")
+    private var locations by mutableStateOf(BdLocations())
+    val divisions: List<String> get() = locations.divisions.ifEmpty {
+        listOf("Barishal", "Chattogram", "Dhaka", "Khulna", "Mymensingh", "Rajshahi", "Rangpur", "Sylhet")
+    }
+    val territories: List<String> get() = locations.districts.values
+        .filter { it.division.equals(division, ignoreCase = true) }
+        .flatMap { it.territories }.distinct().sorted()
 
     var company by mutableStateOf("")
         private set
@@ -68,7 +84,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun updateEmployeeId(v: String) { employeeId = v }
     fun updateFullName(v: String) { fullName = v }
-    fun updateDivision(v: String) { division = v }
+    fun updateDivision(v: String) {
+        if (division != v) { division = v; territory = "" }
+    }
     fun updateTerritory(v: String) { territory = v }
     fun updatePortfolio(v: String) { portfolio = v }
 
@@ -103,6 +121,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             error = null
             runCatching {
+                locations = app.graph.locationRepository.locations()
                 allCompanies = app.graph.database.medexDao().companies()
                 profileDao.current()?.let { p ->
                     company = p.company

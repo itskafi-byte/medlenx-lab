@@ -28,6 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -70,7 +72,7 @@ private fun AuthScreen(auth: FirebaseAuth?) {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     Box(
-        modifier = Modifier.fillMaxSize().background(Mlx.Brand900)
+        modifier = Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Mlx.Brand900, Mlx.Brand700, Mlx.Brand900)))
             .statusBarsPadding().navigationBarsPadding()
             .verticalScroll(rememberScrollState()).padding(20.dp),
         contentAlignment = Alignment.Center,
@@ -104,8 +106,8 @@ private fun AuthScreen(auth: FirebaseAuth?) {
                             }
                         }
                     }, enabled = !busy, modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Mlx.Brand900)) {
-                        if (busy) CircularProgressIndicator() else Text(if (create) "Create account" else "Sign in")
+                        colors = ButtonDefaults.buttonColors(containerColor = Mlx.Brand900, contentColor = Color.White)) {
+                        if (busy) CircularProgressIndicator(color = Color.White) else Text(if (create) "Create account" else "Sign in", color = Color.White)
                     }
                     TextButton(onClick = { create = !create; message = "" }, enabled = !busy) {
                         Text(if (create) "Already have an account? Sign in" else "New to MedLenX? Create an account")

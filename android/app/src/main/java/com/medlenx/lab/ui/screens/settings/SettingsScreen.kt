@@ -21,8 +21,22 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,9 +69,6 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(MlxD.SectionGap),
     ) {
-        androidx.compose.material3.TextButton(onClick = { com.google.firebase.auth.FirebaseAuth.getInstance().signOut() }) {
-            Text("Sign out")
-        }
         MlxCard {
             Text(
                 text = "Enterprise Settings & Officer Profile",
@@ -131,59 +142,20 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(MlxD.Space3))
-            FieldLabel("Division")
-            MlxTextField(
-                value = vm.division,
-                onValueChange = vm::updateDivision,
-                placeholder = "Dhaka",
-                modifier = Modifier.fillMaxWidth(),
+            SettingsDropdown("Division", vm.division, vm.divisions, vm::updateDivision)
+            Spacer(Modifier.height(MlxD.Space3))
+            SettingsDropdown(
+                "Designated Territory / Zone", vm.territory, vm.territories,
+                vm::updateTerritory, enabled = vm.division.isNotBlank(),
+                placeholder = if (vm.division.isBlank()) "Select a division first" else "Select a territory",
             )
             Spacer(Modifier.height(MlxD.Space3))
-            FieldLabel("Designated Territory / Zone")
-            MlxTextField(
-                value = vm.territory,
-                onValueChange = vm::updateTerritory,
-                placeholder = "Dhaka South, Chittagong Metro...",
-                modifier = Modifier.fillMaxWidth(),
-            )
+            SettingsDropdown("Assigned Product Portfolio", vm.portfolio, vm.portfolios, vm::updatePortfolio)
             Spacer(Modifier.height(MlxD.Space3))
-            FieldLabel("Assigned Product Portfolio")
-            MlxTextField(
-                value = vm.portfolio,
-                onValueChange = vm::updatePortfolio,
-                placeholder = "Cardiology, Gastroenterology",
-                modifier = Modifier.fillMaxWidth(),
+            SettingsDropdown(
+                label = "Role", value = vm.role, options = vm.roles,
+                onSelected = vm::updateRole, display = { vm.roleLabels[it] ?: it },
             )
-            Spacer(Modifier.height(MlxD.Space3))
-            FieldLabel("Role")
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Mlx.Surface)
-                    .border(BorderStroke(1.dp, Mlx.Brand200), RoundedCornerShape(12.dp)),
-            ) {
-                vm.roles.forEach { r ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { vm.updateRole(r) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = r,
-                            style = MlxType.BodySmall,
-                            color = if (r == vm.role) Mlx.Text900 else Mlx.Text500,
-                            fontWeight = if (r == vm.role) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (r == vm.role) {
-                            Text("✓", style = MlxType.BodySmall, color = Mlx.Ok600)
-                        }
-                    }
-                }
-            }
 
             Spacer(Modifier.height(MlxD.Space4))
 
@@ -278,6 +250,17 @@ fun SettingsScreen(
                 icon = Icons.Filled.Save,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(MlxD.Space3))
+            OutlinedButton(
+                onClick = { com.google.firebase.auth.FirebaseAuth.getInstance().signOut() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Sign out")
+            }
         }
 
         MlxCard {
@@ -325,4 +308,43 @@ private fun FieldLabel(text: String) {
         color = Mlx.Text500,
         modifier = Modifier.padding(bottom = MlxD.Space1),
     )
+}
+
+/** Keeps a previously saved custom value visible without silently replacing it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsDropdown(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit,
+    enabled: Boolean = true,
+    placeholder: String = "Select an option",
+    display: (String) -> String = { it },
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val choices = if (value.isNotBlank() && value !in options) listOf(value) + options else options
+    ExposedDropdownMenuBox(
+        expanded = expanded && enabled,
+        onExpandedChange = { if (enabled) expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = display(value), onValueChange = {}, readOnly = true, enabled = enabled,
+            label = { Text(label) }, placeholder = { Text(placeholder) }, singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+        )
+        this.ExposedDropdownMenu(
+            expanded = expanded && enabled, onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 320.dp),
+        ) {
+            choices.forEach { item ->
+                DropdownMenuItem(text = { Text(display(item)) }, onClick = {
+                    onSelected(item)
+                    expanded = false
+                })
+            }
+        }
+    }
 }
