@@ -160,6 +160,15 @@ object Migrations {
         }
     }
 
+    /** Uniqueness for cloud-restored UUIDs, without changing legacy blank IDs. */
+    val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `restore_scan_id` TEXT")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_prescriptions_user_id_scan_id` ON `prescriptions` (`user_id`, `scan_id`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_prescriptions_user_id_restore_scan_id` ON `prescriptions` (`user_id`, `restore_scan_id`)")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

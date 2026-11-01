@@ -107,6 +107,18 @@ content restrictions require a trusted server-side ingestion path.
   records. Shared or unsafe image paths are retained and reported; an interruption
   after the Room commit can leave orphaned files. Sign-out itself never performs
   this cleanup.
+- On sign-in/startup a network-constrained one-shot restore verifies the current
+  membership with the server, then pages through `team_scans` filtered by the
+  existing `createdByUid` field (not `userId`). It restores only that UID's
+  current-company results and retries when offline. The local per-user UUID
+  guard preserves existing scans and their photos, including pending scans.
+  Photos, original capture time, Rx number, full medicine details and clinical
+  classifications were never uploaded and cannot be recovered. Restored rows
+  use an empty image path, a short UUID as the display Rx number, and the cloud
+  upload timestamp as their date. Date-based local analytics therefore reflect
+  upload time, not necessarily capture time; absent clinical flags are not
+  restored and should not be interpreted as negative findings. Invalid cloud
+  documents are skipped. Previously assigned companies are not queried.
 - Team activity displays server-confirmed results only. It deliberately hides
   cached feed results while offline to avoid exposing Firestore's shared disk
   cache after an account switch. Other local features remain offline-first.

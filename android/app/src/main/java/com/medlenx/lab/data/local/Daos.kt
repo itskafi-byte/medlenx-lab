@@ -83,6 +83,12 @@ interface PrescriptionDao {
     @Upsert
     suspend fun upsert(p: PrescriptionEntity)
 
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND scan_id = :scanId")
+    suspend fun countByScanId(currentUid: String, scanId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertRestored(p: PrescriptionEntity): Long
+
     /** Used only while quarantining a legacy root-level image on this device. */
     @Query("UPDATE prescriptions SET image_path = :newPath WHERE image_path = :oldPath")
     suspend fun relocateLegacyImage(oldPath: String, newPath: String)

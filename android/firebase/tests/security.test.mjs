@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 
 let env;
 const id = '12345678-1234-4123-8123-123456789abc';
@@ -73,4 +73,13 @@ test('profile merge is self-only and preserves administrator assignment', async 
   await assertSucceeds(setDoc(doc(newcomer, 'users/newcomer'), {officerProfile: profile}, {merge: true}));
   await assertFails(setDoc(doc(env.authenticatedContext('intruder').firestore(), 'users/intruder'),
     {companyId: 'company-a', officerProfile: profile}));
+});
+
+test('own history query uses the stored creator field and company boundary', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'companies/company-a/team_scans', id), scan('Alice', 'alice')));
+  const own = query(collection(alice, 'companies/company-a/team_scans'), where('createdByUid', '==', 'alice'));
+  const snapshot = await assertSucceeds(getDocs(own));
+  if (snapshot.size !== 1 || snapshot.docs[0].id !== id) throw new Error('own history query failed');
+  await assertFails(getDocs(query(collection(alice, 'companies/company-b/team_scans'), where('createdByUid', '==', 'alice'))));
 });

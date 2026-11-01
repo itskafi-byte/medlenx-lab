@@ -109,7 +109,11 @@ fun ScanHome(
                         PrescriptionImageViewer(imageUri = Uri.fromFile(image).toString(), transform = transform)
                     }
                     Text("Pinch to zoom · Drag to pan", style = MlxType.Footnote)
-                } else Text("This image is unavailable or requires legacy review.", style = MlxType.BodySmall)
+                } else Text(
+                    if (rx.restoreScanId != null) "Image not backed up to cloud. This restored summary contains only shared scan results."
+                    else "This image is unavailable or requires legacy review.",
+                    style = MlxType.BodySmall,
+                )
                 OutlinedButton(onClick = { selected = null; onOpenAudit(listOf(rx).toRecentRxRows().first()) },
                     modifier = Modifier.fillMaxWidth()) { Text("View saved audit") }
             }
@@ -272,7 +276,9 @@ private fun RecentCaptures(captures: List<PrescriptionEntity>, currentUid: Strin
                             if (rx.imagePath.isNotBlank() && File(rx.imagePath).isFile && UserCaptureFiles.ownsStored(context, currentUid, File(rx.imagePath))) {
                                 AsyncImage(model = File(rx.imagePath), contentDescription = "Prescription ${rx.rxNo}",
                                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                            } else Icon(Icons.Filled.Image, contentDescription = "Image unavailable", tint = Mlx.Text400, modifier = Modifier.size(28.dp))
+                            } else Icon(Icons.Filled.Image,
+                                contentDescription = if (rx.restoreScanId != null) "Image not backed up to cloud" else "Image unavailable",
+                                tint = Mlx.Text400, modifier = Modifier.size(28.dp))
                         }
                         Text(rx.doctorName.ifBlank { "Unknown doctor" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MlxType.BodySmall, modifier = Modifier.padding(8.dp))

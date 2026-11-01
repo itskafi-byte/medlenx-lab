@@ -323,9 +323,16 @@ private fun DrawerBody(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = MlxD.Space4, vertical = MlxD.Space3),
         ) {
+            if (drawer.prescription.restoreScanId != null) {
+                Text("Restored from cloud. Image not backed up. Only shared scan results were restored; original capture time, Rx number and clinical details are unavailable. The date is upload time and the Rx number is a shortened scan ID.",
+                    style = MlxType.BodySmall, color = Mlx.Text600, modifier = Modifier.padding(bottom = MlxD.Space3))
+            } else if (drawer.prescription.imagePath.isBlank() || !java.io.File(drawer.prescription.imagePath).isFile) {
+                Text("Prescription image unavailable on this device.", style = MlxType.BodySmall,
+                    color = Mlx.Text600, modifier = Modifier.padding(bottom = MlxD.Space3))
+            }
             DuplicateNote(drawer)
 
-            ClinicalStrip(
+            if (drawer.prescription.restoreScanId == null) ClinicalStrip(
                 antibiotics = drawer.lines.count { it.isAntibiotic },
                 broadSpectrum = drawer.lines.count { it.broadSpectrum },
                 total = drawer.lines.size,

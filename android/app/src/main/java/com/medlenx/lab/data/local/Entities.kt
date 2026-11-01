@@ -71,7 +71,9 @@ data class DoctorEntity(
 /** One verified prescription scan. */
 @Entity(
     tableName = "prescriptions",
-    indices = [Index("created_at"), Index("mr_id"), Index("doctor_name")],
+    indices = [Index("created_at"), Index("mr_id"), Index("doctor_name"),
+        Index(value = ["user_id", "scan_id"]),
+        Index(value = ["user_id", "restore_scan_id"], unique = true)],
 )
 data class PrescriptionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -80,6 +82,9 @@ data class PrescriptionEntity(
     @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     // Historical rows remain local-only; only newly verified scans enter the outbox.
     @ColumnInfo(name = "scan_id", defaultValue = "''") val scanId: String = "",
+    // Nullable so historical empty scan IDs never conflict. Restored rows mirror
+    // their non-empty scan UUID here for a per-user uniqueness constraint.
+    @ColumnInfo(name = "restore_scan_id") val restoreScanId: String? = null,
     @ColumnInfo(name = "company_id", defaultValue = "''") val companyId: String = "",
     @ColumnInfo(name = "sync_status", defaultValue = "'LOCAL_ONLY'") val syncStatus: String = "LOCAL_ONLY",
     @ColumnInfo(name = "rx_no") val rxNo: String,

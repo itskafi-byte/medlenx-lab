@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.sync.ProfileCloudSync
+import com.medlenx.lab.data.sync.HistoryRestoreScheduling
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
 import kotlinx.coroutines.CancellationException
@@ -64,6 +65,7 @@ fun AuthGate(content: @Composable () -> Unit) {
     LaunchedEffect(currentUid) {
         if (currentUid != null && currentUid != "legacy_user") {
             runCatching { UploadScheduling.start(context, currentUid) }
+            runCatching { HistoryRestoreScheduling.start(context, currentUid) }
             try {
                 TrustedMembership.refresh(context, currentUid)
             } catch (e: CancellationException) {
