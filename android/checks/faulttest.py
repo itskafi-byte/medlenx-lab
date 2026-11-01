@@ -114,25 +114,26 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         "is not qualified",
     ),
     (
-        "a query using RX_FILTER_SQL with no doctors join",
+        "a filter referencing an undeclared table alias",
         "roomcheck.py", DAOS,
-        '            "LEFT JOIN doctors d ON p.doctor_id = d.id " +\n'
-        '            "WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '
-        "''" ') != ' + "''" + '" + RX_FILTER_SQL',
-        '"WHERE p.created_at >= :since AND IFNULL(p.doctor_name, '
-        "''" ') != ' + "''" + '" + RX_FILTER_SQL',
+        """        "SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
+            "WHERE p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL""",
+        """        "SELECT COUNT(DISTINCT p.id) FROM prescriptions p " +
+            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
+            "WHERE absent.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL""",
         "declares no table",
     ),
     (
         "a qualifier pointing at the wrong table",
         "roomcheck.py", DAOS,
-        "        SELECT IFNULL(d.specialty, '') AS specialty,\n"
+        "        SELECT IFNULL(p.doctor_specialty, '') AS specialty,\n"
         "               sm.generic AS generic,\n"
         "               COUNT(*) AS count",
-        "        SELECT IFNULL(d.rx_no, '') AS specialty,\n"
+        "        SELECT IFNULL(sm.doctor_specialty, '') AS specialty,\n"
         "               sm.generic AS generic,\n"
         "               COUNT(*) AS count",
-        "is not on table 'doctors'",
+        "is not on table 'scanned_medicines'",
     ),
     (
         "a column that is on no table at all, written bare",
@@ -164,9 +165,9 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
     (
         "an inlined filter fragment with one clause changed",
         "roomcheck.py", DAOS,
-        """        WHERE sm.generic != '' AND IFNULL(d.specialty, '') != ''
+        """        WHERE p.user_id = :currentUid AND sm.generic != '' AND IFNULL(p.doctor_specialty, '') != ''
           AND (:district IS NULL OR :district = '' OR p.district = :district)""",
-        """        WHERE sm.generic != '' AND IFNULL(d.specialty, '') != ''
+        """        WHERE p.user_id = :currentUid AND sm.generic != '' AND IFNULL(p.doctor_specialty, '') != ''
           AND (:district IS NULL OR :district = '' OR p.upazila = :district)""",
         # The reported `found:` line has to carry the drift itself, not just a count.
         "p.upazila = :district",

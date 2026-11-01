@@ -65,8 +65,10 @@ content restrictions require a trusted server-side ingestion path.
 - Partition all user-local data by authenticated UID, including profile, scans,
   medicines, targets, queue, preferences and images. The current database is
   shared across sign-ins and is not yet partitioned. New prescription rows now
-  record the signed-in UID, while historical rows are marked `legacy_user`; most
-  queries do not filter by UID, so this is **not isolation**. Any later cloud
+  record the signed-in UID, while historical rows are marked `legacy_user`.
+  Recent-audit and Analytics queries have UID predicates, but Team, shared
+  profiles, targets, queue, legacy images, and other paths are not yet isolated;
+  this is **not total isolation**. Any later cloud
   upload of existing local scans requires a deliberate migration.
 - Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
   results and pending writes require deliberate treatment on shared devices;

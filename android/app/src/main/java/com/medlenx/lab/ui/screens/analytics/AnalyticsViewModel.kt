@@ -123,7 +123,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         if (next < 0 || next >= liveTotal) return
         liveOffset = next
         viewModelScope.launch {
-            runCatching { liveScans = prescriptionDao.liveScanRows(limit = next + livePageSize) }
+            runCatching { liveScans = prescriptionDao.liveScanRows(currentUid, limit = next + livePageSize) }
                 .onFailure { error = it.message ?: "Could not page the live feed" }
         }
     }
@@ -352,7 +352,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     suspend fun buildExportCsv(): String = withContext(Dispatchers.Default) {
         val f = filters
         ExportDocuments.recentMedicinesCsv(
-            prescriptionDao.recentMedicineExportRows(
+            prescriptionDao.recentMedicineExportRows(currentUid,
                 since = System.currentTimeMillis() - filterSpan(),
                 limit = EXPORT_LIMIT,
                 district = f.district,
@@ -388,7 +388,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     fun openCompanyDrilldown(company: String) {
         if (company.isBlank()) return
         openDrilldown { f, since ->
-            val generics = prescriptionDao.companyGenerics(
+            val generics = prescriptionDao.companyGenerics(currentUid,
                 company, since, COMPANY_DRILL_LIMIT,
                 f.district, f.territory, f.specialty, f.mrId, f.source,
             )
@@ -396,16 +396,16 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 company = company,
                 // Both totals, so the dialog can show the true count and still
                 // explain where the web's smaller figure comes from.
-                totalItems = prescriptionDao.companyItemCount(
+                totalItems = prescriptionDao.companyItemCount(currentUid,
                     company, since, f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
                 topGenericItems = generics.sumOf { it.count },
                 generics = generics,
-                brands = prescriptionDao.companyBrands(
+                brands = prescriptionDao.companyBrands(currentUid,
                     company, since, COMPANY_DRILL_LIMIT,
                     f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
-                doctors = prescriptionDao.companyDoctors(
+                doctors = prescriptionDao.companyDoctors(currentUid,
                     company, since, COMPANY_DRILL_LIMIT,
                     f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
@@ -434,7 +434,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         openDrilldown { f, since ->
             Drilldown.Brand(
                 brand = brand,
-                doctors = prescriptionDao.brandDoctors(
+                doctors = prescriptionDao.brandDoctors(currentUid,
                     brand, since, BRAND_DOCTOR_LIMIT,
                     f.district, f.territory, f.specialty, f.mrId, f.source,
                 ),
@@ -476,10 +476,10 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             runCatching {
                 val f = filters
                 filterOptions = FilterOptions(
-                    districts = prescriptionDao.filterDistricts(),
-                    territories = prescriptionDao.filterTerritories(),
-                    specialties = prescriptionDao.filterSpecialties(),
-                    mrIds = prescriptionDao.filterMrIds(),
+                    districts = prescriptionDao.filterDistricts(currentUid),
+                    territories = prescriptionDao.filterTerritories(currentUid),
+                    specialties = prescriptionDao.filterSpecialties(currentUid),
+                    mrIds = prescriptionDao.filterMrIds(currentUid),
                 )
                 val now = System.currentTimeMillis()
                 val span = filterSpan()
@@ -490,21 +490,21 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     .split(" ").first()
                 val ownLike = "%$ownToken%"
 
-                val itemsTotal = prescriptionDao.itemCountSince(since, f.district, f.territory, f.specialty, f.mrId, f.source)
+                val itemsTotal = prescriptionDao.itemCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source)
                 kpis = AnalyticsMetrics.dashboardKpis(
-                    totalToday = prescriptionDao.prescriptionCountSince(startOfToday(), f.district, f.territory, f.specialty, f.mrId, f.source),
-                    totalWeek = prescriptionDao.prescriptionCountSince(now - 7L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    totalMonth = prescriptionDao.prescriptionCountSince(now - 30L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    totalAll = prescriptionDao.prescriptionCountAll(f.district, f.territory, f.specialty, f.mrId, f.source),
-                    scansCur = prescriptionDao.prescriptionCountSince(since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    scansPrev = prescriptionDao.prescriptionCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalToday = prescriptionDao.prescriptionCountSince(currentUid, startOfToday(), f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalWeek = prescriptionDao.prescriptionCountSince(currentUid, now - 7L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalMonth = prescriptionDao.prescriptionCountSince(currentUid, now - 30L * 24 * 60 * 60 * 1000, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalAll = prescriptionDao.prescriptionCountAll(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    scansCur = prescriptionDao.prescriptionCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    scansPrev = prescriptionDao.prescriptionCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     itemsTotal = itemsTotal,
-                    ownCount = prescriptionDao.ownItemCountSince(since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    prevItems = prescriptionDao.itemCountBetween(prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    prevOwn = prescriptionDao.ownItemCountBetween(prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    topBrand = prescriptionDao.topBrandRow(since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    activeDoctors = prescriptionDao.activeDoctorCount(since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    totalDoctors = prescriptionDao.allDoctorCount(f.district, f.territory, f.specialty, f.mrId, f.source),
+                    ownCount = prescriptionDao.ownItemCountSince(currentUid, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevItems = prescriptionDao.itemCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevOwn = prescriptionDao.ownItemCountBetween(currentUid, prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    topBrand = prescriptionDao.topBrandRow(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    activeDoctors = prescriptionDao.activeDoctorCount(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    totalDoctors = prescriptionDao.allDoctorCount(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
                     ownCompanyName = ownCompany,
                 )
 
@@ -516,20 +516,20 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 // ten bars print different percentages for the same data - the web's and
                 // the app's would disagree on every bar.
                 mostPrescribed = AnalyticsMetrics.mostPrescribed(
-                    prescriptionDao.mostPrescribedRows(since = since, limit = 8, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
+                    prescriptionDao.mostPrescribedRows(currentUid, since = since, limit = 8, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
                 companyShare = AnalyticsMetrics.companyShare(
-                    prescriptionDao.companyShareRows(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
+                    prescriptionDao.companyShareRows(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
                 genericMatrix = AnalyticsMetrics.genericBrandMatrix(
-                    prescriptionDao.genericMatrixRows(f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prescriptionDao.genericMatrixRows(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
                 )
-                leaderTotal = prescriptionDao.doctorLeaderTotal(since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
+                leaderTotal = prescriptionDao.doctorLeaderTotal(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
                 loadLeaderPageSync(since, ownLike)
 
                 liveTotal = prescriptionDao.medicineCount(currentUid)
-                liveScans = prescriptionDao.liveScanRows(limit = livePageSize)
+                liveScans = prescriptionDao.liveScanRows(currentUid, limit = livePageSize)
                 recentPrescriptions = prescriptionDao.observeRecent(currentUid, limit = 8).first()
             }.onFailure { e ->
                 error = e.message ?: "Could not load analytics"
@@ -541,7 +541,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
         val f = filters
         leaders = AnalyticsMetrics.doctorLeaders(
-            rows = prescriptionDao.doctorLeaderRows(
+            rows = prescriptionDao.doctorLeaderRows(currentUid,
                 since = since,
                 ownLike = ownLike,
                 limit = pageSize,

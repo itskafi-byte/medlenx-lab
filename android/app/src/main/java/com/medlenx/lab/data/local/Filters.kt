@@ -50,48 +50,22 @@ data class FilterState(
 }
 
 /**
- * Shared WHERE fragment appended to every filtered query.
- *
- * Room has no dynamic SQL, so the `(:x IS NULL OR col = :x)` idiom stands in for
- * the Python's conditional clause building.
- *
- * All dimensions but one read the prescription row, exactly as `_filter_sql`
- * does (`alias="p"`). Specialty is the exception and reads the joined doctor:
- * `_filter_sql` matches `doctor_alias.specialty`, which is `d.specialty`, and
- * every one of its eighteen filtered statements in the backend joins `doctors`.
- * The distinction is not cosmetic. `p.doctor_specialty` is the value captured
- * when that prescription was scanned; `d.specialty` is the doctor's current
- * profile, refreshed on every save. Correcting a doctor's specialty moves their
- * whole history under the new value on the web, and did not here.
- *
- * Because the fragment references `d`, every query that appends it MUST join
- * `doctors` as `d`. That is checked, not remembered: a query using this constant
- * without the join is reported by `agent/roomcheck.py`.
+ * Shared analytics filter. Always scope to the authenticated UID. Specialty is
+ * taken from the prescription snapshot rather than the shared doctor table,
+ * so another account's doctor edits cannot alter this user's analytics.
+ * This deliberately differs from the web's current-doctor specialty behavior.
  */
 const val RX_FILTER_SQL =
+    " AND p.user_id = :currentUid" +
     " AND (:district IS NULL OR :district = '' OR p.district = :district)" +
         " AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)" +
-        " AND (:specialty IS NULL OR :specialty = '' OR d.specialty = :specialty)" +
+        " AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)" +
         " AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)" +
         " AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)"
 
-/**
- * The same fragment for the one endpoint the web backs with the denormalised
- * `recent_scanned_medicines` row instead of a join.
- *
- * `get_recent_scanned_medicines` (`database.py:1329`) filters its own
- * `specialty` column — the value written when the scan was saved — and
- * `/api/export/recent-medicines.csv` is the endpoint that reads it. So the
- * specialty here matches the prescription's captured value rather than the
- * doctor's current profile, and the statement needs no `doctors` join.
- *
- * Kept as a second constant rather than a hand-written clause list so that
- * `agent/roomcheck.py` can compare every statement that filters against a known
- * variant and report one that matches none. The two differ only in the
- * specialty clause; anything else changing in one and not the other is the
- * drift that check exists to catch.
- */
+/** Export uses the same user-scoped prescription snapshot filters. */
 const val RX_FILTER_SQL_SNAPSHOT =
+    " AND p.user_id = :currentUid" +
     " AND (:district IS NULL OR :district = '' OR p.district = :district)" +
         " AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)" +
         " AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)" +
