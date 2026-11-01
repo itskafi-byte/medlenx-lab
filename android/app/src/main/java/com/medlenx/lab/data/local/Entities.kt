@@ -295,7 +295,7 @@ data class ScanPointRow(
     val items: Int,
 )
 
-/** Projection for [PrescriptionDao.brandCapturedRows] — `get_target_progress`. */
+/** Projection for [PrescriptionDao.observeBrandCapturedRows] — `get_target_progress`. */
 data class BrandCapturedRow(val brand: String, val captured: Int)
 
 /** Projection for [PrescriptionDao.trendRows] — `get_rsm_trends`. */

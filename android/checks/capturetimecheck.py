@@ -49,4 +49,8 @@ assert 'doc.get("captureTimestamp")' in restore and 'doc.getTimestamp("timestamp
 assert 'dao.updateRestoredCaptureTime(uid, company, doc.id, captured)' in restore
 assert "request.resource.data.captureTimestamp is timestamp" in rules
 assert 'observeBrandCapturedRows(currentUid, start, end).collect' in settings
+team = (root/'app/src/main/java/com/medlenx/lab/ui/screens/team/TeamViewModel.kt').read_text()
+assert 'observeBrandCapturedRows(currentUid, since = monthStart, until = nextMonth).first()' in team
+for file in (root/'app/src/main/java').rglob('*.kt'):
+    assert not re.search(r'\.brandCapturedRows\s*\(', file.read_text()), file
 print('capturetimecheck: guarded correction, day/month boundaries, UID isolation and payload wiring PASS')

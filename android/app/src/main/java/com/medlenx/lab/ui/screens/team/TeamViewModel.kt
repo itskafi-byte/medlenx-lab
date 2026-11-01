@@ -191,17 +191,18 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
 
                 // `get_target_progress` measures the calendar month, not a rolling
                 // 30 days, so it gets its own boundary.
-                val monthStart = LocalDate.now().withDayOfMonth(1)
-                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val monthDate = LocalDate.now().withDayOfMonth(1)
+                val monthStart = monthDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val nextMonth = monthDate.plusMonths(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 // Locale.US: this string is printed ("Remaining 40 · 2026-09"), and the
                 // formatter's DecimalStyle would otherwise take Bengali digits from the
                 // default locale.
-                val month = LocalDate.now()
+                val month = monthDate
                     .format(DateTimeFormatter.ofPattern("yyyy-MM", Locale.US))
                 targetProgress = TeamMetrics.targetProgress(
                     targets = app.graph.profileDao.observeTargets(currentUid).first()
                         .map { BrandTarget(it.brand, it.target) },
-                    captured = prescriptionDao.brandCapturedRows(currentUid, since = monthStart),
+                    captured = prescriptionDao.observeBrandCapturedRows(currentUid, since = monthStart, until = nextMonth).first(),
                     month = month,
                 )
                 doctorTargets = app.graph.profileDao.doctorTargetRows(currentUid)
