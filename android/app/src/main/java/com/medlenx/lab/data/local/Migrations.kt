@@ -153,6 +153,13 @@ object Migrations {
         }
     }
 
+    /** Existing pending rows lack a capture-time company and remain unrouteable. */
+    val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `company_id` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

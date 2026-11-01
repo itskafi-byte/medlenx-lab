@@ -28,6 +28,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import com.medlenx.lab.data.sync.TeamFeedRepository
+import com.medlenx.lab.data.sync.TeamFeedState
 import kotlinx.coroutines.launch
 
 /**
@@ -43,6 +47,8 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as MedLenXApp
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     private val prescriptionDao = app.graph.database.prescriptionDao()
+    val teamFeed = TeamFeedRepository.observe(application, currentUid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TeamFeedState())
 
     /** `get_doctor_tiers(days=30)`. */
     private val days = 30

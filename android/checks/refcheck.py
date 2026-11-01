@@ -125,8 +125,8 @@ MEMBER_VAL = re.compile(
 )
 MEMBER_FUN = re.compile(
     r"^\s*(?:@\w+(?:\([^)]*\))?\s*)*"
-    r"(?:public|internal|private|protected|override|open|abstract|final|suspend|inline|"
-    r"actual|expect|operator|infix|tailrec|external|const|fun)+\s+"
+    r"(?:(?:public|internal|private|protected|override|open|abstract|final|suspend|inline|"
+    r"actual|expect|operator|infix|tailrec|external)\s+)*fun\s+"
     r"(?:<[^>]*>\s*)?(?:[\w<>,.?\[\]\s]+\.)?(?P<name>\w+)\s*\(",
     re.M,
 )

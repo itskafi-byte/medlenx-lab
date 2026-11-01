@@ -80,6 +80,7 @@ data class PrescriptionEntity(
     @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     // Historical rows remain local-only; only newly verified scans enter the outbox.
     @ColumnInfo(name = "scan_id", defaultValue = "''") val scanId: String = "",
+    @ColumnInfo(name = "company_id", defaultValue = "''") val companyId: String = "",
     @ColumnInfo(name = "sync_status", defaultValue = "'LOCAL_ONLY'") val syncStatus: String = "LOCAL_ONLY",
     @ColumnInfo(name = "rx_no") val rxNo: String,
     @ColumnInfo(name = "image_path") val imagePath: String,

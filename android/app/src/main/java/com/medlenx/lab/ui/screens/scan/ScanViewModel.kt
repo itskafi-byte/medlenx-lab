@@ -102,6 +102,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT))
         private set
+    var pendingUploads by mutableStateOf(0)
+        private set
+    var unroutableUploads by mutableStateOf(0)
+        private set
     var todayCount by mutableStateOf(0)
         private set
     var recentCaptures by mutableStateOf<List<PrescriptionEntity>>(emptyList())
@@ -144,6 +148,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     init {
         targetPrefs.registerOnSharedPreferenceChangeListener(targetListener)
         viewModelScope.launch { prescriptionDao.observeRecent(currentUid, 4).collect { recentCaptures = it } }
+        viewModelScope.launch { prescriptionDao.observePendingUploads(currentUid).collect { pendingUploads = it } }
+        viewModelScope.launch { prescriptionDao.observeUnroutableUploads(currentUid).collect { unroutableUploads = it } }
         viewModelScope.launch {
             var day: java.time.LocalDate? = null
             var counter: Job? = null

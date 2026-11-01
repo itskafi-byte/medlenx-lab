@@ -84,6 +84,8 @@ fun TeamScreen(
         Spacer(Modifier.height(12.dp))
 
         vm.error?.let { MlxErrorLine(it, Modifier.padding(bottom = 12.dp)) }
+        TeamFeed(vm.teamFeed)
+        Spacer(Modifier.height(12.dp))
 
         TeamMapSection(
             regions = vm.geoRegions,

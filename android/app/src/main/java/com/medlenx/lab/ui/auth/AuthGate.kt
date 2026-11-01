@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,29 +38,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.medlenx.lab.BuildConfig
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.sync.TrustedMembership
+import com.medlenx.lab.data.sync.UploadScheduling
+import kotlinx.coroutines.CancellationException
 import com.medlenx.lab.ui.shell.BrandLockup
 import com.medlenx.lab.ui.theme.Mlx
 
 @Composable
 fun AuthGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val auth = remember {
-        if (BuildConfig.FIREBASE_API_KEY.isBlank() || BuildConfig.FIREBASE_APP_ID.isBlank() ||
-            BuildConfig.FIREBASE_PROJECT_ID.isBlank()) null
-        else {
-            val app = FirebaseApp.getApps(context).firstOrNull() ?: FirebaseApp.initializeApp(
-                context, FirebaseOptions.Builder().setApiKey(BuildConfig.FIREBASE_API_KEY)
-                    .setApplicationId(BuildConfig.FIREBASE_APP_ID)
-                    .setProjectId(BuildConfig.FIREBASE_PROJECT_ID).build()
-            )
-            FirebaseAuth.getInstance(app)
-        }
-    }
+    val auth = remember { TrustedMembership.firebase(context)?.let { FirebaseAuth.getInstance(it) } }
     var uid by remember(auth) { mutableStateOf(auth?.currentUser?.uid) }
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener { uid = it.currentUser?.uid }
@@ -67,6 +57,18 @@ fun AuthGate(content: @Composable () -> Unit) {
         onDispose { auth?.removeAuthStateListener(listener) }
     }
     val currentUid = uid
+    LaunchedEffect(currentUid) {
+        if (currentUid != null && currentUid != "legacy_user") {
+            runCatching { UploadScheduling.start(context, currentUid) }
+            try {
+                TrustedMembership.refresh(context, currentUid)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Offline: keep the last server-verified snapshot for this UID.
+            }
+        }
+    }
     DisposableEffect(currentUid) {
         val graph = (context.applicationContext as MedLenXApp).graph
         graph.deviceState.bindUser(currentUid, graph.scope)

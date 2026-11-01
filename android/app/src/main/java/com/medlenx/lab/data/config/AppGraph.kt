@@ -86,6 +86,7 @@ class AppGraph private constructor(
                     assets = catalogue,
                 ),
                 scanRepository = ScanRepository(
+                    context = appContext,
                     database = db,
                     vlClient = vlClient,
                     prescriptionDao = db.prescriptionDao(),

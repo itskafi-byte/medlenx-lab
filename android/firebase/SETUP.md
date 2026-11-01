@@ -1,12 +1,9 @@
 # Firebase team sharing: setup and current status
 
-**Not yet functional.** The repository currently contains the Firestore dependency
-and a proposed rules baseline, not the upload pipeline, team feed, legacy-scan
-migration, or account-safe cache handling. Do not use this as a production sync
-feature or deploy these rules without testing and integrating them with your
-project's other rules. New verified audits are saved atomically with a UUID and
-`PENDING` status, but there is no upload worker or feed: the app does not upload
-them. Older audits remain `LOCAL_ONLY` and are not automatically queued.
+**Implemented, not yet device-verified.** New audits use a UID-bound Room
+outbox and WorkManager. The Team tab listens for team scans after validating
+membership with the server. No prescription images are uploaded. Do not use
+this for production clinical data until the rules and Android flows are tested.
 
 ## Initial project setup
 
@@ -30,8 +27,8 @@ them. Older audits remain `LOCAL_ONLY` and are not automatically queued.
 5. Choose a stable, unique company document ID. Do not use a freely editable
    display name as proof of membership. A display name is neither guaranteed to
    be unique nor safe as a Firestore document path (for example, it may contain
-   `/`). An eventual implementation needs an administrator-assigned mapping
-   from the local company selection to this ID.
+   `/`). The app uses the administrator-assigned ID, not the editable local
+   company selection, for cloud routing.
 6. A trusted administrator must provision both `users/{firebaseUid}` with a
    string `companyId` and `companies/{companyId}/members/{firebaseUid}` with
    boolean `active: true` and string `displayName` in the Firebase console or
@@ -42,7 +39,7 @@ them. Older audits remain `LOCAL_ONLY` and are not automatically queued.
    Offline copies already downloaded to devices cannot be remotely erased immediately.
 7. Review `firestore.rules`. It grants team-scan reads only to active members of
    that company and permits only authenticated, attributed creates. The rules
-   are a **baseline for a future client**, not a tested deployment: they deny
+   are **not a tested deployment**: they deny
    all unmatched paths and could break other applications sharing this database.
    Merge them carefully into any existing rules and test with the Firestore
    emulator, including cross-company access, revoked members, forged identity,
@@ -54,38 +51,32 @@ Do not rely on these rules alone to prevent malicious clients from placing
 sensitive content inside medicine fields. Production validation and any stronger
 content restrictions require a trusted server-side ingestion path.
 
-## Work still required before enabling sync
+## How sync behaves
 
-- Bind the signed-in UID to the server-assigned `users/{uid}.companyId` and
-  approved membership, and observe membership changes. The current app does not
-  yet perform this lookup.
-- Implement a WorkManager uploader and durable scheduling/recovery. The Room
-  audit, medicines and pending status are saved in one transaction, but no work
-  is currently enqueued. PENDING rows do not yet record an approved company at
-  capture time; do not automatically route them to whatever company happens to
-  be assigned later. Firestore persistence alone cannot make a Room write and a
-  Firestore write atomic.
-  Surface rejected writes. Sign-out currently retains local data and must not
-  delete unsynced work. A Firestore instance must be terminated before clearing
-  persistence; clearing it deletes pending writes, so that cannot be added to
-  sign-out without a durable alternative for pending uploads.
-- Partition all user-local data by authenticated UID, including profile, scans,
-  medicines, targets, queue, preferences and images. The current database is
-  shared across sign-ins and is not yet partitioned. New prescription rows now
-  record the signed-in UID, while historical rows are marked `legacy_user`.
-  Recent-audit, Analytics and several Team queries, profiles, brand targets and
-  the image-processing queue now use UID predicates. Doctor identities are now
-  scoped as well. A startup task quarantines root-level legacy saved images and
-  updates their local references without assigning ownership. Temporary camera
-  cache files are not moved because an external camera may still hold their URI.
-  Complete device-level isolation, migration and account-switch testing is still
-  required; these static changes alone do not prove total isolation. Any later
-  cloud upload of existing local scans requires a deliberate migration.
-- Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
-  results and pending writes require deliberate treatment on shared devices;
-  server rules cannot revoke data already cached offline.
-- Implement the real-time feed, read-only audit details, visible failure/status
-  handling, and update existing “cloud sync unavailable” labels only when the
-  behavior is actually working.
-- Build and run emulator/security tests plus two-account, two-company, offline,
-  restart, revocation and shared-device tests before production rollout.
+- Sign in online after an administrator provisions both membership documents.
+  The app saves the last server-verified company for this UID and stamps it on
+  each new audit. Firestore rules still enforce current membership at upload.
+- New saved audits enter the Room outbox. A network-constrained one-shot worker
+  uploads them; periodic work and the next sign-in recover missed scheduling.
+  Fixed UUIDs plus server-side reconciliation handle a lost acknowledgement under
+  the append-only rules. Sign-out retains local records and does not clear
+  Firestore persistence or delete pending writes.
+- Audits saved before this implementation have no company snapshot. They remain
+  pending or local-only and are never automatically assigned to the currently
+  selected company. Audits saved before the first verified company lookup also
+  remain pending without a route. The Scan screen shows a count; there is not
+  yet a review/reassignment UI. A later company change also leaves audits stamped
+  for the old company pending rather than silently rerouting them.
+- Team activity displays server-confirmed results only. It deliberately hides
+  cached feed results while offline to avoid exposing Firestore's shared disk
+  cache after an account switch. Other local features remain offline-first.
+
+## Before production
+
+Run the rules emulator tests in `tests/README.md`, build the Android app, and
+exercise two users in two companies, sign-out and re-entry, offline capture,
+process death after write, membership revocation and company changes. Inspect
+pending/error behavior and the Room migration on an existing device. Cached
+Firestore data already on a device cannot be remotely erased immediately. The
+rules validate top-level fields but cannot fully validate arbitrary nested
+medicine lists; use a trusted ingestion service for stronger validation.

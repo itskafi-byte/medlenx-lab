@@ -87,12 +87,18 @@ interface PrescriptionDao {
     @Query("UPDATE prescriptions SET image_path = :newPath WHERE image_path = :oldPath")
     suspend fun relocateLegacyImage(oldPath: String, newPath: String)
 
+    @Query("UPDATE prescriptions SET sync_status = 'UPLOADED' WHERE id = :id AND user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND sync_status = 'PENDING'")
+    suspend fun markUploaded(currentUid: String, id: Long, company: String, scanId: String): Int
+
     /** Pending new audits only; historical scans are intentionally not uploaded. */
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING' ORDER BY id ASC")
     suspend fun pendingUploads(currentUid: String): List<PrescriptionEntity>
 
     @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING'")
     fun observePendingUploads(currentUid: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING' AND company_id = ''")
+    fun observeUnroutableUploads(currentUid: String): Flow<Int>
 
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid ORDER BY created_at DESC LIMIT :limit")
     fun observeRecent(currentUid: String, limit: Int = 10): Flow<List<PrescriptionEntity>>

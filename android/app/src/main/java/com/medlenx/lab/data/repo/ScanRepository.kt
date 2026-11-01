@@ -1,6 +1,9 @@
 package com.medlenx.lab.data.repo
 
 import com.google.firebase.auth.FirebaseAuth
+import android.content.Context
+import com.medlenx.lab.data.sync.TrustedMembership
+import com.medlenx.lab.data.sync.UploadScheduling
 import androidx.room.withTransaction
 import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.AssetCatalogue
@@ -44,6 +47,7 @@ sealed class ScanProgress {
  * as pass-throughs rather than stubbed with fake logic.
  */
 class ScanRepository(
+    private val context: Context,
     private val database: MedLenXDatabase,
     private val vlClient: MedLenXVlClient,
     private val prescriptionDao: PrescriptionDao,
@@ -162,11 +166,13 @@ class ScanRepository(
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: throw IllegalStateException("Sign in before saving a prescription")
         check(uid == expectedUid && expectedUid.isNotBlank()) { "The signed-in user changed; capture the prescription again" }
-        return database.withTransaction {
+        val stampedCompany = TrustedMembership.cachedCompany(context, uid)
+        val savedId = database.withTransaction {
             val id = prescriptionDao.insert(
                 prescription.copy(
                     userId = uid,
                     scanId = java.util.UUID.randomUUID().toString(),
+                    companyId = stampedCompany,
                     syncStatus = "PENDING",
                     totalMedicines = result.medicines.size,
                     mrId = mrId,
@@ -207,6 +213,10 @@ class ScanRepository(
             if (rows.isNotEmpty()) prescriptionDao.insertMedicines(rows)
             id
         }
+        // Failure to schedule does not roll back the saved audit; periodic work
+        // and sign-in scheduling will discover the durable pending row later.
+        runCatching { UploadScheduling.enqueue(context, uid) }
+        return savedId
     }
 
     /**

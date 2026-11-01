@@ -180,8 +180,13 @@ private fun CaptureHero(vm: ScanViewModel, onCamera: () -> Unit, onGallery: () -
                     color = if (pending) Mlx.WarnDeep else Mlx.OkDeep,
                 )
             }
-            Text("Cloud sync is not available yet.", style = MlxType.Footnote, color = Color.White,
-                modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(
+                if (vm.unroutableUploads > 0) "${vm.unroutableUploads} scans have no approved company snapshot and need review; ${vm.pendingUploads} total awaiting upload."
+                else if (vm.pendingUploads > 0) "${vm.pendingUploads} saved audits awaiting cloud upload."
+                else "Saved audits can sync after company approval.",
+                style = MlxType.Footnote, color = Color.White,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
