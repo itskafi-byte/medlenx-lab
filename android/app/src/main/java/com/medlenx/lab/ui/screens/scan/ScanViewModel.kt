@@ -62,6 +62,8 @@ data class ScanUiState(
     val imageFile: File? = null,
     val progress: Float = 0f,
     val progressText: String = "",
+    val progressIndeterminate: Boolean = true,
+    val revealedMedicines: Int = 0,
     val error: String? = null,
     val result: VlScanResult? = null,
     val geo: GeoStripState = GeoStripState(),
@@ -147,6 +149,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     /** True while a save round-trip is in flight, so a second tap cannot double-insert. */
+    private var scanJob: Job? = null
     var saving by mutableStateOf(false)
         private set
 
@@ -307,18 +310,18 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val file = state.imageFile ?: return
         if (state.phase == ScanPhase.Scanning) return
 
-        viewModelScope.launch {
-            // No route to the API, so do not burn the capture. The web contract is
-            // explicit - "scans cache on-device when the rural network drops, then sync
-            // on reconnect" - and ScanProgress.QueuedOffline is the variant that carries
-            // that outcome.
+        scanJob = viewModelScope.launch {
             val outcome: ScanProgress = if (!deviceState.online) {
                 ScanProgress.QueuedOffline
             } else {
                 state = state.copy(
                     phase = ScanPhase.Scanning,
-                    progress = 0.15f,
-                    progressText = "Extracting with MedLenX VL...",
+                    progress = 0f,
+                    progressIndeterminate = true,
+                    progressText = "Preparing image…",
+                    revealedMedicines = 0,
+                    result = null,
+                    cards = emptyList(),
                     error = null,
                     parked = false,
                 )
@@ -326,31 +329,24 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     runCatching { file.readBytes() }.getOrNull()
                 }
                 if (bytes == null) {
-                    // Not a connectivity problem - parking would just retry a file that
-                    // cannot be read until the attempt cap drops it.
                     state = state.copy(phase = ScanPhase.Failed, error = "Image bytes unavailable")
                     return@launch
                 }
-                state = state.copy(progress = 0.45f)
+                state = state.copy(progressText = "Waiting for AI response…")
                 scanRepository.scan(bytes)
             }
             when (outcome) {
-                is ScanProgress.Done -> enterVerification(outcome.result)
-
+                is ScanProgress.Done -> try {
+                    enterVerification(outcome.result)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    state = state.copy(phase = ScanPhase.Failed, error = e.message ?: "Could not prepare the scan for review")
+                }
                 is ScanProgress.Failed ->
-                    // The network can drop after the request has gone out. Park rather
-                    // than strand the officer on a panel with no way back.
-                    if (!deviceState.online) {
-                        parkForReplay(file)
-                    } else {
-                        state = state.copy(
-                            phase = ScanPhase.Failed,
-                            error = outcome.message,
-                        )
-                    }
-
+                    if (!deviceState.online) parkForReplay(file)
+                    else state = state.copy(phase = ScanPhase.Failed, error = outcome.message)
                 ScanProgress.QueuedOffline -> parkForReplay(file)
-
                 ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
                 else -> Unit
             }
@@ -366,9 +362,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * retry by hand. [syncQueuedScans] retries automatically.
      */
     private suspend fun parkForReplay(file: File) {
-        val parked = runCatching {
+        val parked = try {
             scanRepository.queueForLater(currentUid, file.absolutePath, mimeType)
-        }.isSuccess
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
         state = state.copy(
             phase = ScanPhase.Ready,
             parked = parked,
@@ -430,6 +431,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun enterVerification(result: VlScanResult) {
         val d = result.doctor
+        val animated = state.phase == ScanPhase.Scanning
+        if (animated) {
+            // The provider returns one complete JSON response, not a stream of
+            // detections. Only now can real doctor data appear in the skeleton.
+            state = state.copy(result = result, progressIndeterminate = false,
+                progress = 0.5f, progressText = "Cross-referencing drug database…")
+        }
         // Enrich first, then build the cards from the enriched list.
         //
         // The cards used to be built from `result.medicines` -- the raw vision read --
@@ -450,6 +458,20 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             // substitution pick at all, and the web's resolver never returns blank.
             ownCompany = MedicineMatcher.resolveOwnCompany(officerProfile?.company).name,
         )
+        val medicineCards = enrichedMedicines.map { it.toCardData() }
+        if (animated) {
+            state = state.copy(cards = medicineCards, progress = 0.85f,
+                progressText = "Preparing results for review…")
+            // Brief reveal of real rows only; bound the delay for long lists.
+            val count = medicineCards.size
+            val interval = if (count == 0) 0L else (400L / count).coerceIn(5L, 65L)
+            for (i in 1..count) {
+                delay(interval)
+                state = state.copy(revealedMedicines = i, progress = 0.85f + 0.14f * i / count)
+            }
+            state = state.copy(progress = 1f, progressText = "Read complete")
+            delay(120)
+        }
         state = state.copy(
             phase = ScanPhase.VerifyDoctor,
             progress = 1f,
@@ -469,7 +491,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 upazila = d.upazila.ifBlank { state.geo.upazila },
                 territory = d.territory.ifBlank { state.geo.territory },
             ),
-            cards = enrichedMedicines.map { it.toCardData() },
+            cards = medicineCards,
             enriched = enrichedMedicines,
         )
     }
@@ -1154,6 +1176,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clear() {
+        scanJob?.cancel()
+        scanJob = null
         substitutionJobs.values.forEach { it.cancel() }
         substitutionJobs.clear()
         state = ScanUiState()

@@ -23,9 +23,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,13 +50,13 @@ import com.medlenx.lab.ui.components.MlxErrorLine
 import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.copyToClipboard
 import com.medlenx.lab.ui.components.PillTone
-import com.medlenx.lab.ui.components.ProgressTrack
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.StatusPill
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
+import kotlinx.coroutines.delay
 import java.io.File
 
 /**
@@ -421,7 +423,7 @@ private fun ViewerCard(
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
-                        text = "Scanning…",
+                        text = "Illustrative scan animation",
                         tone = PillTone.Dark,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -459,9 +461,24 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
     }
     if (state.phase == ScanPhase.Scanning) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(state.progressText.ifBlank { "Extracting with MedLenX VL..." }, style = MlxType.Meta)
-            // Brand blue, matching the web's `#progressBar` (`bg-brand-600`).
-            ProgressTrack(progress = state.progress, fillColor = Mlx.Brand500)
+            val waiting = state.progressIndeterminate && state.progressText == "Waiting for AI response…"
+            var stage by remember(waiting) { mutableStateOf(0) }
+            LaunchedEffect(waiting) {
+                if (waiting) {
+                    while (true) {
+                        delay(2000)
+                        stage = (stage + 1) % 3
+                    }
+                }
+            }
+            val illustrativeStages = listOf("Uploading image...", "Detecting text regions...", "Decoding handwriting...")
+            Text(if (waiting) illustrativeStages[stage] else state.progressText, style = MlxType.Meta)
+            if (waiting) Text("Illustrative stages and highlights; waiting for the AI response.", style = MlxType.Footnote)
+            if (state.progressIndeterminate) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(5.dp), color = Mlx.Brand500, trackColor = Mlx.Brand100)
+            } else {
+                LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth().height(5.dp), color = Mlx.Brand500, trackColor = Mlx.Brand100)
+            }
         }
     }
 }
@@ -474,7 +491,13 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
 @Composable
 private fun VerificationArea(state: ScanUiState) {
     when (state.phase) {
-        ScanPhase.Scanning -> ScanSkeleton()
+        ScanPhase.Scanning -> ScanSkeleton(
+            result = state.result,
+            cards = state.cards,
+            revealedMedicines = state.revealedMedicines,
+            indeterminate = state.progressIndeterminate,
+            preparing = !state.progressIndeterminate && state.progress < 0.85f,
+        )
 
         ScanPhase.Failed -> MlxCard {
             SectionHeader(title = "Scan failed")

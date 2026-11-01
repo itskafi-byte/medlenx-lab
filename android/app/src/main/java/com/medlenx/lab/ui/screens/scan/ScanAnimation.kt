@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,76 +28,68 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.material3.Text
+import com.medlenx.lab.data.model.VlScanResult
+import com.medlenx.lab.ui.theme.MlxType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.medlenx.lab.ui.theme.Mlx
 
-private val LaserGradientColors = listOf(
-    Color.Transparent, Mlx.Cyan700, Mlx.Cyan400, Mlx.Cyan700, Color.Transparent,
-)
-private val WashCyan = Color(0x1406B6D4)
-private val WashCyanPeak = Color(0x2E06B6D4)
 private val ShimmerCyan = Color(0x2E06B6D4)
 private val CyanLeftEdge = Color(0xFF06B6D4)
 
-/**
- * Dual-glow radar scan overlay.
- *
- * Port of the web's `.animate-scan-laser` (a 3px bar, gradient
- * transparent -> #0284C7 -> #38BDF8 -> #0284C7 -> transparent, 12px cyan glow,
- * sweeping over 2.2s) combined with `.scan-overlay-glow` (a full-panel cyan wash on
- * the same cycle). `RepeatMode.Reverse` reproduces the CSS `alternate` direction.
- */
+/** Decorative sweep and transient highlights, not model-provided detections. */
 @Composable
 fun ScanLaserOverlay(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "scan")
     val progress by transition.animateFloat(
-        // CSS `.scan-laser` keyframes travel `top: 8% -> 88% -> 8%`, not 0 -> 98%.
-        initialValue = 0.08f,
-        targetValue = 0.88f,
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
+            animation = tween(durationMillis = 2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
         ),
         label = "laser",
     )
-
-    Box(modifier = modifier.fillMaxSize()) {
-        // Full-panel cyan wash (.scan-overlay-glow).
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.00f to Color.Transparent,
-                        (progress - 0.05f).coerceIn(0f, 1f) to WashCyan,
-                        progress.coerceIn(0f, 1f) to WashCyanPeak,
-                        (progress + 0.05f).coerceIn(0f, 1f) to WashCyan,
-                        1.00f to Color.Transparent,
-                    ),
-                ),
-        )
-        // The laser line, translated to `progress` of the parent height.
-        Box(
-            Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                .height(3.dp)
-                .graphicsLayer { translationY = progress * size.height }
-                .background(Brush.horizontalGradient(LaserGradientColors)),
-        )
+    Canvas(modifier.fillMaxSize()) {
+        val y = progress * size.height
+        // Fixed, illustrative marks fade behind the beam; they are not OCR boxes.
+        for (i in 0 until 7) {
+            val rowY = size.height * (0.14f + i * 0.12f)
+            val age = (y - rowY) / size.height
+            if (age in 0f..0.27f) {
+                val alpha = (1f - age / 0.27f) * 0.3f
+                val x = size.width * (if (i % 2 == 0) 0.13f else 0.22f)
+                val w = size.width * (if (i % 3 == 0) 0.58f else 0.43f)
+                val h = 15.dp.toPx()
+                drawRoundRect(Mlx.Cyan400.copy(alpha = alpha * 0.25f),
+                    topLeft = Offset(x, rowY), size = Size(w, h), cornerRadius = CornerRadius(3.dp.toPx()))
+                drawRoundRect(Mlx.Cyan400.copy(alpha = alpha),
+                    topLeft = Offset(x, rowY), size = Size(w, h), cornerRadius = CornerRadius(3.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx()))
+            }
+        }
+        val left = Offset(size.width * 0.08f, y)
+        val right = Offset(size.width * 0.92f, y)
+        drawLine(Mlx.Cyan400.copy(alpha = 0.10f), left, right, 16.dp.toPx(), cap = StrokeCap.Round)
+        drawLine(Mlx.Cyan400.copy(alpha = 0.26f), left, right, 7.dp.toPx(), cap = StrokeCap.Round)
+        drawLine(Color.White.copy(alpha = 0.95f), left, right, 1.5.dp.toPx(), cap = StrokeCap.Round)
     }
 }
 
-/**
- * Skeleton rows shown while MedLenX VL works.
- *
- * Port of the web's `.skeleton` shimmer plus `.shimmer-row` — #F1F5F9 blocks with a
- * 4dp cyan-500 left edge and a cyan sweep travelling left to right over 1.6s.
- */
+/** Skeleton transitions to real response data, never simulated clinical results. */
 @Composable
-fun ScanSkeleton(modifier: Modifier = Modifier) {
+fun ScanSkeleton(
+    result: VlScanResult?,
+    cards: List<MedicineCardData>,
+    revealedMedicines: Int,
+    indeterminate: Boolean,
+    preparing: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val sweep by transition.animateFloat(
         // CSS `.shimmer-block::after` travels translateX(-100%) -> translateX(200%).
@@ -104,7 +97,7 @@ fun ScanSkeleton(modifier: Modifier = Modifier) {
         targetValue = 2f,
         animationSpec = infiniteRepeatable(
             // index.css: `animation: shimmer 1.5s infinite`, not 1.6s.
-            animation = tween(durationMillis = 1500, easing = LinearEasing),
+            animation = tween(durationMillis = if (indeterminate) 1500 else 550, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "sweep",
@@ -117,9 +110,24 @@ fun ScanSkeleton(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SkeletonBar(widthFraction = 0.35f, height = 16.dp)
-        repeat(2) { SkeletonRow(sweep) }
+        if (result == null) {
+            repeat(2) { SkeletonRow(sweep) }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(result.doctor.name.ifBlank { "Doctor name not identified" }, style = MlxType.CardTitle)
+                if (result.doctor.bmdcNo.isNotBlank()) Text("BMDC: ${result.doctor.bmdcNo}", style = MlxType.Meta)
+            }
+        }
         SkeletonBar(widthFraction = 0.25f, height = 16.dp)
-        repeat(4) { SkeletonRow(sweep) }
+        cards.take(revealedMedicines).forEach { card ->
+            Column {
+                Text(card.brand.ifBlank { "Medicine name not identified" }, style = MlxType.CardTitle)
+                if (card.company.isNotBlank()) Text(card.company, style = MlxType.Meta)
+            }
+        }
+        if (result == null || preparing || revealedMedicines < cards.size) {
+            repeat(2) { SkeletonRow(sweep) }
+        }
     }
 }
 
