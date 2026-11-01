@@ -74,6 +74,11 @@ fun AuthGate(content: @Composable () -> Unit) {
     }
     if (currentUid == null) {
         AuthScreen(auth)
+    } else if (currentUid == "legacy_user") {
+        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("This account ID is reserved for unassigned legacy data. Contact your administrator.")
+            Button(onClick = { auth?.signOut() }) { Text("Sign out") }
+        }
     } else {
         // Activity-owned ViewModels survive sign-out. Give each authenticated
         // session its own store so old screen state is discarded on account change.

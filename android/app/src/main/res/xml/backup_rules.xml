@@ -2,5 +2,6 @@
 <full-backup-content>
     <!-- Never back up captured prescription images: patient-adjacent clinical data. -->
     <exclude domain="file" path="rx/" />
+    <exclude domain="file" path="prescriptions/" />
     <exclude domain="database" path="medlenx.db" />
 </full-backup-content>

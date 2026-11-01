@@ -2,10 +2,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="rx/" />
+    <exclude domain="file" path="prescriptions/" />
         <exclude domain="database" path="medlenx.db" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="rx/" />
+    <exclude domain="file" path="prescriptions/" />
         <exclude domain="database" path="medlenx.db" />
     </device-transfer>
 </data-extraction-rules>

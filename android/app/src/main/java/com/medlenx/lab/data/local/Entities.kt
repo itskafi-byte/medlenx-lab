@@ -57,6 +57,7 @@ data class MedexEntity(
 )
 data class DoctorEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "user_id", defaultValue = "'legacy_user'") val userId: String = "legacy_user",
     @ColumnInfo(name = "identity_key") val identityKey: String,
     val name: String,
     val specialty: String,

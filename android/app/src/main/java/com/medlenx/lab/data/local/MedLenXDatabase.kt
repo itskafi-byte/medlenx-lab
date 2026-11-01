@@ -18,7 +18,7 @@ import androidx.room.RoomDatabase
         DoctorVisitEntity::class,
         ErrorReportEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
@@ -40,7 +40,7 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 "medlenx.db",
             )
                 // Never silently wipe unsynced local data on an unknown schema.
-                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7)
+                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7, Migrations.MIGRATION_7_8)
                 .build()
                 .also { instance = it }
         }

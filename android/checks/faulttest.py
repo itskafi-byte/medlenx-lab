@@ -96,9 +96,9 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
     (
         "the same member declared twice",
         "imports.py", DAOS,
-        "    @Query(\"SELECT COUNT(*) FROM doctors\")\n    suspend fun count(): Int",
-        "    @Query(\"SELECT COUNT(*) FROM doctors\")\n    suspend fun count(): Int\n\n"
-        "    @Query(\"SELECT COUNT(*) FROM doctors\")\n    suspend fun count(): Int",
+        "    @Query(\"SELECT COUNT(*) FROM doctors WHERE user_id = :currentUid\")\n    suspend fun count(currentUid: String): Int",
+        "    @Query(\"SELECT COUNT(*) FROM doctors WHERE user_id = :currentUid\")\n    suspend fun count(currentUid: String): Int\n\n"
+        "    @Query(\"SELECT COUNT(*) FROM doctors WHERE user_id = :currentUid\")\n    suspend fun count(currentUid: String): Int",
         "DUPLICATE",
     ),
     # ── roomcheck.py ─────────────────────────────────────────────────────────

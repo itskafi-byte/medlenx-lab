@@ -2,6 +2,8 @@ package com.medlenx.lab
 
 import android.app.Application
 import com.medlenx.lab.data.config.AppGraph
+import com.medlenx.lab.data.local.LegacyImageQuarantine
+import kotlinx.coroutines.launch
 
 /**
  * Application entry point and composition root.
@@ -22,6 +24,7 @@ class MedLenXApp : Application() {
         // else triggers it, and the matcher, the enrichment step and the Hub's
         // drug index all read the resulting Room rows.
         graph.importCatalogue()
+        graph.scope.launch { LegacyImageQuarantine.run(applicationContext, graph.database) }
         // Connectivity starts here; account-specific queue/profile collectors are
         // bound after Firebase authentication resolves the active user.
         graph.deviceState.start()

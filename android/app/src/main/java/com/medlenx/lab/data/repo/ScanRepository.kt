@@ -11,6 +11,7 @@ import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.QueueDao
 import com.medlenx.lab.data.local.QueuedScanEntity
 import com.medlenx.lab.data.local.ScannedMedicineEntity
+import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.model.EnrichedMedicine
 import com.medlenx.lab.data.model.VlScanResult
 import com.medlenx.lab.data.remote.MedLenXVlClient
@@ -77,21 +78,25 @@ class ScanRepository(
      * The [DoctorEntity] id this prescription belongs to, creating it if needed.
      *
      * Keyed by [DoctorIdentity], which is the same rule the v1->v2 migration
-     * backfills with — so a doctor who already exists from history resolves to
-     * that existing row rather than a second one.
+     * backfills with. Current user identities are namespaced separately, so
+     * pre-isolation doctor rows remain unassigned rather than being claimed.
      *
      * Null when the prescription carries nothing to identify a doctor by. The
      * column is nullable and the drill-down groups the nulls together, which is
      * what the web's own null `doctor_id` does.
      *
-     * The read-then-insert is not atomic and does not need to be: `identity_key`
-     * is UNIQUE, so a racing insert is ignored rather than duplicated, and the
+     * The read-then-insert is not atomic and does not need to be: the scoped
+     * `identity_key` is UNIQUE, so a racing insert is ignored rather than duplicated, and the
      * fallback read then finds whichever one landed.
      */
-    private suspend fun resolveDoctorId(prescription: PrescriptionEntity): Long? {
-        val key = DoctorIdentity.keyOf(prescription) ?: return null
+    private suspend fun resolveDoctorId(prescription: PrescriptionEntity, uid: String): Long? {
+        val identity = DoctorIdentity.keyOf(prescription) ?: return null
+        // Existing unique index stays valid: namespacing the key isolates doctor
+        // identities while leaving legacy identities untouched and recoverable.
+        val key = "u:${UserCaptureFiles.key(uid)}:$identity"
 
         val incoming = DoctorEntity(
+            userId = uid,
             identityKey = key,
             name = DoctorIdentity.displayName(prescription.doctorName),
             specialty = prescription.doctorSpecialty,
@@ -102,7 +107,7 @@ class ScanRepository(
             bmdcNo = prescription.doctorBmdcNo,
         )
 
-        val existing = doctorDao.byKey(key)
+        val existing = doctorDao.byKey(uid, key)
         if (existing != null) {
             // The web refreshes the profile on every save, and its rule is that a
             // non-empty incoming value always wins (database.py:508): the value
@@ -127,7 +132,7 @@ class ScanRepository(
         }
 
         val inserted = doctorDao.insertIgnoring(incoming)
-        return if (inserted != -1L) inserted else doctorDao.idFor(key)
+        return if (inserted != -1L) inserted else doctorDao.idFor(uid, key)
     }
 
     /**
@@ -160,7 +165,7 @@ class ScanRepository(
                 totalMedicines = result.medicines.size,
                 mrId = mrId,
                 createdAt = prescription.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
-                doctorId = resolveDoctorId(prescription),
+                doctorId = resolveDoctorId(prescription, uid),
             ),
         )
         val rows = result.medicines.mapIndexed { index, med ->

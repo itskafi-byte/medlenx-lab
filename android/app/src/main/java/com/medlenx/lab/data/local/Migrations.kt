@@ -138,6 +138,13 @@ object Migrations {
         }
     }
 
+    /** Pre-isolation doctors cannot safely be assigned to a specific account. */
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `doctors` ADD COLUMN `user_id` TEXT NOT NULL DEFAULT 'legacy_user'")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

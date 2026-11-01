@@ -18,14 +18,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DoctorDao {
 
-    @Query("SELECT COUNT(*) FROM doctors")
-    suspend fun count(): Int
+    @Query("SELECT COUNT(*) FROM doctors WHERE user_id = :currentUid")
+    suspend fun count(currentUid: String): Int
 
-    @Query("SELECT id FROM doctors WHERE identity_key = :key LIMIT 1")
-    suspend fun idFor(key: String): Long?
+    @Query("SELECT id FROM doctors WHERE user_id = :currentUid AND identity_key = :key LIMIT 1")
+    suspend fun idFor(currentUid: String, key: String): Long?
 
-    @Query("SELECT * FROM doctors WHERE identity_key = :key LIMIT 1")
-    suspend fun byKey(key: String): DoctorEntity?
+    @Query("SELECT * FROM doctors WHERE user_id = :currentUid AND identity_key = :key LIMIT 1")
+    suspend fun byKey(currentUid: String, key: String): DoctorEntity?
 
     @Update
     suspend fun update(doctor: DoctorEntity)
@@ -33,8 +33,8 @@ interface DoctorDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnoring(doctor: DoctorEntity): Long
 
-    @Query("SELECT * FROM doctors ORDER BY name")
-    suspend fun all(): List<DoctorEntity>
+    @Query("SELECT * FROM doctors WHERE user_id = :currentUid ORDER BY name")
+    suspend fun all(currentUid: String): List<DoctorEntity>
 }
 
 @Dao
@@ -82,6 +82,10 @@ interface PrescriptionDao {
 
     @Upsert
     suspend fun upsert(p: PrescriptionEntity)
+
+    /** Used only while quarantining a legacy root-level image on this device. */
+    @Query("UPDATE prescriptions SET image_path = :newPath WHERE image_path = :oldPath")
+    suspend fun relocateLegacyImage(oldPath: String, newPath: String)
 
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid ORDER BY created_at DESC LIMIT :limit")
     fun observeRecent(currentUid: String, limit: Int = 10): Flow<List<PrescriptionEntity>>
@@ -843,6 +847,9 @@ interface PrescriptionDao {
 
 @Dao
 interface QueueDao {
+    @Query("UPDATE queued_scans SET image_path = :newPath WHERE image_path = :oldPath")
+    suspend fun relocateLegacyImage(oldPath: String, newPath: String)
+
     @Insert
     suspend fun enqueue(row: QueuedScanEntity): Long
 

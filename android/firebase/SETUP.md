@@ -68,10 +68,12 @@ content restrictions require a trusted server-side ingestion path.
   shared across sign-ins and is not yet partitioned. New prescription rows now
   record the signed-in UID, while historical rows are marked `legacy_user`.
   Recent-audit, Analytics and several Team queries, profiles, brand targets and
-  the image-processing queue now use UID predicates. The shared doctor table,
-  legacy-image migration, and other paths still need a complete isolation audit;
-  this is **not total isolation**. Legacy images are retained, but recent capture
-  previews only open images in the current user's scoped directory. Any later
+  the image-processing queue now use UID predicates. Doctor identities are now
+  scoped as well. A startup task quarantines root-level legacy saved images and
+  updates their local references without assigning ownership. Temporary camera
+  cache files are not moved because an external camera may still hold their URI.
+  Complete device-level isolation, migration and account-switch testing is still
+  required; these static changes alone do not prove total isolation. Any later
   cloud upload of existing local scans requires a deliberate migration.
 - Isolate/clear account-sensitive cache and UI across sign-ins. Cached Firestore
   results and pending writes require deliberate treatment on shared devices;
