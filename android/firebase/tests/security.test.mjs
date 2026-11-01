@@ -56,3 +56,21 @@ test('revoked membership denies access', async () => {
   await assertFails(getDocs(collection(db, 'companies/company-a/team_scans')));
   await assertFails(setDoc(doc(db, 'companies/company-a/team_scans', id), scan('Alice', 'alice')));
 });
+
+const profile = {company: 'Display company', employeeId: 'E1', fullName: 'Alice',
+  designation: 'MPO', division: 'Dhaka', territory: 'Test', portfolio: 'General',
+  dailyTarget: 10, monthlyTarget: [{brand: 'Example', target: 4}]};
+test('profile merge is self-only and preserves administrator assignment', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'users/alice'), {officerProfile: profile}, {merge: true}));
+  const snap = await assertSucceeds(getDoc(doc(alice, 'users/alice')));
+  if (snap.data().companyId !== 'company-a') throw new Error('companyId changed');
+  await assertFails(setDoc(doc(alice, 'users/alice'), {companyId: 'company-b', officerProfile: profile}, {merge: true}));
+  await assertFails(setDoc(doc(alice, 'users/bob'), {officerProfile: profile}, {merge: true}));
+  await assertFails(setDoc(doc(alice, 'users/alice'), {officerProfile: {...profile, dailyTarget: 0}}, {merge: true}));
+  await assertFails(setDoc(doc(alice, 'users/alice'), {admin: true}, {merge: true}));
+  const newcomer = env.authenticatedContext('newcomer').firestore();
+  await assertSucceeds(setDoc(doc(newcomer, 'users/newcomer'), {officerProfile: profile}, {merge: true}));
+  await assertFails(setDoc(doc(env.authenticatedContext('intruder').firestore(), 'users/intruder'),
+    {companyId: 'company-a', officerProfile: profile}));
+});

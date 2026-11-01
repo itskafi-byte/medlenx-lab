@@ -34,7 +34,10 @@ this for production clinical data until the rules and Android flows are tested.
    boolean `active: true` and string `displayName` in the Firebase console or
    using a trusted Admin SDK. The company ID must be identical in both paths.
    Obtain the UID from the Authentication Users page after account creation.
-   Clients cannot create or modify either document under the proposed rules.
+   Clients can create or update only their own `officerProfile` map in the user
+   document; they cannot change `companyId` or the membership document. If a
+   profile-only user document already exists, provision `companyId` with a merge
+   so that the saved profile is not overwritten.
    To revoke membership, set `active` to `false` or delete the member document.
    Offline copies already downloaded to devices cannot be remotely erased immediately.
 7. Review `firestore.rules`. It grants team-scan reads only to active members of
@@ -52,6 +55,23 @@ sensitive content inside medicine fields. Production validation and any stronger
 content restrictions require a trusted server-side ingestion path.
 
 ## How sync behaves
+
+- Settings saves the officer card, daily scan target, and monthly brand targets
+  locally and merges an `officerProfile` map into `users/{uid}`. This display
+  company is not the administrator-managed `companyId`. Android Firestore's
+  default persistent cache queues profile writes offline. A server-confirmed
+  profile is restored on sign-in/startup or reconnect, without replacing an
+  unsent local save or in-progress Settings edits. After a local save, further
+  cloud restores wait until the next sign-in/startup to avoid stale callbacks.
+  Concurrent edits on different
+  devices are last-write-wins, not a field-level conflict resolver. A backup can
+  be lost if the app is uninstalled before the queued write reaches the server.
+  A small crash window exists between the separate Room and preferences commits;
+  re-entry retries dirty local data. Permission errors require the updated rules
+  to be deployed; local saves continue even if the cloud write is rejected.
+- Firestore rules cannot validate each element of the monthly-target list. Treat
+  client-written profile data as untrusted; the app validates its shape on restore.
+
 
 - Sign in online after an administrator provisions both membership documents.
   The app saves the last server-verified company for this UID and stamps it on

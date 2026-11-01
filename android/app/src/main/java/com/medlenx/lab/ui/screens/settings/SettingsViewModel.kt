@@ -21,6 +21,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import com.medlenx.lab.data.sync.ProfileCloudSync
 import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CancellationException
@@ -41,7 +42,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString())
         private set
-    fun updateDailyTarget(value: String) { if (value.length <= 4 && value.all { it.isDigit() }) dailyTarget = value }
+    private var editVersion = 0
+    private var editing = false
+    private fun changed() { editing = true; editVersion++ }
+    fun updateDailyTarget(value: String) { if (value.length <= 4 && value.all { it.isDigit() }) { changed(); dailyTarget = value } }
 
     val roles = listOf("MPO", "RSO", "RSM", "Territory Manager", "Product Manager")
     val roleLabels = mapOf(
@@ -222,65 +226,71 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     var error by mutableStateOf<String?>(null)
         private set
 
-    fun updateEmployeeId(v: String) { employeeId = v }
-    fun updateFullName(v: String) { fullName = v }
+    fun updateEmployeeId(v: String) { changed(); employeeId = v }
+    fun updateFullName(v: String) { changed(); fullName = v }
     fun updateDivision(v: String) {
-        if (division != v) { division = v; territory = "" }
+        if (division != v) { changed(); division = v; territory = "" }
     }
-    fun updateTerritory(v: String) { territory = v }
-    fun updatePortfolio(v: String) { portfolio = v }
+    fun updateTerritory(v: String) { changed(); territory = v }
+    fun updatePortfolio(v: String) { changed(); portfolio = v }
 
     fun onCompanyQuery(q: String) {
         companyQuery = q
     }
 
     fun selectCompany(name: String) {
+        changed()
         company = name
         companyQuery = ""
     }
 
     fun updateRole(r: String) {
+        changed()
         role = if (r in roles) r else roles.first()
     }
 
     fun addBrand() {
+        changed()
         targets = targets + TargetDraft(brand = "", monthlyTarget = 0, captured = 0)
     }
 
     fun updateBrand(index: Int, brand: String, monthlyTarget: Int) {
+        changed()
         targets = targets.mapIndexed { i, t ->
             if (i == index) t.copy(brand = brand, monthlyTarget = monthlyTarget) else t
         }
     }
 
     fun removeBrand(index: Int) {
+        changed()
         targets = targets.filterIndexed { i, _ -> i != index }
     }
 
     fun load() {
         viewModelScope.launch {
-            error = null
             runCatching {
                 locations = app.graph.locationRepository.locations()
                 allCompanies = app.graph.database.medexDao().companies()
-                profileDao.current(currentUid)?.let { p ->
-                    company = p.company
-                    employeeId = p.employeeId
-                    fullName = p.fullName
-                    if (p.role in roles) role = p.role
-                    division = p.division
-                    territory = p.territory
-                    portfolio = p.portfolio
-                }
+                val profile = profileDao.current(currentUid)
                 val captured = app.graph.database.prescriptionDao()
                     .brandCapturedRows(currentUid, since = startOfMonth())
                     .associateBy({ it.brand.lowercase() }, { it.captured })
-                targets = profileDao.observeTargets(currentUid).first().map { t ->
-                    TargetDraft(
-                        brand = t.brand,
-                        monthlyTarget = t.target,
-                        captured = captured[t.brand.lowercase()] ?: 0,
-                    )
+                val loadedTargets = profileDao.observeTargets(currentUid).first().map { t ->
+                    TargetDraft(t.brand, t.target, captured[t.brand.lowercase()] ?: 0)
+                }
+                // A restore must not replace edits already being typed on this screen.
+                if (!editing && FirebaseAuth.getInstance().currentUser?.uid == currentUid) {
+                    profile?.let { p ->
+                        company = p.company
+                        employeeId = p.employeeId
+                        fullName = p.fullName
+                        if (p.role in roles) role = p.role
+                        division = p.division
+                        territory = p.territory
+                        portfolio = p.portfolio
+                    }
+                    targets = loadedTargets
+                    dailyTarget = targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString()
                 }
             }.onFailure { error = it.message ?: "Could not load settings" }
         }
@@ -295,30 +305,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 error = "Enter a daily scan target greater than zero."
                 return@launch
             }
-            runCatching {
-                check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid) { "Sign in to save your profile" }
-                profileDao.save(
-                    OfficerProfileEntity(
-                        userId = currentUid,
-                        company = company,
-                        employeeId = employeeId,
-                        fullName = fullName,
-                        role = role,
-                        division = division,
-                        territory = territory,
-                        portfolio = portfolio,
-                    ),
-                )
-                val rows = targets
-                    .filter { it.brand.isNotBlank() }
-                    .map { BrandTargetEntity(userId = currentUid, brand = it.brand, target = it.monthlyTarget) }
-                profileDao.clearTargets(currentUid)
-                profileDao.saveTargets(rows)
-            }.onFailure {
-                error = it.message ?: "Could not save the officer card"
+            val profile = OfficerProfileEntity(currentUid, company, employeeId, fullName, role, division, territory, portfolio)
+            val rows = targets.filter { it.brand.isNotBlank() }
+                .map { BrandTargetEntity(userId = currentUid, brand = it.brand, target = it.monthlyTarget) }
+            if (listOf(company, employeeId, fullName, role, division, territory, portfolio).any { it.length > 500 } ||
+                rows.size > 100 || rows.any { it.brand.length > 500 || it.target < 0 }) {
+                error = "Use at most 100 targets, non-negative target values, and text up to 500 characters."
                 return@launch
             }
-            targetPrefs.edit().putInt(DailyTargetSettings.KEY, target).apply()
+            val version = editVersion
+            try {
+                ProfileCloudSync.save(app, profile, rows, target)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                error = e.message ?: "Could not save the officer card"
+                return@launch
+            }
+            if (editVersion == version) editing = false
             saved = true
             load()
         }
@@ -336,6 +339,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             app.graph.database.prescriptionDao().observeTrappedCount(currentUid).collect { trappedCount = it }
         }
+        viewModelScope.launch { ProfileCloudSync.restored.collect { if (it == currentUid && !editing) load() } }
+        viewModelScope.launch { ProfileCloudSync.errors.collect { if (it.first == currentUid) error = it.second } }
         load()
     }
 }

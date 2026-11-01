@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.sync.ProfileCloudSync
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
 import kotlinx.coroutines.CancellationException
@@ -57,6 +58,9 @@ fun AuthGate(content: @Composable () -> Unit) {
         onDispose { auth?.removeAuthStateListener(listener) }
     }
     val currentUid = uid
+    remember(currentUid) {
+        if (currentUid != null && currentUid != "legacy_user") ProfileCloudSync.startSession(currentUid)
+    }
     LaunchedEffect(currentUid) {
         if (currentUid != null && currentUid != "legacy_user") {
             runCatching { UploadScheduling.start(context, currentUid) }
@@ -67,6 +71,13 @@ fun AuthGate(content: @Composable () -> Unit) {
             } catch (_: Exception) {
                 // Offline: keep the last server-verified snapshot for this UID.
             }
+        }
+    }
+    LaunchedEffect(currentUid) {
+        if (currentUid != null && currentUid != "legacy_user") {
+            try { ProfileCloudSync.watch(context.applicationContext, currentUid) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { }
         }
     }
     DisposableEffect(currentUid) {

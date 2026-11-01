@@ -13,10 +13,36 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)) &&
         membership(companyId).data.active == true;
     }
-    // Only trusted administrators can create or update the company assignment.
+    // Only the self-owned profile map is writable. Membership and all other
+    // administrator-managed fields remain unchanged, including companyId.
+    function validProfile(p) {
+      return p is map && p.keys().hasOnly([
+          'company', 'employeeId', 'fullName', 'designation', 'division',
+          'territory', 'portfolio', 'dailyTarget', 'monthlyTarget'
+        ]) && p.keys().hasAll([
+          'company', 'employeeId', 'fullName', 'designation', 'division',
+          'territory', 'portfolio', 'dailyTarget', 'monthlyTarget'
+        ])
+        && p.company is string && p.company.size() <= 500
+        && p.employeeId is string && p.employeeId.size() <= 500
+        && p.fullName is string && p.fullName.size() <= 500
+        && p.designation is string && p.designation.size() <= 500
+        && p.division is string && p.division.size() <= 500
+        && p.territory is string && p.territory.size() <= 500
+        && p.portfolio is string && p.portfolio.size() <= 500
+        && p.dailyTarget is int && p.dailyTarget >= 1 && p.dailyTarget <= 9999
+        && p.monthlyTarget is list && p.monthlyTarget.size() <= 100;
+    }
     match /users/{userId} {
       allow get: if request.auth != null && request.auth.uid == userId;
-      allow list, create, update, delete: if false;
+      allow create: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['officerProfile'])
+        && request.resource.data.keys().hasAll(['officerProfile'])
+        && validProfile(request.resource.data.officerProfile);
+      allow update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['officerProfile'])
+        && validProfile(request.resource.data.officerProfile);
+      allow list, delete: if false;
     }
     match /companies/{companyId}/members/{memberId} {
       allow get: if request.auth != null && request.auth.uid == memberId;
