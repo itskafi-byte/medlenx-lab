@@ -89,6 +89,9 @@ interface PrescriptionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertRestored(p: PrescriptionEntity): Long
 
+    @Query("UPDATE prescriptions SET created_at = :capturedAt WHERE user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND restore_scan_id = :scanId AND sync_status = 'UPLOADED' AND created_at != :capturedAt")
+    suspend fun updateRestoredCaptureTime(currentUid: String, company: String, scanId: String, capturedAt: Long): Int
+
     /** Used only while quarantining a legacy root-level image on this device. */
     @Query("UPDATE prescriptions SET image_path = :newPath WHERE image_path = :oldPath")
     suspend fun relocateLegacyImage(oldPath: String, newPath: String)
@@ -295,11 +298,11 @@ interface PrescriptionDao {
         SELECT sm.brand_name AS brand, COUNT(*) AS captured
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
         GROUP BY sm.brand_name COLLATE NOCASE
         """
     )
-    suspend fun brandCapturedRows(currentUid: String, since: Long): List<BrandCapturedRow>
+    fun observeBrandCapturedRows(currentUid: String, since: Long, until: Long): Flow<List<BrandCapturedRow>>
 
     /**
      * `get_geo_heatmap`: prescriptions aggregated by district + upazila with the

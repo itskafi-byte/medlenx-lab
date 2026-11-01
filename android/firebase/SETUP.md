@@ -76,6 +76,9 @@ content restrictions require a trusted server-side ingestion path.
 - Sign in online after an administrator provisions both membership documents.
   The app saves the last server-verified company for this UID and stamps it on
   each new audit. Firestore rules still enforce current membership at upload.
+- Deploy the updated `firestore.rules` **before** distributing this app version:
+  older rules reject the new `captureTimestamp` field and can mark uploads
+  rejected. The new rules accept both old clients and the timestamp field.
 - New saved audits enter the Room outbox. A network-constrained one-shot worker
   uploads them; periodic work and the next sign-in recover missed scheduling.
   Fixed UUIDs plus server-side reconciliation handle a lost acknowledgement under
@@ -112,12 +115,17 @@ content restrictions require a trusted server-side ingestion path.
   existing `createdByUid` field (not `userId`). It restores only that UID's
   current-company results and retries when offline. The local per-user UUID
   guard preserves existing scans and their photos, including pending scans.
-  Photos, original capture time, Rx number, full medicine details and clinical
-  classifications were never uploaded and cannot be recovered. Restored rows
-  use an empty image path, a short UUID as the display Rx number, and the cloud
-  upload timestamp as their date. Date-based local analytics therefore reflect
-  upload time, not necessarily capture time; absent clinical flags are not
-  restored and should not be interpreted as negative findings. Invalid cloud
+  Uploads now store the original local `created_at` as `captureTimestamp` and
+  retain the server `timestamp` separately as upload metadata. The local time is
+  recorded when the verified audit is saved, not necessarily when its photo was
+  taken; it relies on the device clock. Restore uses it for `created_at` and can
+  correct previously restored rows when the field exists. Older cloud documents
+  lack it and fall back to upload time, which can put them in the wrong day or
+  month; the original date cannot be recovered from those documents. Calendar
+  boundaries use the current device's local time zone. Photos, Rx number, full
+  medicine details and clinical classifications were never uploaded; restored
+  rows use an empty image path and a short UUID as the display Rx number. Absent
+  clinical flags should not be interpreted as negative findings. Invalid cloud
   documents are skipped. Previously assigned companies are not queried.
 - Team activity displays server-confirmed results only. It deliberately hides
   cached feed results while offline to avoid exposing Firestore's shared disk

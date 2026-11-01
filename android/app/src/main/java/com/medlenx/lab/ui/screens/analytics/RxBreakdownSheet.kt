@@ -324,7 +324,7 @@ private fun DrawerBody(
                 .padding(horizontal = MlxD.Space4, vertical = MlxD.Space3),
         ) {
             if (drawer.prescription.restoreScanId != null) {
-                Text("Restored from cloud. Image not backed up. Only shared scan results were restored; original capture time, Rx number and clinical details are unavailable. The date is upload time and the Rx number is a shortened scan ID.",
+                Text("Restored from cloud. Image not backed up. Only shared scan results were restored; Rx number and clinical details are unavailable. The date uses capture time when backed up; older records use upload time. The Rx number is a shortened scan ID.",
                     style = MlxType.BodySmall, color = Mlx.Text600, modifier = Modifier.padding(bottom = MlxD.Space3))
             } else if (drawer.prescription.imagePath.isBlank() || !java.io.File(drawer.prescription.imagePath).isFile) {
                 Text("Prescription image unavailable on this device.", style = MlxType.BodySmall,

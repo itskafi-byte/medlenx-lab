@@ -53,7 +53,13 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
                         val restored = runCatching { parse(doc, uid, company) }.getOrNull() ?: continue
                         // Check ALL local scans, including pending ones, before using
                         // the restored-ID unique index. Never replace local detail/photos.
-                        if (dao.countByScanId(uid, doc.id) != 0) continue
+                        if (dao.countByScanId(uid, doc.id) != 0) {
+                            // Correct only previously restored rows, and only when
+                            // the original capture timestamp is actually available.
+                            val captured = (doc.get("captureTimestamp") as? com.google.firebase.Timestamp)?.toDate()?.time
+                            if (captured != null) dao.updateRestoredCaptureTime(uid, company, doc.id, captured)
+                            continue
+                        }
                         val id = dao.insertRestored(restored.first)
                         if (id != -1L) dao.insertMedicines(restored.second.map { it.copy(prescriptionId = id) })
                     }
@@ -77,8 +83,10 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
         val doctor = doc.getString("doctorName") ?: return null
         val specialty = doc.getString("doctorSpecialty") ?: return null
         val territory = doc.getString("territory") ?: return null
-        // The cloud only stores upload time, not the original capture time.
-        val timestamp = doc.getTimestamp("timestamp")?.toDate()?.time ?: return null
+        // Older cloud documents lack captureTimestamp; their upload time is the
+        // only available fallback and is not the original capture time.
+        val timestamp = (doc.get("captureTimestamp") as? com.google.firebase.Timestamp)?.toDate()?.time
+            ?: doc.getTimestamp("timestamp")?.toDate()?.time ?: return null
         val raw = doc.get("medicines") as? List<*> ?: return null
         if (raw.size > 100) return null
         val medicines = raw.mapIndexed { index, value ->

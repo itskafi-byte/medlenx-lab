@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 
 let env;
 const id = '12345678-1234-4123-8123-123456789abc';
@@ -82,4 +82,17 @@ test('own history query uses the stored creator field and company boundary', asy
   const snapshot = await assertSucceeds(getDocs(own));
   if (snapshot.size !== 1 || snapshot.docs[0].id !== id) throw new Error('own history query failed');
   await assertFails(getDocs(query(collection(alice, 'companies/company-b/team_scans'), where('createdByUid', '==', 'alice'))));
+});
+
+test('capture time is optional for legacy scans and type-checked separately from server upload time', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  const own = doc(db, 'companies/company-a/team_scans', id);
+  const capture = Timestamp.fromMillis(Date.UTC(2025, 0, 2, 8, 30));
+  await assertFails(setDoc(own, {...scan('Alice', 'alice'), captureTimestamp: 'not a timestamp'}));
+  await assertSucceeds(setDoc(own, {...scan('Alice', 'alice'), captureTimestamp: capture}));
+  const saved = await assertSucceeds(getDoc(own));
+  if (saved.data().captureTimestamp.toMillis() !== capture.toMillis()) throw new Error('capture time was not preserved');
+  if (!(saved.data().timestamp instanceof Timestamp)) throw new Error('upload time is missing');
+  const oldId = '12345678-1234-4123-8123-123456789abd';
+  await assertSucceeds(setDoc(doc(db, 'companies/company-a/team_scans', oldId), {...scan('Alice', 'alice'), scanId: oldId}));
 });

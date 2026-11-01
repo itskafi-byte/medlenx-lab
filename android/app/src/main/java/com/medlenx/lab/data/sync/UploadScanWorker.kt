@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,6 +18,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
 import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.UserCaptureFiles
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
@@ -75,7 +77,9 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         if (existing.getString("createdByUid") != uid || existing.getString("scanId") != rx.scanId ||
                             existing.getString("doctorName") != rx.doctorName ||
                             existing.getString("doctorSpecialty") != rx.doctorSpecialty ||
-                            existing.getString("territory") != rx.territory || existing.get("medicines") != medicines) {
+                            existing.getString("territory") != rx.territory || existing.get("medicines") != medicines ||
+                            (existing.contains("captureTimestamp") &&
+                                (existing.get("captureTimestamp") as? Timestamp)?.toDate()?.time != rx.createdAt)) {
                             return Result.failure()
                         }
                     } else {
@@ -88,6 +92,7 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             "medicines" to medicines,
                             "scannedBy" to name,
                             "createdByUid" to uid,
+                            "captureTimestamp" to Timestamp(Date(rx.createdAt)),
                             "timestamp" to FieldValue.serverTimestamp(),
                         )).await()
                     }

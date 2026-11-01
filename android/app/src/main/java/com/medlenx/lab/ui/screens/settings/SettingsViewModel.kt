@@ -30,6 +30,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /**
  * Backs the Enterprise Settings & Officer Profile screen.
@@ -86,6 +89,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** Editable target rows; `captured` is filled from this month's scans. */
     var targets by mutableStateOf<List<TargetDraft>>(emptyList())
         private set
+    private var capturedByBrand: Map<String, Int> = emptyMap()
 
     /** Company autocomplete source — the distinct companies in the bundled catalogue. */
     private var allCompanies by mutableStateOf<List<String>>(emptyList())
@@ -263,7 +267,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updateBrand(index: Int, brand: String, monthlyTarget: Int) {
         changed()
         targets = targets.mapIndexed { i, t ->
-            if (i == index) t.copy(brand = brand, monthlyTarget = monthlyTarget) else t
+            if (i == index) t.copy(brand = brand, monthlyTarget = monthlyTarget,
+                captured = capturedByBrand[brand.lowercase()] ?: 0) else t
         }
     }
 
@@ -278,12 +283,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 locations = app.graph.locationRepository.locations()
                 allCompanies = app.graph.database.medexDao().companies()
                 val profile = profileDao.current(currentUid)
-                val captured = app.graph.database.prescriptionDao()
-                    .brandCapturedRows(currentUid, since = startOfMonth())
-                    .associateBy({ it.brand.lowercase() }, { it.captured })
-                val loadedTargets = profileDao.observeTargets(currentUid).first().map { t ->
-                    TargetDraft(t.brand, t.target, captured[t.brand.lowercase()] ?: 0)
-                }
+                val loadedTargets = profileDao.observeTargets(currentUid).first()
                 // A restore must not replace edits already being typed on this screen.
                 if (!editing && FirebaseAuth.getInstance().currentUser?.uid == currentUid) {
                     profile?.let { p ->
@@ -295,7 +295,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         territory = p.territory
                         portfolio = p.portfolio
                     }
-                    targets = loadedTargets
+                    targets = loadedTargets.map { t ->
+                        TargetDraft(t.brand, t.target, capturedByBrand[t.brand.lowercase()] ?: 0)
+                    }
                     dailyTarget = targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString()
                 }
             }.onFailure { error = it.message ?: "Could not load settings" }
@@ -333,12 +335,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun startOfMonth(): Long =
-        java.time.LocalDate.now().withDayOfMonth(1)
-            .atStartOfDay(java.time.ZoneId.systemDefault())
-            .toInstant().toEpochMilli()
-
     init {
+        viewModelScope.launch {
+            var month: java.time.YearMonth? = null
+            var counter: Job? = null
+            while (isActive) {
+                val now = java.time.YearMonth.now()
+                if (month != now) {
+                    month = now
+                    counter?.cancel()
+                    val zone = java.time.ZoneId.systemDefault()
+                    val start = now.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    val end = now.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    counter = launch {
+                        app.graph.database.prescriptionDao().observeBrandCapturedRows(currentUid, start, end).collect { rows ->
+                            capturedByBrand = rows.associate { it.brand.lowercase() to it.captured }
+                            targets = targets.map { it.copy(captured = capturedByBrand[it.brand.lowercase()] ?: 0) }
+                        }
+                    }
+                }
+                delay(30_000)
+            }
+        }
         viewModelScope.launch {
             val manager = WorkManager.getInstance(app)
             // Unique periodic work also observes jobs created before per-user tags
