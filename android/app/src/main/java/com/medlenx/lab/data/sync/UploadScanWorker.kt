@@ -13,6 +13,7 @@ import androidx.work.workDataOf
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
 import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.UserCaptureFiles
@@ -28,51 +29,78 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val auth = FirebaseAuth.getInstance(app)
         if (auth.currentUser?.uid != uid) return Result.success() // Dormant until this UID signs in again.
         try {
-            val company = TrustedMembership.refresh(applicationContext, uid) ?: return Result.retry()
+            val dao = MedLenXDatabase.get(applicationContext).prescriptionDao()
+            val company = TrustedMembership.refresh(applicationContext, uid)
             if (auth.currentUser?.uid != uid) return Result.success()
+            val pending = dao.pendingUploads(uid)
+            if (company == null) {
+                // A server-confirmed missing/inactive membership cannot access any
+                // stamped tenant under our rules. Unstamped rows remain claimable.
+                var rejected = false
+                for (rx in pending) {
+                    if (auth.currentUser?.uid != uid) return Result.success()
+                    if (rx.companyId.isNotBlank()) {
+                        dao.markRejected(uid, rx.id, rx.companyId, rx.scanId)
+                        rejected = true
+                    }
+                }
+                return if (rejected) Result.failure() else Result.retry()
+            }
             val firestore = FirebaseFirestore.getInstance(app)
             val member = firestore.collection("companies").document(company).collection("members").document(uid)
                 .get(Source.SERVER).await()
             val name = member.getString("displayName").orEmpty()
             if (member.getBoolean("active") != true || name.isBlank()) return Result.retry()
-            val dao = MedLenXDatabase.get(applicationContext).prescriptionDao()
-            for (rx in dao.pendingUploads(uid)) {
-                // Rows predating the capture-time snapshot, or assigned to a prior
-                // company, need deliberate review. Never silently reroute them.
-                if (rx.companyId != company || rx.scanId.isBlank()) continue
+            var rejected = false
+            for (rx in pending) {
                 if (auth.currentUser?.uid != uid) return Result.success()
-                val doc = firestore.collection("companies").document(rx.companyId)
-                    .collection("team_scans").document(rx.scanId)
-                val medicines = dao.medicinesFor(uid, rx.id).map { med ->
-                    mapOf("brand" to med.brandName, "generic" to med.generic,
-                        "confidence" to med.confidenceScore, "company" to med.companyName.orEmpty())
+                // An empty snapshot needs explicit claiming. A different verified
+                // company cannot access the stamped tenant under the deployed rules.
+                if (rx.companyId.isBlank()) continue
+                if (rx.companyId != company || rx.scanId.isBlank()) {
+                    dao.markRejected(uid, rx.id, rx.companyId, rx.scanId)
+                    rejected = true
+                    continue
                 }
-                val existing = doc.get(Source.SERVER).await()
-                if (existing.exists()) {
-                    // Rules are create-only. An ACK may have been lost; reconcile
-                    // the immutable document instead of issuing a forbidden update.
-                    if (existing.getString("createdByUid") != uid || existing.getString("scanId") != rx.scanId ||
-                        existing.getString("doctorName") != rx.doctorName ||
-                        existing.getString("doctorSpecialty") != rx.doctorSpecialty ||
-                        existing.getString("territory") != rx.territory || existing.get("medicines") != medicines) {
-                        return Result.failure()
+                try {
+                    val doc = firestore.collection("companies").document(rx.companyId)
+                        .collection("team_scans").document(rx.scanId)
+                    val medicines = dao.medicinesFor(uid, rx.id).map { med ->
+                        mapOf("brand" to med.brandName, "generic" to med.generic,
+                            "confidence" to med.confidenceScore, "company" to med.companyName.orEmpty())
                     }
-                } else {
+                    val existing = doc.get(Source.SERVER).await()
+                    if (existing.exists()) {
+                        // An ACK may have been lost. Reconcile instead of updating.
+                        if (existing.getString("createdByUid") != uid || existing.getString("scanId") != rx.scanId ||
+                            existing.getString("doctorName") != rx.doctorName ||
+                            existing.getString("doctorSpecialty") != rx.doctorSpecialty ||
+                            existing.getString("territory") != rx.territory || existing.get("medicines") != medicines) {
+                            return Result.failure()
+                        }
+                    } else {
+                        if (auth.currentUser?.uid != uid) return Result.success()
+                        doc.set(mapOf(
+                            "scanId" to rx.scanId,
+                            "doctorName" to rx.doctorName,
+                            "doctorSpecialty" to rx.doctorSpecialty,
+                            "territory" to rx.territory,
+                            "medicines" to medicines,
+                            "scannedBy" to name,
+                            "createdByUid" to uid,
+                            "timestamp" to FieldValue.serverTimestamp(),
+                        )).await()
+                    }
                     if (auth.currentUser?.uid != uid) return Result.success()
-                    doc.set(mapOf(
-                        "scanId" to rx.scanId,
-                        "doctorName" to rx.doctorName,
-                        "doctorSpecialty" to rx.doctorSpecialty,
-                        "territory" to rx.territory,
-                        "medicines" to medicines,
-                        "scannedBy" to name,
-                        "createdByUid" to uid,
-                        "timestamp" to FieldValue.serverTimestamp(),
-                    )).await()
+                    dao.markUploaded(uid, rx.id, rx.companyId, rx.scanId)
+                } catch (e: FirebaseFirestoreException) {
+                    if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+                    if (auth.currentUser?.uid != uid) return Result.success()
+                    dao.markRejected(uid, rx.id, rx.companyId, rx.scanId)
+                    rejected = true
                 }
-                if (auth.currentUser?.uid != uid) return Result.success()
-                dao.markUploaded(uid, rx.id, rx.companyId, rx.scanId)
             }
+            if (rejected) return Result.failure()
             return Result.success()
         } catch (e: CancellationException) {
             throw e

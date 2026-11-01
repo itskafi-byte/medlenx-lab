@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -63,6 +65,15 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onOpenHelp: () -> Unit = {},
 ) {
+    vm.purgeConfirmationCount?.let { count ->
+        AlertDialog(
+            onDismissRequest = vm::cancelPurge,
+            title = { Text("Clear Trapped Local Data?") },
+            text = { Text("Permanently delete $count local audits and their photos where safe? This includes unassigned legacy records from this device and rejected records for your signed-in account. Shared photos may be retained. Cloud records are not deleted. This cannot be undone.") },
+            confirmButton = { TextButton(onClick = vm::confirmPurge) { Text("Delete permanently") } },
+            dismissButton = { TextButton(onClick = vm::cancelPurge) { Text("Cancel") } },
+        )
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -258,7 +269,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(MlxD.Space3))
             OutlinedButton(
                 onClick = vm::signOut,
-                enabled = vm.pendingUploads == 0 && !vm.signOutBusy,
+                enabled = vm.pendingUploads == 0 && !vm.signOutBusy && !vm.purgeBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -289,6 +300,19 @@ fun SettingsScreen(
                     style = MlxType.BodySmall,
                     color = Mlx.Text600,
                 )
+            }
+        }
+
+        if (vm.trappedCount > 0 || vm.purgeMessage != null) {
+            MlxCard {
+                Text("Advanced", style = MlxType.CardTitle, color = Mlx.Text900)
+                if (vm.trappedCount > 0) {
+                    Text("${vm.trappedCount} trapped local audits", style = MlxType.BodySmall, color = Mlx.Text500)
+                    OutlinedButton(onClick = vm::preparePurge, enabled = !vm.purgeBusy && !vm.signOutBusy) {
+                        Text("Clear Trapped Local Data")
+                    }
+                }
+                vm.purgeMessage?.let { Text(it, style = MlxType.BodySmall, color = Mlx.Text600) }
             }
         }
 

@@ -68,9 +68,19 @@ content restrictions require a trusted server-side ingestion path.
   remain pending without a route. On the Scan screen, the officer can explicitly
   assign their own unassigned audits after an online company verification. Rows
   belonging to `legacy_user` are excluded because their ownership is unknown.
-  A later company change also leaves audits stamped for the old company pending
-  rather than silently rerouting them; contact an administrator to restore the
-  relevant membership. Such pending rows also block sign-out.
+  A server-confirmed change or loss of membership marks stamped pending audits
+  `FAILED_REJECTED` instead of rerouting them. A permission-denied response for
+  an individual stamped upload does the same; transient errors retry. Rejected
+  audits no longer block sign-out. Unstamped pending audits still need claiming.
+  If membership cannot be verified (for example while offline), pending rows can
+  still block sign-out. A lost upload acknowledgement can mean a rejected audit
+  already exists in the cloud; local cleanup does not delete cloud records.
+- Settings offers a separately confirmed Clear Trapped Local Data action when
+  applicable. It removes device-wide unassigned `legacy_user` audits and this
+  signed-in account's rejected audits, plus safely deletable, unshared local
+  image files. It never removes other accounts' rejected audits. Shared or unsafe
+  image paths are retained and reported; an interruption after the Room commit
+  can leave orphaned files. Sign-out itself never performs this cleanup.
 - Team activity displays server-confirmed results only. It deliberately hides
   cached feed results while offline to avoid exposing Firestore's shared disk
   cache after an account switch. Other local features remain offline-first.

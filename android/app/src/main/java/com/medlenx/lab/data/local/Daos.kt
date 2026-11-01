@@ -90,6 +90,28 @@ interface PrescriptionDao {
     @Query("UPDATE prescriptions SET sync_status = 'UPLOADED' WHERE id = :id AND user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND sync_status = 'PENDING'")
     suspend fun markUploaded(currentUid: String, id: Long, company: String, scanId: String): Int
 
+    /** Legacy rows are device-wide; rejected rows are limited to this account. */
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = 'legacy_user' OR (user_id = :currentUid AND sync_status = 'FAILED_REJECTED')")
+    fun observeTrappedCount(currentUid: String): Flow<Int>
+
+    @Query("SELECT * FROM prescriptions WHERE user_id = 'legacy_user' OR (user_id = :currentUid AND sync_status = 'FAILED_REJECTED') ORDER BY id")
+    suspend fun trappedAudits(currentUid: String): List<PrescriptionEntity>
+
+    @Query("DELETE FROM scanned_medicines WHERE prescription_id IN (:ids)")
+    suspend fun deleteMedicinesForAudits(ids: List<Long>)
+
+    @Query("DELETE FROM doctor_visits WHERE prescription_id IN (:ids)")
+    suspend fun deleteVisitsForAudits(ids: List<Long>)
+
+    @Query("DELETE FROM prescriptions WHERE id IN (:ids) AND (user_id = 'legacy_user' OR (user_id = :currentUid AND sync_status = 'FAILED_REJECTED'))")
+    suspend fun deleteTrappedAudits(currentUid: String, ids: List<Long>): Int
+
+    @Query("SELECT image_path FROM prescriptions WHERE image_path != ''")
+    suspend fun allReferencedImagePaths(): List<String>
+
+    @Query("UPDATE prescriptions SET sync_status = 'FAILED_REJECTED' WHERE id = :id AND user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND sync_status = 'PENDING'")
+    suspend fun markRejected(currentUid: String, id: Long, company: String, scanId: String): Int
+
     /** Pending new audits only; historical scans are intentionally not uploaded. */
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING' ORDER BY id ASC")
     suspend fun pendingUploads(currentUid: String): List<PrescriptionEntity>
@@ -873,6 +895,9 @@ interface PrescriptionDao {
 
 @Dao
 interface QueueDao {
+    @Query("SELECT image_path FROM queued_scans WHERE image_path != ''")
+    suspend fun allReferencedImagePaths(): List<String>
+
     @Query("UPDATE queued_scans SET image_path = :newPath WHERE image_path = :oldPath")
     suspend fun relocateLegacyImage(oldPath: String, newPath: String)
 
