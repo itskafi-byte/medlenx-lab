@@ -60,13 +60,17 @@ content restrictions require a trusted server-side ingestion path.
   uploads them; periodic work and the next sign-in recover missed scheduling.
   Fixed UUIDs plus server-side reconciliation handle a lost acknowledgement under
   the append-only rules. Sign-out retains local records and does not clear
-  Firestore persistence or delete pending writes.
+  Firestore persistence or delete pending writes. Sign-out is blocked while
+  this account has any pending uploads, including those that require review.
 - Audits saved before this implementation have no company snapshot. They remain
   pending or local-only and are never automatically assigned to the currently
   selected company. Audits saved before the first verified company lookup also
-  remain pending without a route. The Scan screen shows a count; there is not
-  yet a review/reassignment UI. A later company change also leaves audits stamped
-  for the old company pending rather than silently rerouting them.
+  remain pending without a route. On the Scan screen, the officer can explicitly
+  assign their own unassigned audits after an online company verification. Rows
+  belonging to `legacy_user` are excluded because their ownership is unknown.
+  A later company change also leaves audits stamped for the old company pending
+  rather than silently rerouting them; contact an administrator to restore the
+  relevant membership. Such pending rows also block sign-out.
 - Team activity displays server-confirmed results only. It deliberately hides
   cached feed results while offline to avoid exposing Firestore's shared disk
   cache after an account switch. Other local features remain offline-first.

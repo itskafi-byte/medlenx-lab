@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import androidx.room.withTransaction
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,6 +16,8 @@ import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.local.UserCaptureFiles
+import com.medlenx.lab.data.sync.TrustedMembership
+import com.medlenx.lab.data.sync.UploadScheduling
 import com.medlenx.lab.data.local.DailyTargetSettings
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
@@ -102,6 +105,17 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT))
         private set
+    var claimableAudits by mutableStateOf(0)
+        private set
+    var claimCompany by mutableStateOf<String?>(null)
+        private set
+    var claimCount by mutableStateOf(0)
+        private set
+    private var claimIds: Set<Long> = emptySet()
+    var claimBusy by mutableStateOf(false)
+        private set
+    var claimMessage by mutableStateOf<String?>(null)
+        private set
     var pendingUploads by mutableStateOf(0)
         private set
     var unroutableUploads by mutableStateOf(0)
@@ -149,6 +163,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         targetPrefs.registerOnSharedPreferenceChangeListener(targetListener)
         viewModelScope.launch { prescriptionDao.observeRecent(currentUid, 4).collect { recentCaptures = it } }
         viewModelScope.launch { prescriptionDao.observePendingUploads(currentUid).collect { pendingUploads = it } }
+        viewModelScope.launch { prescriptionDao.observeClaimableAudits(currentUid).collect { claimableAudits = it } }
         viewModelScope.launch { prescriptionDao.observeUnroutableUploads(currentUid).collect { unroutableUploads = it } }
         viewModelScope.launch {
             var day: java.time.LocalDate? = null
@@ -183,6 +198,68 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             snapshotFlow { deviceState.online }
                 .distinctUntilChanged()
                 .collect { isOnline -> if (isOnline) syncQueuedScans() }
+        }
+    }
+
+    /** Fetch a fresh server-approved company before offering explicit assignment. */
+    fun prepareClaim() {
+        if (claimBusy) return
+        claimBusy = true
+        claimMessage = null
+        viewModelScope.launch {
+            try {
+                check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+                val company = TrustedMembership.refresh(getApplication<Application>(), currentUid)
+                if (company == null) {
+                    claimMessage = "Your company membership must be approved by an administrator."
+                } else {
+                    claimIds = prescriptionDao.claimableAudits(currentUid).map { it.id }.toSet()
+                    claimCount = claimIds.size
+                    if (claimIds.isEmpty()) claimMessage = "No unassigned scans remain."
+                    else claimCompany = company
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                claimMessage = "Connect to the internet to verify your company before assigning scans."
+            } finally {
+                claimBusy = false
+            }
+        }
+    }
+
+    fun cancelClaim() { claimCompany = null; claimIds = emptySet(); claimCount = 0 }
+
+    fun confirmClaim() {
+        val chosen = claimCompany ?: return
+        if (claimBusy) return
+        claimBusy = true
+        claimMessage = null
+        viewModelScope.launch {
+            try {
+                check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+                val verified = TrustedMembership.refresh(getApplication<Application>(), currentUid)
+                check(verified == chosen) { "Your company membership changed. Verify again before assigning scans." }
+                val assigned = app.graph.database.withTransaction {
+                    check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+                    prescriptionDao.claimableAudits(currentUid).filter { it.id in claimIds }.sumOf { rx ->
+                        prescriptionDao.assignAudit(currentUid, rx.id, chosen, java.util.UUID.randomUUID().toString())
+                    }
+                }
+                cancelClaim()
+                if (assigned > 0) {
+                    val scheduled = runCatching { UploadScheduling.start(getApplication<Application>(), currentUid) }.isSuccess
+                    claimMessage = if (scheduled) "$assigned scans assigned to $chosen and queued for sync."
+                        else "$assigned scans assigned locally. Reopen the app to retry scheduling sync."
+                } else claimMessage = "No unassigned scans remain."
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                cancelClaim()
+                claimMessage = e.message ?: "Could not assign scans. Check your connection and try again."
+            } finally {
+                claimBusy = false
+            }
         }
     }
 

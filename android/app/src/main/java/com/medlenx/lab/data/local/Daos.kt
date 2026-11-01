@@ -97,6 +97,19 @@ interface PrescriptionDao {
     @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING'")
     fun observePendingUploads(currentUid: String): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING'")
+    suspend fun pendingUploadCount(currentUid: String): Int
+
+    /** Only this account's unassigned audits are eligible; never re-route a stamped upload. */
+    @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND company_id = '' AND sync_status IN ('LOCAL_ONLY', 'PENDING') ORDER BY id")
+    suspend fun claimableAudits(currentUid: String): List<PrescriptionEntity>
+
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND company_id = '' AND sync_status IN ('LOCAL_ONLY', 'PENDING')")
+    fun observeClaimableAudits(currentUid: String): Flow<Int>
+
+    @Query("UPDATE prescriptions SET company_id = :company, sync_status = 'PENDING', scan_id = CASE WHEN scan_id = '' THEN :newScanId ELSE scan_id END WHERE id = :id AND user_id = :currentUid AND company_id = '' AND sync_status IN ('LOCAL_ONLY', 'PENDING')")
+    suspend fun assignAudit(currentUid: String, id: Long, company: String, newScanId: String): Int
+
     @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING' AND company_id = ''")
     fun observeUnroutableUploads(currentUid: String): Flow<Int>
 

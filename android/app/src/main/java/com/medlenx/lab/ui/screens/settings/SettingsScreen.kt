@@ -257,7 +257,8 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(MlxD.Space3))
             OutlinedButton(
-                onClick = { com.google.firebase.auth.FirebaseAuth.getInstance().signOut() },
+                onClick = vm::signOut,
+                enabled = vm.pendingUploads == 0 && !vm.signOutBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -266,6 +267,16 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Sign out")
             }
+            val pending = vm.pendingUploads
+            if (pending == null) {
+                Text("Checking pending uploads…", style = MlxType.BodySmall, color = Mlx.Text500)
+            } else if (pending > 0) {
+                Text("Sync in progress. Please wait for $pending pending scans to upload before signing out.",
+                    style = MlxType.BodySmall, color = Mlx.Warn600)
+                Text("If scans have no assigned company, use Assign & Sync on the Scan screen. For an old company assignment, contact your administrator.",
+                    style = MlxType.Footnote, color = Mlx.Text500)
+            }
+            vm.signOutError?.let { Text(it, style = MlxType.BodySmall, color = MaterialTheme.colorScheme.error) }
         }
 
         MlxCard {

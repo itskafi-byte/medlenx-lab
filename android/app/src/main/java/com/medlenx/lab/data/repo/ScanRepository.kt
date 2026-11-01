@@ -168,6 +168,7 @@ class ScanRepository(
         check(uid == expectedUid && expectedUid.isNotBlank()) { "The signed-in user changed; capture the prescription again" }
         val stampedCompany = TrustedMembership.cachedCompany(context, uid)
         val savedId = database.withTransaction {
+            check(FirebaseAuth.getInstance().currentUser?.uid == uid) { "The signed-in user changed; capture the prescription again" }
             val id = prescriptionDao.insert(
                 prescription.copy(
                     userId = uid,

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.rounded.TrackChanges
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -81,6 +83,17 @@ fun ScanHome(
 ) {
     val context = LocalContext.current
     var selected by remember { mutableStateOf<PrescriptionEntity?>(null) }
+    vm.claimCompany?.let { company ->
+        AlertDialog(
+            onDismissRequest = { if (!vm.claimBusy) vm.cancelClaim() },
+            title = { Text("Assign unassigned audits?") },
+            text = { Text("Assign ${vm.claimCount} of your unassigned audits to $company and queue their results for team sync. Prescription photos stay on this device. This cannot automatically be rerouted later.") },
+            confirmButton = {
+                TextButton(onClick = vm::confirmClaim, enabled = !vm.claimBusy) { Text("Assign to $company & Sync") }
+            },
+            dismissButton = { TextButton(onClick = vm::cancelClaim, enabled = !vm.claimBusy) { Text("Cancel") } },
+        )
+    }
     selected?.let { rx ->
         val image = remember(rx.imagePath) { File(rx.imagePath) }
         val transform = remember(rx.id) { ViewerTransform() }
@@ -112,6 +125,7 @@ fun ScanHome(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     CaptureHero(vm, onCamera, onGallery)
                     DailyTargetCard(vm)
+                    ClaimAuditsCard(vm)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
@@ -125,9 +139,28 @@ fun ScanHome(
             ) {
                 CaptureHero(vm, onCamera, onGallery)
                 DailyTargetCard(vm)
+                ClaimAuditsCard(vm)
                 RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
                 HubFeed(hubVm, onOpenUrl, onOpenHub)
             }
+        }
+    }
+}
+
+@Composable
+private fun ClaimAuditsCard(vm: ScanViewModel) {
+    if (vm.claimableAudits == 0 && vm.claimMessage == null) return
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (vm.claimableAudits > 0) {
+                Text("You have ${vm.claimableAudits} unassigned offline scans.", style = MlxType.CardTitle)
+                Text("Only scans assigned to this account can be claimed. Connect to verify your approved company.",
+                    style = MlxType.BodySmall, color = Mlx.Text500)
+                Button(onClick = vm::prepareClaim, enabled = !vm.claimBusy, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (vm.claimBusy) "Verifying…" else "Assign to company & Sync")
+                }
+            }
+            vm.claimMessage?.let { Text(it, style = MlxType.BodySmall, color = Mlx.Text700) }
         }
     }
 }

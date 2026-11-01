@@ -2,6 +2,7 @@ package com.medlenx.lab.ui.screens.settings
 
 import android.app.Application
 import android.content.Context
+import androidx.room.withTransaction
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +18,7 @@ import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.model.BdLocations
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -86,6 +88,42 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             if (q.isEmpty()) return emptyList()
             return allCompanies.filter { it.contains(q, ignoreCase = true) }.take(8)
         }
+
+    var pendingUploads by mutableStateOf<Int?>(null)
+        private set
+    var signOutBusy by mutableStateOf(false)
+        private set
+    var signOutError by mutableStateOf<String?>(null)
+        private set
+
+    /** Fail closed if the count is not loaded or changes before the click. */
+    fun signOut() {
+        if (signOutBusy || pendingUploads == null || pendingUploads != 0) return
+        signOutBusy = true
+        signOutError = null
+        viewModelScope.launch {
+            try {
+                app.graph.database.withTransaction {
+                    check(FirebaseAuth.getInstance().currentUser?.uid == currentUid && currentUid.isNotBlank())
+                    val count = app.graph.database.prescriptionDao().pendingUploadCount(currentUid)
+                    if (count > 0) {
+                        signOutError = "Sync in progress. Please wait for $count pending scans to upload before signing out."
+                    } else {
+                        // Auth may have changed while the database query was running.
+                        check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+                        // Local audits and photos are deliberately retained.
+                        FirebaseAuth.getInstance().signOut()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                signOutError = "Could not verify pending uploads. Sign-out was not completed."
+            } finally {
+                signOutBusy = false
+            }
+        }
+    }
 
     var saved by mutableStateOf(false)
         private set
@@ -200,6 +238,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             .toInstant().toEpochMilli()
 
     init {
+        viewModelScope.launch {
+            app.graph.database.prescriptionDao().observePendingUploads(currentUid).collect { pendingUploads = it }
+        }
         load()
     }
 }
