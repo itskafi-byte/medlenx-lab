@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
+import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.local.DailyTargetSettings
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
@@ -92,6 +94,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val locationRepository = app.graph.locationRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
     private val deviceState = app.graph.deviceState
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     /** Parked captures are replayed from disk, so the mime travels with the row. */
     private val mimeType = "image/jpeg"
@@ -140,7 +143,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         targetPrefs.registerOnSharedPreferenceChangeListener(targetListener)
-        viewModelScope.launch { prescriptionDao.observeRecent(4).collect { recentCaptures = it } }
+        viewModelScope.launch { prescriptionDao.observeRecent(currentUid, 4).collect { recentCaptures = it } }
         viewModelScope.launch {
             var day: java.time.LocalDate? = null
             var counter: Job? = null
@@ -152,7 +155,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     val zone = java.time.ZoneId.systemDefault()
                     val start = now.atStartOfDay(zone).toInstant().toEpochMilli()
                     val end = now.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-                    counter = launch { prescriptionDao.observeCountBetween(start, end).collect { todayCount = it } }
+                    counter = launch { prescriptionDao.observeCountBetween(currentUid, start, end).collect { todayCount = it } }
                 }
                 delay(30_000)
             }
@@ -184,16 +187,21 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Copies the picked image into app storage so the path stays valid after the picker closes. */
     fun onImagePicked(uri: Uri) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
             val file = withContext(Dispatchers.IO) {
                 runCatching {
-                    val dir = File(getApplication<Application>().filesDir, "rx").apply { mkdirs() }
-                    val target = File(dir, "rx_${System.currentTimeMillis()}.jpg")
+                    val dir = UserCaptureFiles.stored(getApplication(), uid).apply { check(mkdirs() || isDirectory) }
+                    val target = File(dir, "rx_${java.util.UUID.randomUUID()}.jpg")
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
                         target.outputStream().use { output -> input.copyTo(output) }
                     }
                     target.takeIf { it.exists() && it.length() > 0 }
                 }.getOrNull()
+            }
+            if (FirebaseAuth.getInstance().currentUser?.uid != uid) {
+                file?.delete()
+                return@launch
             }
             if (file == null) {
                 state = state.copy(phase = ScanPhase.Failed, error = "Could not read that image")
@@ -902,7 +910,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 // Prescriptions are never deleted in this app, so the row count is a
                 // safe monotonic sequence and the number can be known before insert -
                 // no read-modify-write round trip to fill it in afterwards.
-                val rxNo = "RX-${prescriptionDao.prescriptionCount() + 1}"
+                val rxNo = "RX-${prescriptionDao.prescriptionCount(currentUid) + 1}"
 
                 scanRepository.saveVerified(
                     prescription = PrescriptionEntity(
@@ -931,6 +939,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     result = corrected,
                     mrId = repId,
                     ownCompany = MedicineMatcher.resolveOwnCompany(profile?.company).name,
+                    expectedUid = currentUid,
                     enriched = audit,
                 )
                 duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()
@@ -962,7 +971,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun findDuplicate(hash: String): PrescriptionHashRow? {
         var best: PrescriptionHashRow? = null
         var bestDistance = Int.MAX_VALUE
-        for (row in prescriptionDao.hashRows()) {
+        for (row in prescriptionDao.hashRows(currentUid)) {
             val other = row.imageHash ?: continue
             val distance = PHash.hammingDistance(hash, other) ?: continue
             if (distance <= RxAudit.DUPLICATE_THRESHOLD && distance < bestDistance) {

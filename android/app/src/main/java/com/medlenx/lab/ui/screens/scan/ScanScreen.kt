@@ -3,6 +3,8 @@ package com.medlenx.lab.ui.screens.scan
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import com.google.firebase.auth.FirebaseAuth
+import com.medlenx.lab.data.local.UserCaptureFiles
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -96,14 +98,25 @@ fun ScanScreen(
     // taken a picture -- which reads exactly like a camera crash. Uri is Parcelable,
     // so it saves without a custom saver.
     var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var pendingCameraUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingGalleryUid by rememberSaveable { mutableStateOf<String?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
     ) { success ->
-        if (success) pendingCameraUri?.let(vm::onImagePicked)
+        if (success && pendingCameraUid != null && pendingCameraUid == FirebaseAuth.getInstance().currentUser?.uid) {
+            pendingCameraUri?.let(vm::onImagePicked)
+        }
+        pendingCameraUid = null
+        pendingCameraUri = null
     }
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
-    ) { uri -> uri?.let(vm::onImagePicked) }
+    ) { uri ->
+        if (pendingGalleryUid != null && pendingGalleryUid == FirebaseAuth.getInstance().currentUser?.uid) {
+            uri?.let(vm::onImagePicked)
+        }
+        pendingGalleryUid = null
+    }
 
     /**
      * Guarded camera launch.
@@ -116,7 +129,9 @@ fun ScanScreen(
      */
     val launchCamera = {
         runCatching {
-            val dir = File(context.cacheDir, "rx").apply { mkdirs() }
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+                ?: error("Sign in before capturing a prescription")
+            val dir = UserCaptureFiles.temporary(context, uid).apply { check(mkdirs() || isDirectory) }
             val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
             val uri = FileProvider.getUriForFile(
                 context,
@@ -124,6 +139,7 @@ fun ScanScreen(
                 file,
             )
             pendingCameraUri = uri
+            pendingCameraUid = uid
             cameraLauncher.launch(uri)
         }.onFailure { e ->
             android.widget.Toast.makeText(
@@ -180,6 +196,7 @@ fun ScanScreen(
             onOpenHub = onOpenHub,
             onOpenUrl = onOpenUrl,
             onGallery = {
+                pendingGalleryUid = FirebaseAuth.getInstance().currentUser?.uid
                 galleryLauncher.launch(
                     // Builder, not the constructor: the PickVisualMediaRequest(mediaType)
                     // ctor is deprecated and is gone from the current androidx API surface.

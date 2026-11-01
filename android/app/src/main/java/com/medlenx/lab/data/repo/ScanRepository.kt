@@ -146,10 +146,12 @@ class ScanRepository(
         result: VlScanResult,
         mrId: String,
         ownCompany: String?,
+        expectedUid: String,
         enriched: List<EnrichedMedicine> = emptyList(),
     ): Long {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: throw IllegalStateException("Sign in before saving a prescription")
+        check(uid == expectedUid && expectedUid.isNotBlank()) { "The signed-in user changed; capture the prescription again" }
         val id = prescriptionDao.insert(
             prescription.copy(
                 userId = uid,
@@ -224,13 +226,13 @@ class ScanRepository(
         return drained
     }
 
-    suspend fun recentMedicines(limit: Int, offset: Int) =
-        prescriptionDao.recentMedicines(limit, offset)
+    suspend fun recentMedicines(currentUid: String, limit: Int, offset: Int) =
+        prescriptionDao.recentMedicines(currentUid, limit, offset)
 
-    suspend fun medicinesFor(prescriptionId: Long) =
-        prescriptionDao.medicinesFor(prescriptionId)
+    suspend fun medicinesFor(currentUid: String, prescriptionId: Long) =
+        prescriptionDao.medicinesFor(currentUid, prescriptionId)
 
-    fun recentPrescriptions(limit: Int = 10) = prescriptionDao.observeRecent(limit)
+    fun recentPrescriptions(currentUid: String, limit: Int = 10) = prescriptionDao.observeRecent(currentUid, limit)
 
     suspend fun searchCatalogue(query: String, limit: Int = 24) = medexDao.search(query, limit)
 

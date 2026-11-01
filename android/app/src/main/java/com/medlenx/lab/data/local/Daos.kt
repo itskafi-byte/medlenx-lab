@@ -83,17 +83,17 @@ interface PrescriptionDao {
     @Upsert
     suspend fun upsert(p: PrescriptionEntity)
 
-    @Query("SELECT * FROM prescriptions ORDER BY created_at DESC LIMIT :limit")
-    fun observeRecent(limit: Int = 10): Flow<List<PrescriptionEntity>>
+    @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid ORDER BY created_at DESC LIMIT :limit")
+    fun observeRecent(currentUid: String, limit: Int = 10): Flow<List<PrescriptionEntity>>
 
-    @Query("SELECT COUNT(*) FROM prescriptions WHERE created_at >= :start AND created_at < :end")
-    fun observeCountBetween(start: Long, end: Long): Flow<Int>
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND created_at >= :start AND created_at < :end")
+    fun observeCountBetween(currentUid: String, start: Long, end: Long): Flow<Int>
 
-    @Query("SELECT * FROM prescriptions WHERE id = :id")
-    suspend fun byId(id: Long): PrescriptionEntity?
+    @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND id = :id")
+    suspend fun byId(currentUid: String, id: Long): PrescriptionEntity?
 
-    @Query("SELECT * FROM prescriptions WHERE image_hash = :hash AND id != :excludeId LIMIT 1")
-    suspend fun findByHash(hash: String, excludeId: Long = -1): PrescriptionEntity?
+    @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND image_hash = :hash AND id != :excludeId LIMIT 1")
+    suspend fun findByHash(currentUid: String, hash: String, excludeId: Long = -1): PrescriptionEntity?
 
     /**
      * Scanned items joined to their prescription, for the TRIPS portfolio
@@ -824,23 +824,20 @@ interface PrescriptionDao {
     @Insert
     suspend fun insertMedicines(rows: List<ScannedMedicineEntity>)
 
-    @Query("DELETE FROM scanned_medicines WHERE prescription_id = :prescriptionId")
-    suspend fun clearMedicines(prescriptionId: Long)
-
-    @Query("SELECT * FROM scanned_medicines WHERE prescription_id = :prescriptionId ORDER BY line_number")
-    suspend fun medicinesFor(prescriptionId: Long): List<ScannedMedicineEntity>
+    @Query("SELECT sm.* FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id WHERE p.user_id = :currentUid AND p.id = :prescriptionId ORDER BY sm.line_number")
+    suspend fun medicinesFor(currentUid: String, prescriptionId: Long): List<ScannedMedicineEntity>
 
     /** Live Recent Scans feed — every individual medicine detected, newest first. */
     @Query(
-        "SELECT * FROM scanned_medicines ORDER BY id DESC LIMIT :limit OFFSET :offset",
+        "SELECT sm.* FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id WHERE p.user_id = :currentUid ORDER BY sm.id DESC LIMIT :limit OFFSET :offset",
     )
-    suspend fun recentMedicines(limit: Int, offset: Int): List<ScannedMedicineEntity>
+    suspend fun recentMedicines(currentUid: String, limit: Int, offset: Int): List<ScannedMedicineEntity>
 
-    @Query("SELECT COUNT(*) FROM scanned_medicines")
-    suspend fun medicineCount(): Int
+    @Query("SELECT COUNT(*) FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id WHERE p.user_id = :currentUid")
+    suspend fun medicineCount(currentUid: String): Int
 
-    @Query("SELECT COUNT(*) FROM prescriptions")
-    suspend fun prescriptionCount(): Int
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid")
+    suspend fun prescriptionCount(currentUid: String): Int
 
     /**
      * Every stored perceptual hash, oldest first — the duplicate scan's input.
@@ -852,9 +849,9 @@ interface PrescriptionDao {
      */
     @Query(
         "SELECT id, rx_no AS rxNo, image_hash AS imageHash FROM prescriptions " +
-            "WHERE image_hash IS NOT NULL AND image_hash != '' ORDER BY id ASC",
+            "WHERE user_id = :currentUid AND image_hash IS NOT NULL AND image_hash != '' ORDER BY id ASC",
     )
-    suspend fun hashRows(): List<PrescriptionHashRow>
+    suspend fun hashRows(currentUid: String): List<PrescriptionHashRow>
 }
 
 @Dao

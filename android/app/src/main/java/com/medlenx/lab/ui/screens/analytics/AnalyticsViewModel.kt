@@ -13,6 +13,7 @@ import com.medlenx.lab.data.repo.MedicineMatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import com.medlenx.lab.MedLenXApp
+import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
@@ -53,6 +54,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val app = application as MedLenXApp
     private val prescriptionDao = app.graph.database.prescriptionDao()
+    private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     /** The global filter bar's dimensions. Null dimensions contribute no clause. */
     var filters by mutableStateOf(FilterState.None)
@@ -239,8 +241,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
      * badge and the footer share below it can never disagree.
      */
     private suspend fun loadDrawer(prescriptionId: Long): RxAuditDrawer? {
-        val prescription = prescriptionDao.byId(prescriptionId) ?: return null
-        val rows = failureAsNull { prescriptionDao.medicinesFor(prescriptionId) }
+        val prescription = prescriptionDao.byId(currentUid, prescriptionId) ?: return null
+        val rows = failureAsNull { prescriptionDao.medicinesFor(currentUid, prescriptionId) }
             .orEmpty()
         // Never blank, and the flag says whether the rep picked it: a blank own company
         // would silently drop every portfolio match in the drawer, which is the pills and
@@ -293,7 +295,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
             // web's classBreakdown does.
             slices = classBreakdownOf(rows.map { it.therapeuticClass }),
             duplicateOf = prescription.duplicateOf?.let { original ->
-                failureAsNull { prescriptionDao.byId(original) }
+                failureAsNull { prescriptionDao.byId(currentUid, original) }
             },
         )
     }
@@ -526,9 +528,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
                 loadLeaderPageSync(since, ownLike)
 
-                liveTotal = prescriptionDao.medicineCount()
+                liveTotal = prescriptionDao.medicineCount(currentUid)
                 liveScans = prescriptionDao.liveScanRows(limit = livePageSize)
-                recentPrescriptions = prescriptionDao.observeRecent(limit = 8).first()
+                recentPrescriptions = prescriptionDao.observeRecent(currentUid, limit = 8).first()
             }.onFailure { e ->
                 error = e.message ?: "Could not load analytics"
             }

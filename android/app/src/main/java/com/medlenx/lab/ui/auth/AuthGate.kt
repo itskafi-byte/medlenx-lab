@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -55,13 +59,24 @@ fun AuthGate(content: @Composable () -> Unit) {
             FirebaseAuth.getInstance(app)
         }
     }
-    var signedIn by remember(auth) { mutableStateOf(auth?.currentUser != null) }
+    var uid by remember(auth) { mutableStateOf(auth?.currentUser?.uid) }
     DisposableEffect(auth) {
-        val listener = FirebaseAuth.AuthStateListener { signedIn = it.currentUser != null }
+        val listener = FirebaseAuth.AuthStateListener { uid = it.currentUser?.uid }
         auth?.addAuthStateListener(listener)
         onDispose { auth?.removeAuthStateListener(listener) }
     }
-    if (signedIn) content() else AuthScreen(auth)
+    val currentUid = uid
+    if (currentUid == null) {
+        AuthScreen(auth)
+    } else {
+        // Activity-owned ViewModels survive sign-out. Give each authenticated
+        // session its own store so old screen state is discarded on account change.
+        val owner = remember(currentUid) {
+            object : ViewModelStoreOwner { override val viewModelStore = ViewModelStore() }
+        }
+        DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
+        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) { content() }
+    }
 }
 
 @Composable

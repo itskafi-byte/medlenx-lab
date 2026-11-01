@@ -208,7 +208,7 @@ private fun DailyTargetCard(vm: ScanViewModel) {
                 Box(Modifier.fillMaxWidth(progress).height(12.dp).clip(CircleShape)
                     .background(Brush.horizontalGradient(listOf(Mlx.Brand500, Mlx.Ok400))))
             }
-            Text("Device total · change your target in Settings", style = MlxType.Footnote, color = Mlx.Text500)
+            Text("Your scans · change your target in Settings", style = MlxType.Footnote, color = Mlx.Text500)
         }
     }
 }
