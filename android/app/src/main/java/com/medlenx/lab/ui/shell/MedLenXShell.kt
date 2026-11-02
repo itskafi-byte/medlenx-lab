@@ -182,6 +182,7 @@ fun MedLenXShell(
                     },
                     state = topBarState,
                     avatarUri = settingsVm.avatarUri,
+                    avatarId = settingsVm.avatarId,
                     hazeState = hazeState,
                 )
                 HorizontalDivider(color = Mlx.Brand200, thickness = 1.dp)
@@ -267,7 +268,7 @@ fun MedLenXShell(
                                     onOpenAudit = {
                                         navController.navigate(Destination.RxAudit.route)
                                     },
-                                    recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(scanVm.currentUid, scanVm.officerProfile?.fullName, settingsVm.avatarUri),
+                                    recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(scanVm.currentUid, scanVm.officerProfile?.fullName, settingsVm.avatarUri, settingsVm.avatarId),
                                     onSelectPrescription = analyticsVm::showBreakdown,
                                 )
                                 Destination.Analytics -> AnalyticsScreen(
@@ -275,6 +276,7 @@ fun MedLenXShell(
                                     currentUid = scanVm.currentUid,
                                     officerName = scanVm.officerProfile?.fullName,
                                     officerAvatarUri = settingsVm.avatarUri,
+                                    officerAvatarId = settingsVm.avatarId,
                                     onOpenFilters = { filterOpen = true },
                                     // Already accepted by the screen and forwarded to
                                     // RecentPrescriptions, but never supplied here, so

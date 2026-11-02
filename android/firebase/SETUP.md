@@ -54,6 +54,30 @@ Do not rely on these rules alone to prevent malicious clients from placing
 sensitive content inside medicine fields. Production validation and any stronger
 content restrictions require a trusted server-side ingestion path.
 
+## Built-in avatars
+
+Deploy the updated rules **before shipping the avatar client**. A user's selected
+`avatarId` is saved in account-scoped DataStore and merged into their own
+`users/{uid}` document. A small network-constrained WorkManager job retries
+until it can atomically mirror that ID to `companies/{companyId}/avatars/{uid}`.
+The directory contains only the whitelisted ID; only the owner may write it and
+only active members of that company may read it. Users cannot read each other's
+private profile documents. No image is uploaded. Selection remains local while
+offline; sync requires authentication, membership and connectivity. Changes on
+multiple devices are last-write-wins, not a cross-device conflict resolver.
+Existing avatar-free members need no migration. When membership is unavailable,
+the own-user ID is backed up and directory sync retries after approval. Old
+company directory entries are not automatically deleted when membership changes.
+
+The Team feed still requires a server-confirmed membership and scan snapshot and
+is intentionally not exposed from the shared Firestore disk cache while offline.
+Bundled illustrations themselves require no network. If a teammate has no avatar
+ID, the app requests a generated image from **ui-avatars.com**, sending the
+teammate's display name and the device's network address to that third party;
+when unavailable a neutral local icon is shown. Personal photo choices remain
+local and are never shared. Test this privacy tradeoff and provider availability
+before production. Deploy and emulator-test the new rules before the client.
+
 ## How sync behaves
 
 - Settings saves the officer card, daily scan target, and monthly brand targets

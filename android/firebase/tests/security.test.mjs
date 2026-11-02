@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 
 let env;
 const id = '12345678-1234-4123-8123-123456789abc';
@@ -21,8 +21,10 @@ beforeEach(async () => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), {companyId: 'company-a'});
     await setDoc(doc(db, 'users/bob'), {companyId: 'company-b'});
+    await setDoc(doc(db, 'users/charlie'), {companyId: 'company-a'});
     await setDoc(doc(db, 'companies/company-a/members/alice'), {active: true, displayName: 'Alice'});
     await setDoc(doc(db, 'companies/company-b/members/bob'), {active: true, displayName: 'Bob'});
+    await setDoc(doc(db, 'companies/company-a/members/charlie'), {active: true, displayName: 'Charlie'});
     await setDoc(doc(db, 'companies/company-a/team_scans/old'), {doctorName: 'Dr Test'});
   });
 });
@@ -95,4 +97,33 @@ test('capture time is optional for legacy scans and type-checked separately from
   if (!(saved.data().timestamp instanceof Timestamp)) throw new Error('upload time is missing');
   const oldId = '12345678-1234-4123-8123-123456789abd';
   await assertSucceeds(setDoc(doc(db, 'companies/company-a/team_scans', oldId), {...scan('Alice', 'alice'), scanId: oldId}));
+});
+
+test('avatar IDs are self-owned, restricted and shared only within the active company', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const charlie = env.authenticatedContext('charlie').firestore();
+  const own = doc(alice, 'users/alice');
+  const directory = doc(alice, 'companies/company-a/avatars/alice');
+  await assertFails(setDoc(own, {avatarId: 'https://example.com/tracking'}, {merge: true}));
+  await assertFails(setDoc(own, {avatarId: 'avatar_09'}, {merge: true}));
+  await assertSucceeds(setDoc(own, {avatarId: 'avatar_02'}, {merge: true}));
+  await assertFails(setDoc(directory, {avatarId: 'avatar_01'}));
+  await assertFails(setDoc(directory, {avatarId: 'avatar_02', name: 'private'}));
+  await assertSucceeds(setDoc(directory, {avatarId: 'avatar_02'}));
+  await assertFails(setDoc(doc(bob, 'companies/company-a/avatars/alice'), {avatarId: 'avatar_02'}));
+  await assertFails(getDoc(doc(bob, 'users/alice')));
+  await assertFails(getDocs(collection(bob, 'companies/company-a/avatars')));
+  await assertSucceeds(getDocs(collection(alice, 'companies/company-a/avatars')));
+  await assertSucceeds(getDocs(collection(charlie, 'companies/company-a/avatars')));
+  await assertFails(getDoc(doc(charlie, 'users/alice')));
+  await assertFails(setDoc(doc(charlie, 'companies/company-a/avatars/alice'), {avatarId: 'avatar_02'}));
+  const batch = writeBatch(alice);
+  batch.set(own, {avatarId: 'avatar_03'}, {merge: true});
+  batch.set(directory, {avatarId: 'avatar_03'});
+  await assertSucceeds(batch.commit());
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'companies/company-a/members/alice'), {active: false, displayName: 'Alice'});
+  });
+  await assertFails(getDocs(collection(alice, 'companies/company-a/avatars')));
 });

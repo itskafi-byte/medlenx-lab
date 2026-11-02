@@ -61,6 +61,8 @@ fun TeamFeed(feed: StateFlow<TeamFeedState>) {
                     time = if (capture == null && scan.timestamp != null) "Uploaded $relative" else relative,
                     medicines = scan.medicines.map { it.brand.ifBlank { it.generic.ifBlank { "Unidentified medicine" } } },
                     attribution = "Scanned by ${scan.officer.ifBlank { "Officer (name unavailable)" }}",
+                    officerAvatarId = scan.avatarId,
+                    fallbackName = scan.officer.takeIf { scan.avatarResolved && scan.createdByUid.isNotBlank() && it.isNotBlank() },
                     modifier = Modifier.fillMaxWidth().clickable { selected = scan },
                 )
             }

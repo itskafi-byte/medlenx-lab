@@ -62,5 +62,5 @@ assert 'leaderTopVolume' in vm and 'row.rxCount.toFloat() / topDoctorCount' in u
 assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui
-assert 'p.userId == currentUid' in mapping and 'CircleCropTransformation()' in ui
+assert 'p.userId == currentUid' in mapping and 'OfficerAvatar(imageUri = rx.officerAvatarUri' in ui
 print('analyticsenterprisecheck: ranking, pagination, account isolation, grouped events and company mix PASS')

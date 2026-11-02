@@ -157,6 +157,7 @@ private val rxStamp: DateTimeFormatter =
 
 fun List<PrescriptionEntity>.toRecentRxRows(
     currentUid: String? = null, officerName: String? = null, officerAvatarUri: String? = null,
+    officerAvatarId: String? = null,
 ): List<RecentRxRow> = map { p ->
     RecentRxRow(
         id = p.id,
@@ -169,6 +170,7 @@ fun List<PrescriptionEntity>.toRecentRxRows(
         duplicate = p.duplicateOf != null,
         officerName = officerName?.takeIf { currentUid != null && p.userId == currentUid && it.isNotBlank() },
         officerAvatarUri = officerAvatarUri?.takeIf { currentUid != null && p.userId == currentUid },
+        officerAvatarId = officerAvatarId?.takeIf { currentUid != null && p.userId == currentUid },
     )
 }
 

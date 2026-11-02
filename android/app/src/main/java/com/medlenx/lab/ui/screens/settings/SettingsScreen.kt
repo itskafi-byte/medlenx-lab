@@ -8,6 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.data.local.AvatarStore
 import com.medlenx.lab.ui.components.OfficerAvatar
 import com.medlenx.lab.ui.components.CompanyBadge
 import com.medlenx.lab.ui.components.MlxButton
@@ -63,6 +67,7 @@ import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxType
 
 /** `SettingsScreen` in `App.tsx:1974`. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     vm: SettingsViewModel,
@@ -71,6 +76,20 @@ fun SettingsScreen(
 ) {
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.selectAvatar(uri)
+    }
+    var showAvatars by remember { mutableStateOf(false) }
+    if (showAvatars) {
+        AlertDialog(onDismissRequest = { showAvatars = false }, title = { Text("Choose an avatar") },
+            text = {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AvatarStore.ids.forEach { id ->
+                        OfficerAvatar(imageUri = null, avatarId = id, size = 64.dp,
+                            modifier = Modifier.border(if (vm.avatarId == id) 3.dp else 0.dp, Mlx.Brand600, androidx.compose.foundation.shape.CircleShape)
+                                .clickable { vm.selectBuiltInAvatar(id); showAvatars = false })
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAvatars = false }) { Text("Close") } })
     }
     vm.purgeConfirmationCount?.let { count ->
         AlertDialog(
@@ -103,13 +122,21 @@ fun SettingsScreen(
 
             FieldLabel("Profile Avatar")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OfficerAvatar(imageUri = vm.avatarUri, size = 56.dp)
-                OutlinedButton(onClick = {
-                    avatarPicker.launch(PickVisualMediaRequest.Builder()
-                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly).build())
-                }) { Text(if (vm.avatarUri == null) "Choose photo" else "Change photo") }
+                OfficerAvatar(imageUri = vm.avatarUri, avatarId = vm.avatarId, size = 56.dp,
+                    modifier = Modifier.clickable { showAvatars = true })
+                Column {
+                    OutlinedButton(onClick = { showAvatars = true }) { Text("Choose avatar") }
+                    TextButton(onClick = {
+                        avatarPicker.launch(PickVisualMediaRequest.Builder()
+                            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly).build())
+                    }) { Text("Use local photo") }
+                }
             }
-            Text("Photo link saved on this device; keep the original available.", style = MlxType.Meta, color = Mlx.Text500)
+            Text("Built-in avatars sync to your team. Your own photo stays on this device; teammates see your selected built-in avatar.",
+                style = MlxType.Meta, color = Mlx.Text500)
+            if (vm.avatarSyncPending) Text("Saved locally; team avatar sync is pending.", style = MlxType.Meta, color = Mlx.Text500)
+            Text("When a teammate has no avatar, their display name may be sent to ui-avatars.com to generate one.",
+                style = MlxType.Meta, color = Mlx.Text500)
             vm.avatarError?.let { MlxErrorLine(it) }
             Spacer(Modifier.height(MlxD.Space4))
 

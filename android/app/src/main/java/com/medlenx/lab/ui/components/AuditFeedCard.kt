@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,7 +26,7 @@ import com.medlenx.lab.ui.theme.MlxType
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AuditFeedCard(doctor: String, time: String, medicines: List<String>, modifier: Modifier = Modifier,
-    attribution: String? = null) {
+    attribution: String? = null, officerAvatarId: String? = null, fallbackName: String? = null) {
     Column(modifier.fillMaxWidth().background(Mlx.Surface, MlxShape.Medium)
         .border(1.dp, Mlx.Brand200, MlxShape.Medium).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -48,6 +49,11 @@ fun AuditFeedCard(doctor: String, time: String, medicines: List<String>, modifie
                 }
             }
         }
-        if (!attribution.isNullOrBlank()) Text(attribution, style = MaterialTheme.typography.bodySmall, color = Mlx.Text500)
+        if (!attribution.isNullOrBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OfficerAvatar(imageUri = null, avatarId = officerAvatarId, fallbackName = fallbackName, size = 28.dp)
+                Text(attribution, style = MaterialTheme.typography.bodySmall, color = Mlx.Text500)
+            }
+        }
     }
 }

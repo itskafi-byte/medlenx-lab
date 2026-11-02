@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.MedLenXApp
+import com.medlenx.lab.data.sync.AvatarCloudSync
 import com.medlenx.lab.data.sync.ProfileCloudSync
 import com.medlenx.lab.data.sync.HistoryRestoreScheduling
 import com.medlenx.lab.data.sync.TrustedMembership
@@ -60,7 +61,10 @@ fun AuthGate(content: @Composable () -> Unit) {
     }
     val currentUid = uid
     remember(currentUid) {
-        if (currentUid != null && currentUid != "legacy_user") ProfileCloudSync.startSession(currentUid)
+        if (currentUid != null && currentUid != "legacy_user") {
+            ProfileCloudSync.startSession(currentUid)
+            AvatarCloudSync.startSession(currentUid)
+        }
     }
     LaunchedEffect(currentUid) {
         if (currentUid != null && currentUid != "legacy_user") {
@@ -80,6 +84,13 @@ fun AuthGate(content: @Composable () -> Unit) {
             try { ProfileCloudSync.watch(context.applicationContext, currentUid) }
             catch (e: CancellationException) { throw e }
             catch (_: Exception) { }
+        }
+    }
+    LaunchedEffect(currentUid) {
+        if (currentUid != null && currentUid != "legacy_user") {
+            try { AvatarCloudSync.watch(context.applicationContext, currentUid) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { } // Keep the local selection; retry on the next session.
         }
     }
     DisposableEffect(currentUid) {

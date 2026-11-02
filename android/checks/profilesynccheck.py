@@ -14,6 +14,6 @@ assert 'profile_sync_dirty' in sync and 'uid in editedThisSession' in sync
 assert '!snapshot.metadata.isFromCache' in sync and '!snapshot.metadata.hasPendingWrites()' in sync
 assert 'ProfileCloudSync.save(app, profile, rows, target)' in settings
 assert 'ProfileCloudSync.watch(context.applicationContext, currentUid)' in auth
-assert "affectedKeys().hasOnly(['officerProfile'])" in rules
+assert "affectedKeys().hasOnly(['officerProfile', 'avatarId'])" in rules
 assert 'request.auth.uid == userId' in rules
 print('profilesynccheck: scoped merge, restore guards and rules contract PASS (static only)')

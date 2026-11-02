@@ -49,14 +49,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.transform.CircleCropTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +59,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.FilterState
+import com.medlenx.lab.ui.components.OfficerAvatar
 import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.DarkHero
@@ -96,6 +91,7 @@ fun AnalyticsScreen(
     currentUid: String? = null,
     officerName: String? = null,
     officerAvatarUri: String? = null,
+    officerAvatarId: String? = null,
     modifier: Modifier = Modifier,
     onOpenFilters: () -> Unit = {},
     onExport: () -> Unit = {},
@@ -235,7 +231,7 @@ fun AnalyticsScreen(
             onExportCsv = onExport,
         )
         RecentPrescriptions(
-            rows = vm.recentPrescriptions.toRecentRxRows(currentUid, officerName, officerAvatarUri),
+            rows = vm.recentPrescriptions.toRecentRxRows(currentUid, officerName, officerAvatarUri, officerAvatarId),
             onSelect = onSelectPrescription,
         )
 
@@ -959,14 +955,7 @@ fun RecentPrescriptions(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 6.dp)) {
-                            Box(Modifier.size(24.dp).clip(CircleShape).background(Mlx.Brand100), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Person, contentDescription = null, tint = Mlx.Text500, modifier = Modifier.size(14.dp))
-                                if (!rx.officerAvatarUri.isNullOrBlank()) {
-                                    AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(rx.officerAvatarUri)
-                                        .transformations(CircleCropTransformation()).build(), contentDescription = null,
-                                        contentScale = ContentScale.Crop, modifier = Modifier.size(24.dp))
-                                }
-                            }
+                            OfficerAvatar(imageUri = rx.officerAvatarUri, avatarId = rx.officerAvatarId, size = 24.dp)
                             Text("📸 Scanned by ${rx.officerName ?: "Officer (name unavailable)"}",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

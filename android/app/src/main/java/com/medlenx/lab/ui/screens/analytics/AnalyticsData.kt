@@ -146,6 +146,7 @@ data class RecentRxRow(
     val duplicate: Boolean,
     val officerName: String? = null,
     val officerAvatarUri: String? = null,
+    val officerAvatarId: String? = null,
 )
 
 /**

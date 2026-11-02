@@ -16,6 +16,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medlenx.lab.MedLenXApp
 import com.google.firebase.auth.FirebaseAuth
+import com.medlenx.lab.data.local.AvatarStore
+import com.medlenx.lab.data.sync.AvatarCloudSync
 import com.medlenx.lab.data.local.BrandTargetEntity
 import com.medlenx.lab.data.local.DailyTargetSettings
 import com.medlenx.lab.data.local.UserCaptureFiles
@@ -53,7 +55,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         private set
     // Picker access and the URI are retained on this device, separately for each UID.
     private val avatarPrefs = application.getSharedPreferences("officer_avatar_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
-    var avatarUri by mutableStateOf(avatarPrefs.getString("uri", null))
+    var avatarUri by mutableStateOf(if (avatarPrefs.getBoolean("custom_active", true)) avatarPrefs.getString("uri", null) else null)
+        private set
+    var avatarId by mutableStateOf<String?>(null)
+        private set
+    var avatarSyncPending by mutableStateOf(false)
         private set
     var avatarError by mutableStateOf<String?>(null)
         private set
@@ -64,10 +70,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid)
             require(uri.scheme == "content")
             app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            check(avatarPrefs.edit().putString("uri", uri.toString()).commit())
+            check(avatarPrefs.edit().putString("uri", uri.toString()).putBoolean("custom_active", true).commit())
             avatarUri = uri.toString()
         } catch (_: Exception) {
             avatarError = "Couldn't save this image. Please choose another photo."
+        }
+    }
+
+    fun selectBuiltInAvatar(id: String) {
+        if (!AvatarStore.valid(id) || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
+        AvatarCloudSync.markEdited(currentUid)
+        viewModelScope.launch {
+            try {
+                AvatarStore.select(app, currentUid, id)
+                AvatarCloudSync.schedule(app, currentUid)
+                check(avatarPrefs.edit().putBoolean("custom_active", false).commit())
+                avatarUri = null
+                avatarError = null
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { avatarError = "Could not save the avatar selection. Please try again." }
         }
     }
 
@@ -358,6 +379,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
+        viewModelScope.launch { AvatarStore.observe(app, currentUid).collect { avatarId = it } }
+        viewModelScope.launch { AvatarStore.observePending(app, currentUid).collect { avatarSyncPending = it } }
         viewModelScope.launch {
             var month: java.time.YearMonth? = null
             var counter: Job? = null

@@ -54,6 +54,7 @@ fun MlxTopBar(
     onSettingsClick: () -> Unit,
     state: TopBarState,
     avatarUri: String?,
+    avatarId: String?,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
@@ -66,7 +67,7 @@ fun MlxTopBar(
                 }
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically) {
-                    HeaderActions(state, avatarUri, onSearchClick, onSettingsClick)
+                    HeaderActions(state, avatarUri, avatarId, onSearchClick, onSettingsClick)
                 }
             }
         } else {
@@ -76,7 +77,7 @@ fun MlxTopBar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 BrandHeader(Modifier.weight(1f))
-                HeaderActions(state, avatarUri, onSearchClick, onSettingsClick)
+                HeaderActions(state, avatarUri, avatarId, onSearchClick, onSettingsClick)
             }
         }
     }
@@ -92,7 +93,7 @@ private fun BrandHeader(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun HeaderActions(state: TopBarState, avatarUri: String?, onSearchClick: () -> Unit, onSettingsClick: () -> Unit) {
+private fun HeaderActions(state: TopBarState, avatarUri: String?, avatarId: String?, onSearchClick: () -> Unit, onSettingsClick: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onSearchClick) {
             Icon(Icons.Filled.Search, contentDescription = "Search", tint = Mlx.Text900)
@@ -101,7 +102,7 @@ private fun HeaderActions(state: TopBarState, avatarUri: String?, onSearchClick:
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Mlx.Text900)
         }
-        OfficerAvatar(imageUri = avatarUri, size = 32.dp, modifier = Modifier.padding(horizontal = 4.dp))
+        OfficerAvatar(imageUri = avatarUri, avatarId = avatarId, size = 32.dp, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 

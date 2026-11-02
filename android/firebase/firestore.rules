@@ -33,16 +33,33 @@ service cloud.firestore {
         && p.dailyTarget is int && p.dailyTarget >= 1 && p.dailyTarget <= 9999
         && p.monthlyTarget is list && p.monthlyTarget.size() <= 100;
     }
+    function validAvatar(id) {
+      return id is string && id.matches('^avatar_0[1-8]$');
+    }
     match /users/{userId} {
       allow get: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['officerProfile'])
-        && request.resource.data.keys().hasAll(['officerProfile'])
-        && validProfile(request.resource.data.officerProfile);
+        && request.resource.data.keys().hasOnly(['officerProfile', 'avatarId'])
+        && request.resource.data.keys().hasAny(['officerProfile', 'avatarId'])
+        && (!('officerProfile' in request.resource.data) || validProfile(request.resource.data.officerProfile))
+        && (!('avatarId' in request.resource.data) || validAvatar(request.resource.data.avatarId));
       allow update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['officerProfile'])
-        && validProfile(request.resource.data.officerProfile);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['officerProfile', 'avatarId'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['officerProfile']) ||
+            ('officerProfile' in request.resource.data && validProfile(request.resource.data.officerProfile)))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['avatarId']) ||
+            ('avatarId' in request.resource.data && validAvatar(request.resource.data.avatarId)));
       allow list, delete: if false;
+    }
+    // Only the tiny avatar ID is visible to active teammates, never user profiles.
+    match /companies/{companyId}/avatars/{userId} {
+      allow read: if isMember(companyId);
+      allow create, update: if isMember(companyId) && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['avatarId'])
+        && request.resource.data.keys().hasAll(['avatarId'])
+        && validAvatar(request.resource.data.avatarId)
+        && getAfter(/databases/$(database)/documents/users/$(userId)).data.avatarId == request.resource.data.avatarId;
+      allow delete: if false;
     }
     match /companies/{companyId}/members/{memberId} {
       allow get: if request.auth != null && request.auth.uid == memberId;
