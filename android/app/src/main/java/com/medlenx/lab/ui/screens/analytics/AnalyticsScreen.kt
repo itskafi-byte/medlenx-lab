@@ -2,6 +2,7 @@ package com.medlenx.lab.ui.screens.analytics
 
 import android.text.format.DateUtils
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -49,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +63,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.ui.components.OfficerAvatar
+import com.medlenx.lab.ui.components.AuditMedicineChip
 import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.DarkHero
@@ -70,7 +74,6 @@ import com.medlenx.lab.ui.components.MlxEmptyState
 import com.medlenx.lab.ui.components.MlxFilterChip
 import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.PillTone
-import com.medlenx.lab.ui.components.ProgressTrack
 import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.SectionHeader
 import com.medlenx.lab.ui.components.StatusPill
@@ -184,8 +187,9 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
+            val maxRx = (vm.leaders.maxOfOrNull { it.prescriptions } ?: 0).coerceAtLeast(1)
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor, vm.leaderTopVolume) }
+                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor, maxRx) }
             }
             Row(
                 modifier = Modifier
@@ -665,6 +669,8 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 /** One leaderboard row — Figma App.tsx:1157-1174. */
 @Composable
 private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
+    val targetProgress = (row.rxCount.toFloat() / topDoctorCount.coerceAtLeast(1)).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetValue = targetProgress, label = "doctor volume")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -705,8 +711,9 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
                 color = Mlx.Text500,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
-            // Volume relative to the overall #1, even when paging.
-            ProgressTrack(progress = if (topDoctorCount > 0) row.rxCount.toFloat() / topDoctorCount else 0f, fillColor = Mlx.Ok400)
+            LinearProgressIndicator(progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                color = Mlx.Ok400, trackColor = Mlx.Brand100)
         }
 
         Column(horizontalAlignment = Alignment.End) {
@@ -809,7 +816,12 @@ fun LiveRecentScans(
             val p = event.prescription
             val time = DateUtils.getRelativeTimeSpanString(p.createdAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
             AuditFeedCard(doctor = p.doctorName, time = if (p.restoreScanId != null) "Cloud date · $time" else time,
-                medicines = event.medicines.sortedBy { it.lineNumber }.map { it.brandName.ifBlank { it.generic.ifBlank { "Unidentified medicine" } } },
+                medicines = event.medicines.sortedBy { it.lineNumber }.map { medicine ->
+                    val manufacturer = medicine.companyName.orEmpty().trim()
+                    val company = vm.currentCompanyName.trim()
+                    AuditMedicineChip(medicine.brandName.ifBlank { medicine.generic.ifBlank { "Unidentified medicine" } },
+                        isOwnBrand = manufacturer.isNotEmpty() && company.isNotEmpty() && manufacturer.equals(company, ignoreCase = true))
+                },
                 modifier = Modifier.padding(bottom = 8.dp))
         }
 
@@ -955,7 +967,8 @@ fun RecentPrescriptions(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 6.dp)) {
-                            OfficerAvatar(imageUri = rx.officerAvatarUri, avatarId = rx.officerAvatarId, size = 24.dp)
+                            OfficerAvatar(imageUri = rx.officerAvatarUri, avatarId = rx.officerAvatarId,
+                                fallbackName = rx.officerName, size = 24.dp)
                             Text("📸 Scanned by ${rx.officerName ?: "Officer (name unavailable)"}",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

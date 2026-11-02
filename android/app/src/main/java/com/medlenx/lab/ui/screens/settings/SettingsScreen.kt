@@ -135,7 +135,7 @@ fun SettingsScreen(
             Text("Built-in avatars sync to your team. Your own photo stays on this device; teammates see your selected built-in avatar.",
                 style = MlxType.Meta, color = Mlx.Text500)
             if (vm.avatarSyncPending) Text("Saved locally; team avatar sync is pending.", style = MlxType.Meta, color = Mlx.Text500)
-            Text("When a teammate has no avatar, their display name may be sent to ui-avatars.com to generate one.",
+            Text("When an officer has no avatar, their display name may be sent to ui-avatars.com to generate one.",
                 style = MlxType.Meta, color = Mlx.Text500)
             vm.avatarError?.let { MlxErrorLine(it) }
             Spacer(Modifier.height(MlxD.Space4))

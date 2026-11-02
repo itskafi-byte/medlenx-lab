@@ -22,10 +22,12 @@ import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 
+data class AuditMedicineChip(val label: String, val isOwnBrand: Boolean = false)
+
 /** One saved prescription event; "Saved" does not assert clinical verification. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AuditFeedCard(doctor: String, time: String, medicines: List<String>, modifier: Modifier = Modifier,
+fun AuditFeedCard(doctor: String, time: String, medicines: List<AuditMedicineChip>, modifier: Modifier = Modifier,
     attribution: String? = null, officerAvatarId: String? = null, fallbackName: String? = null) {
     Column(modifier.fillMaxWidth().background(Mlx.Surface, MlxShape.Medium)
         .border(1.dp, Mlx.Brand200, MlxShape.Medium).padding(12.dp),
@@ -44,8 +46,9 @@ fun AuditFeedCard(doctor: String, time: String, medicines: List<String>, modifie
         if (medicines.isEmpty()) Text("No medicines recorded", style = MlxType.Meta, color = Mlx.Text500)
         else FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             medicines.forEach { medicine ->
-                Surface(shape = CircleShape, color = Mlx.Brand100) {
-                    Text(medicine, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MlxType.MicroPill)
+                Surface(shape = CircleShape, color = if (medicine.isOwnBrand) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(medicine.label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MlxType.MicroPill,
+                        color = if (medicine.isOwnBrand) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

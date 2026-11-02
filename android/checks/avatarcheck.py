@@ -35,7 +35,7 @@ assert "keys().hasOnly(['avatarId'])" in rules and 'getAfter(' in rules and "^av
 assert 'whereIn(FieldPath.documentId(), ids)' in feed and 'createdByUid' in feed
 assert 'snapshot.metadata.isFromCache' in feed and 'generation != avatarGeneration' in feed
 assert 'fallbackName = scan.officer.takeIf { scan.avatarResolved' in team
-assert 'authority("ui-avatars.com")' in ui and 'appendQueryParameter("name", it)' in ui
+assert 'https://ui-avatars.com/api/?name=$encodedName&background=random&bold=true' in ui and 'URLEncoder.encode(it, "UTF-8")' in ui
 assert 'ui-avatars.com' in settings and 'Use local photo' in settings and 'vm.avatarSyncPending' in settings
 assert 'FirebaseStorage' not in sync and 'FirebaseStorage' not in feed
 print('avatarcheck: resource, UID-scoped storage, sync, access and fallback guards PASS (static only)')

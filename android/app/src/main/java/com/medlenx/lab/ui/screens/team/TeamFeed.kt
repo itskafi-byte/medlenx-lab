@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.sync.TeamFeedState
 import com.medlenx.lab.data.sync.TeamScan
 import com.medlenx.lab.data.repo.RxAudit
+import com.medlenx.lab.ui.components.AuditMedicineChip
 import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.theme.Mlx
@@ -59,7 +60,7 @@ fun TeamFeed(feed: StateFlow<TeamFeedState>) {
                 AuditFeedCard(
                     doctor = scan.doctor,
                     time = if (capture == null && scan.timestamp != null) "Uploaded $relative" else relative,
-                    medicines = scan.medicines.map { it.brand.ifBlank { it.generic.ifBlank { "Unidentified medicine" } } },
+                    medicines = scan.medicines.map { AuditMedicineChip(it.brand.ifBlank { it.generic.ifBlank { "Unidentified medicine" } }) },
                     attribution = "Scanned by ${scan.officer.ifBlank { "Officer (name unavailable)" }}",
                     officerAvatarId = scan.avatarId,
                     fallbackName = scan.officer.takeIf { scan.avatarResolved && scan.createdByUid.isNotBlank() && it.isNotBlank() },

@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +25,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -290,6 +294,10 @@ fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolea
     val maxValue = (data.maxOfOrNull { maxOf(it.own, it.other) } ?: 0).coerceAtLeast(1).toFloat()
     val ownColor = MaterialTheme.colorScheme.primary
     val otherColor = MaterialTheme.colorScheme.outline
+    val textMeasurer = rememberTextMeasurer()
+    val labelWidthPx = data.flatMap { listOf(it.own, it.other) }
+        .maxOfOrNull { textMeasurer.measure(it.toString(), style = MlxType.Meta).size.width } ?: 0
+    val labelWidth = with(LocalDensity.current) { labelWidthPx.toDp() }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             listOf("Your company" to ownColor, "Other / unknown" to otherColor).forEach { (label, color) ->
@@ -306,11 +314,15 @@ fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolea
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(row.specialty, style = MlxType.BodySmall)
                 listOf(row.own to ownColor, row.other to otherColor).forEach { (count, color) ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.weight(1f).height(8.dp).background(Mlx.Brand100, RoundedCornerShape(4.dp))) {
-                            Box(Modifier.fillMaxWidth(count / maxValue).height(8.dp).background(color, RoundedCornerShape(4.dp)))
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val available = (maxWidth - labelWidth - 8.dp).coerceAtLeast(0.dp)
+                        val fraction = (count.toFloat() / maxValue).coerceIn(0f, 1f)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.width(available * fraction).height(16.dp)
+                                .background(color, RoundedCornerShape(4.dp)))
+                            Spacer(Modifier.width(8.dp))
+                            Text(count.toString(), style = MlxType.Meta, maxLines = 1)
                         }
-                        Text(count.toString(), style = MlxType.Meta)
                     }
                 }
             }

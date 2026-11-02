@@ -80,7 +80,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
     var specialtyCompanyConfigured by mutableStateOf(false)
         private set
-    var leaderTopVolume by mutableIntStateOf(0)
+    var currentCompanyName by mutableStateOf("")
         private set
     var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
         private set
@@ -456,6 +456,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         // `updateFilters`.
         load()
         viewModelScope.launch {
+            app.graph.profileDao.observe(currentUid).collect { currentCompanyName = it?.company.orEmpty() }
+        }
+        viewModelScope.launch {
             prescriptionDao.observeRecent(currentUid, 8).collect { recentPrescriptions = it }
         }
         viewModelScope.launch {
@@ -549,9 +552,6 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
         val f = filters
-        leaderTopVolume = prescriptionDao.doctorLeaderRows(currentUid, since = since, ownLike = ownLike,
-            limit = 1, offset = 0, district = f.district, territory = f.territory,
-            specialty = f.specialty, mrId = f.mrId, source = f.source).firstOrNull()?.prescriptions ?: 0
         leaders = AnalyticsMetrics.doctorLeaders(
             rows = prescriptionDao.doctorLeaderRows(currentUid,
                 since = since,

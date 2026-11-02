@@ -71,9 +71,9 @@ company directory entries are not automatically deleted when membership changes.
 
 The Team feed still requires a server-confirmed membership and scan snapshot and
 is intentionally not exposed from the shared Firestore disk cache while offline.
-Bundled illustrations themselves require no network. If a teammate has no avatar
-ID, the app requests a generated image from **ui-avatars.com**, sending the
-teammate's display name and the device's network address to that third party;
+Bundled illustrations themselves require no network. If an officer has no avatar
+ID or local photo, the app requests a generated image from **ui-avatars.com**, sending the
+officer's display name and the device's network address to that third party;
 when unavailable a neutral local icon is shown. Personal photo choices remain
 local and are never shared. Test this privacy tradeoff and provider availability
 before production. Deploy and emulator-test the new rules before the client.

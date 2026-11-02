@@ -31,7 +31,7 @@ assert 'ActivityResultContracts.PickVisualMedia.ImageOnly' in settings and 'vm.s
 assert 'UserCaptureFiles.key(currentUid)' in vm and 'currentUser?.uid == currentUid' in vm
 assert 'takePersistableUriPermission' in vm and 'FLAG_GRANT_READ_URI_PERMISSION' in vm
 assert 'putString("uri", uri.toString()).putBoolean("custom_active", true).commit()' in vm and 'avatarUri = uri.toString()' in vm
-assert 'SubcomposeAsyncImage' in avatar and 'error = { AvatarFallback(size) }' in avatar
+assert 'AsyncImage(' in avatar and 'AvatarFallback(size)' in avatar and 'CircleCropTransformation()' in avatar
 assert 'releasePersistableUriPermission' not in vm
 nav = (root/'ui/navigation/Destination.kt').read_text()
 assert 'listOf(Scan, Analytics, Hub, Team)' in nav and 'primaryRoutes: List<Destination> = bottomBar + Settings' in nav
