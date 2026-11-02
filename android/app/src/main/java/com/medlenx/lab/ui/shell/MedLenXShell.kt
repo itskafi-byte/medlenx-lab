@@ -267,11 +267,14 @@ fun MedLenXShell(
                                     onOpenAudit = {
                                         navController.navigate(Destination.RxAudit.route)
                                     },
-                                    recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(),
+                                    recentRows = analyticsVm.recentPrescriptions.toRecentRxRows(scanVm.currentUid, scanVm.officerProfile?.fullName, settingsVm.avatarUri),
                                     onSelectPrescription = analyticsVm::showBreakdown,
                                 )
                                 Destination.Analytics -> AnalyticsScreen(
                                     vm = analyticsVm,
+                                    currentUid = scanVm.currentUid,
+                                    officerName = scanVm.officerProfile?.fullName,
+                                    officerAvatarUri = settingsVm.avatarUri,
                                     onOpenFilters = { filterOpen = true },
                                     // Already accepted by the screen and forwarded to
                                     // RecentPrescriptions, but never supplied here, so

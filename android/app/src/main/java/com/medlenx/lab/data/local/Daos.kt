@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
@@ -783,7 +784,12 @@ interface PrescriptionDao {
           AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
           AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY p.doctor_id
-        ORDER BY prescriptions DESC, totalMeds DESC
+        ORDER BY prescriptions DESC,
+                 CASE WHEN SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) > 0
+                    THEN 1.0 * SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END) /
+                         SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END)
+                    ELSE 0.0 END DESC,
+                 IFNULL(p.doctor_name, '') COLLATE NOCASE ASC, p.doctor_id ASC
         LIMIT :limit OFFSET :offset
         """
     )
@@ -842,6 +848,40 @@ interface PrescriptionDao {
         """
     )
     suspend fun liveScanRows(currentUid: String, limit: Int): List<LiveScanFeedRow>
+
+    /** Page parent prescriptions before loading medicines, including empty and legacy scans. */
+    @Transaction
+    @Query("""
+        SELECT p.* FROM prescriptions p
+        WHERE p.user_id = :currentUid
+          AND (:chamber = 'ALL' OR (:chamber = 'HOSPITAL' AND IFNULL(p.prescription_source, '') LIKE '%hospital%')
+               OR (:chamber = 'PRIVATE' AND IFNULL(p.prescription_source, '') NOT LIKE '%hospital%'))
+        ORDER BY p.created_at DESC, p.id DESC LIMIT :limit OFFSET :offset
+    """)
+    fun observeAuditFeed(currentUid: String, chamber: String, limit: Int, offset: Int): Flow<List<AuditFeedEvent>>
+
+    @Query("""
+        SELECT COUNT(*) FROM prescriptions p
+        WHERE p.user_id = :currentUid
+          AND (:chamber = 'ALL' OR (:chamber = 'HOSPITAL' AND IFNULL(p.prescription_source, '') LIKE '%hospital%')
+               OR (:chamber = 'PRIVATE' AND IFNULL(p.prescription_source, '') NOT LIKE '%hospital%'))
+    """)
+    fun observeAuditFeedCount(currentUid: String, chamber: String): Flow<Int>
+
+    @Query("""
+        SELECT p.doctor_specialty AS specialty, IFNULL(sm.company_name, '') AS company, COUNT(*) AS count
+        FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.doctor_specialty, '') != ''
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
+        GROUP BY p.doctor_specialty, IFNULL(sm.company_name, '')
+        ORDER BY p.doctor_specialty
+    """)
+    suspend fun specialtyCompanyCounts(currentUid: String, since: Long, district: String?, territory: String?,
+        specialty: String?, mrId: String?, source: String?): List<SpecialtyCompanyCount>
 
     /** Widget D: generic counts by the specialty captured with this user's scan. */
     @Query(

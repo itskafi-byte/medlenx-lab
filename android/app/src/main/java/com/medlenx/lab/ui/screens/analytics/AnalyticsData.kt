@@ -111,7 +111,7 @@ sealed interface Drilldown {
 }
 
 /** One specialty row in the generic-vs-brand stacked matrix. */
-data class StackedDatum(val specialty: String, val values: List<Int>)
+data class SpecialtyComparison(val specialty: String, val own: Int, val other: Int)
 
 data class DoctorLeaderRow(
     val rank: Int,
@@ -144,6 +144,8 @@ data class RecentRxRow(
     val area: String,
     val mr: String,
     val duplicate: Boolean,
+    val officerName: String? = null,
+    val officerAvatarUri: String? = null,
 )
 
 /**
@@ -201,7 +203,7 @@ data class KpiDatum(
 
 
 
-fun StackedDatum.seriesValues(): List<Int> = values
+
 
 
 

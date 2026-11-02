@@ -2,6 +2,7 @@ package com.medlenx.lab.ui.screens.analytics
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,13 +18,12 @@ import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
-import com.medlenx.lab.data.local.LiveScanFeedRow
+import com.medlenx.lab.data.local.AuditFeedEvent
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.repo.AnalyticsMetrics
 import com.medlenx.lab.data.repo.CompanySlice
 import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
-import com.medlenx.lab.data.repo.GenericMatrix
 import com.medlenx.lab.data.repo.Intelligence
 import com.medlenx.lab.data.repo.MedexIndex
 import com.medlenx.lab.data.repo.MostPrescribed
@@ -31,6 +31,8 @@ import com.medlenx.lab.data.repo.RxAudit
 import com.medlenx.lab.ui.screens.rx.classBreakdownOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -74,7 +76,11 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     /** Widget D — generic vs brand matrix by specialty. */
-    var genericMatrix by mutableStateOf<GenericMatrix?>(null)
+    var specialtyComparison by mutableStateOf<List<SpecialtyComparison>>(emptyList())
+        private set
+    var specialtyCompanyConfigured by mutableStateOf(false)
+        private set
+    var leaderTopVolume by mutableIntStateOf(0)
         private set
     var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
         private set
@@ -85,47 +91,28 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     var leaderOffset by mutableIntStateOf(0)
         private set
 
-    var liveScans by mutableStateOf<List<LiveScanFeedRow>>(emptyList())
+    var livePage by mutableStateOf<List<AuditFeedEvent>>(emptyList())
         private set
-
-    /** Page size for the Live Recent Scans feed — the export showed 25 per page. */
     private val livePageSize = 25
     var liveOffset by mutableIntStateOf(0)
         private set
     var liveTotal by mutableIntStateOf(0)
         private set
-
     val livePageLabel: String
-        get() = if (liveTotal == 0) "No medicines scanned yet"
-        else "${liveOffset + 1}–${minOf(liveOffset + livePageSize, liveTotal)} of $liveTotal medicines"
+        get() = if (liveTotal == 0) "No saved scans yet"
+        else "${liveOffset + 1}–${minOf(liveOffset + livePageSize, liveTotal)} of $liveTotal scans"
 
-    /** Chamber chip state for the live feed. */
     var chamberFilter by mutableStateOf(ChamberFilter.ALL)
         private set
-
     fun updateChamberFilter(filter: ChamberFilter) {
         chamberFilter = filter
         liveOffset = 0
     }
-
-    /** The visible slice of the fetched rows, after the chamber filter. */
-    val livePage: List<LiveScanFeedRow>
-        get() = liveScans
-            .filter { chamberFilter.matches(it.prescriptionSource) }
-            .drop(liveOffset)
-            .take(livePageSize)
-
     val canLivePrev: Boolean get() = liveOffset > 0
     val canLiveNext: Boolean get() = liveOffset + livePageSize < liveTotal
-
     fun pageLiveScans(forward: Boolean) {
         val next = if (forward) liveOffset + livePageSize else liveOffset - livePageSize
-        if (next < 0 || next >= liveTotal) return
-        liveOffset = next
-        viewModelScope.launch {
-            runCatching { liveScans = prescriptionDao.liveScanRows(currentUid, limit = next + livePageSize) }
-                .onFailure { error = it.message ?: "Could not page the live feed" }
-        }
+        if (next >= 0 && next < liveTotal) liveOffset = next
     }
     var recentPrescriptions by mutableStateOf<List<PrescriptionEntity>>(emptyList())
         private set
@@ -468,6 +455,25 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         // and applies a filter, because `load()` is otherwise only called from
         // `updateFilters`.
         load()
+        viewModelScope.launch {
+            prescriptionDao.observeRecent(currentUid, 8).collect { recentPrescriptions = it }
+        }
+        viewModelScope.launch {
+            var feedJob: Job? = null
+            snapshotFlow { chamberFilter to liveOffset }.collect { (filter, offset) ->
+                feedJob?.cancel()
+                livePage = emptyList()
+                feedJob = launch {
+                    combine(prescriptionDao.observeAuditFeed(currentUid, filter.name, livePageSize, offset),
+                        prescriptionDao.observeAuditFeedCount(currentUid, filter.name)) { events, count -> events to count }
+                        .collect { (events, count) ->
+                            liveTotal = count
+                            if (offset > 0 && offset >= count) liveOffset = if (count == 0) 0 else ((count - 1) / livePageSize) * livePageSize
+                            else livePage = events
+                        }
+                }
+            }
+        }
     }
 
     fun load() {
@@ -521,16 +527,19 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 companyShare = AnalyticsMetrics.companyShare(
                     prescriptionDao.companyShareRows(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source),
                 )
-                genericMatrix = AnalyticsMetrics.genericBrandMatrix(
-                    prescriptionDao.genericMatrixRows(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
-                )
+                specialtyCompanyConfigured = ownCompany.isNotBlank()
+                val specialtyRows = prescriptionDao.specialtyCompanyCounts(currentUid, since,
+                    f.district, f.territory, f.specialty, f.mrId, f.source)
+                specialtyComparison = if (!specialtyCompanyConfigured) emptyList() else specialtyRows
+                    .groupBy { it.specialty }.map { (specialty, entries) ->
+                        SpecialtyComparison(specialty,
+                            entries.filter { MedicineMatcher.sameCompany(it.company, ownCompany) }.sumOf { it.count },
+                            entries.filterNot { MedicineMatcher.sameCompany(it.company, ownCompany) }.sumOf { it.count })
+                    }
                 leaderTotal = prescriptionDao.doctorLeaderTotal(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
                 loadLeaderPageSync(since, ownLike)
 
-                liveTotal = prescriptionDao.medicineCount(currentUid)
-                liveScans = prescriptionDao.liveScanRows(currentUid, limit = livePageSize)
-                recentPrescriptions = prescriptionDao.observeRecent(currentUid, limit = 8).first()
             }.onFailure { e ->
                 error = e.message ?: "Could not load analytics"
             }
@@ -540,6 +549,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
         val f = filters
+        leaderTopVolume = prescriptionDao.doctorLeaderRows(currentUid, since = since, ownLike = ownLike,
+            limit = 1, offset = 0, district = f.district, territory = f.territory,
+            specialty = f.specialty, mrId = f.mrId, source = f.source).firstOrNull()?.prescriptions ?: 0
         leaders = AnalyticsMetrics.doctorLeaders(
             rows = prescriptionDao.doctorLeaderRows(currentUid,
                 since = since,

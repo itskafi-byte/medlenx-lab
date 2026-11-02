@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.flow
 /** Only verified scan results are shared; no prescription image is included. */
 data class TeamMedicine(val brand: String, val generic: String, val confidence: Double, val company: String)
 data class TeamScan(val id: String, val officer: String, val doctor: String, val specialty: String,
-                    val territory: String, val timestamp: Long?, val medicines: List<TeamMedicine>)
+                    val territory: String, val timestamp: Long?, val medicines: List<TeamMedicine>,
+                    val captureTimestamp: Long? = null)
 data class TeamFeedState(val scans: List<TeamScan> = emptyList(), val message: String = "Connecting to team activity…")
 
 object TeamFeedRepository {
@@ -60,7 +61,8 @@ object TeamFeedRepository {
                     }.orEmpty()
                     TeamScan(doc.id, doc.getString("scannedBy").orEmpty(), doc.getString("doctorName").orEmpty(),
                         doc.getString("doctorSpecialty").orEmpty(), doc.getString("territory").orEmpty(),
-                        doc.getTimestamp("timestamp")?.toDate()?.time, meds)
+                        doc.getTimestamp("timestamp")?.toDate()?.time, meds,
+                        doc.getTimestamp("captureTimestamp")?.toDate()?.time)
                 }
                 trySend(TeamFeedState(scans, if (scans.isEmpty()) "No team activity yet." else ""))
             }

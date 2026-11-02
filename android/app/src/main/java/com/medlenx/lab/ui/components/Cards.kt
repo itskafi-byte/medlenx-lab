@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -134,7 +135,8 @@ fun KpiCard(
                 if (caption != null) Text(caption, style = MlxType.Meta, color = Mlx.Text500)
             }
             if (icon != null) {
-                TintedIconTile(icon = icon, tint = Mlx.Brand700, background = Mlx.Accent50)
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(32.dp))
             }
         }
         if (microPills.isNotEmpty()) {

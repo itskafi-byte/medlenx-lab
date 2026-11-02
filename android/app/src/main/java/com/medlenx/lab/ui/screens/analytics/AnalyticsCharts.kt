@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -283,73 +284,34 @@ fun ShareOfVoiceDonut(
     }
 }
 
-/**
- * Chart D — generic vs brand matrix. Horizontal stacked bars by specialty with a legend,
- * matching recharts' `layout="vertical"` and `stackId="a"`.
- */
+/** Two comparable item counts on a shared scale; unknown companies are in Other. */
 @Composable
-fun SpecialtyStackedBarChart(
-    data: List<StackedDatum>,
-    series: List<String>,
-    modifier: Modifier = Modifier,
-) {
-    val maxValue = (data.maxOfOrNull { row -> row.seriesValues().sum() } ?: 1).toFloat()
-
-    Column(modifier = modifier.fillMaxWidth()) {
-        data.forEach { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = row.specialty,
-                    style = MlxType.MicroPill,
-                    color = Mlx.Text500,
-                    maxLines = 1,
-                    modifier = Modifier.width(78.dp),
-                )
-                Canvas(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(18.dp),
-                ) {
-                    val rowTotal = row.seriesValues().sum().toFloat().coerceAtLeast(1f)
-                    val usable = size.width * (rowTotal / maxValue)
-                    var left = 0f
-                    row.seriesValues().forEachIndexed { index, value ->
-                        val width = usable * (value / rowTotal)
-                        drawRect(
-                            color = seriesColor(index),
-                            topLeft = Offset(left, 0f),
-                            size = Size(width, size.height),
-                        )
-                        left += width
-                    }
+fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolean, modifier: Modifier = Modifier) {
+    val maxValue = (data.maxOfOrNull { maxOf(it.own, it.other) } ?: 0).coerceAtLeast(1).toFloat()
+    val ownColor = MaterialTheme.colorScheme.primary
+    val otherColor = MaterialTheme.colorScheme.outline
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf("Your company" to ownColor, "Other / unknown" to otherColor).forEach { (label, color) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.size(8.dp).background(color, RoundedCornerShape(2.dp)))
+                    Text(label, style = MlxType.MicroPill, color = Mlx.Text500)
                 }
             }
         }
-
-        // Legend, recharts `iconSize 8` at 10sp.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            series.forEachIndexed { index, name ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(seriesColor(index), RoundedCornerShape(2.dp)),
-                    )
-                    Text(text = name, style = MlxType.MicroPill, color = Mlx.Text500)
+        Text("Medicine items by company; other includes unknown manufacturers.", style = MlxType.Footnote, color = Mlx.Text500)
+        if (!configured) Text("Select your company in Settings to compare.", style = MlxType.BodySmall, color = Mlx.Text500)
+        else if (data.isEmpty()) Text("No specialty data for these filters.", style = MlxType.BodySmall, color = Mlx.Text500)
+        else data.forEach { row ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(row.specialty, style = MlxType.BodySmall)
+                listOf(row.own to ownColor, row.other to otherColor).forEach { (count, color) ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.weight(1f).height(8.dp).background(Mlx.Brand100, RoundedCornerShape(4.dp))) {
+                            Box(Modifier.fillMaxWidth(count / maxValue).height(8.dp).background(color, RoundedCornerShape(4.dp)))
+                        }
+                        Text(count.toString(), style = MlxType.Meta)
+                    }
                 }
             }
         }

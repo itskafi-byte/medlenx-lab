@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.medlenx.lab.data.sync.TeamFeedState
 import com.medlenx.lab.data.sync.TeamScan
 import com.medlenx.lab.data.repo.RxAudit
+import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.MlxCard
 import com.medlenx.lab.ui.theme.Mlx
 import com.medlenx.lab.ui.theme.MlxType
@@ -52,13 +53,16 @@ fun TeamFeed(feed: StateFlow<TeamFeedState>) {
             Text("Live Team Activity", style = MlxType.CardTitle)
             if (state.message.isNotBlank()) Text(state.message, style = MlxType.BodySmall, color = Mlx.Text500)
             state.scans.forEach { scan ->
-                Column(Modifier.fillMaxWidth().clickable { selected = scan }.padding(vertical = 6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val time = scan.timestamp?.let { DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString() } ?: "Pending"
-                    Text("Scanned by ${scan.officer.ifBlank { "Officer" }} · $time", style = MlxType.CardTitle)
-                    Text("${scan.doctor.ifBlank { "Unknown doctor" }} · ${scan.specialty}", style = MlxType.BodySmall)
-                    Text("${scan.medicines.size} items: ${scan.medicines.take(3).joinToString { it.brand }}", style = MlxType.BodySmall, color = Mlx.Text500)
-                }
+                val capture = scan.captureTimestamp
+                val instant = capture ?: scan.timestamp
+                val relative = instant?.let { DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString() } ?: "Time unavailable"
+                AuditFeedCard(
+                    doctor = scan.doctor,
+                    time = if (capture == null && scan.timestamp != null) "Uploaded $relative" else relative,
+                    medicines = scan.medicines.map { it.brand.ifBlank { it.generic.ifBlank { "Unidentified medicine" } } },
+                    attribution = "Scanned by ${scan.officer.ifBlank { "Officer (name unavailable)" }}",
+                    modifier = Modifier.fillMaxWidth().clickable { selected = scan },
+                )
             }
         }
     }

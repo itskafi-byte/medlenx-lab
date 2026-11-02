@@ -1,5 +1,7 @@
 package com.medlenx.lab.ui.screens.analytics
 
+import android.text.format.DateUtils
+
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -26,6 +28,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material.icons.outlined.DonutLarge
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Close
@@ -36,17 +42,21 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,8 +65,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.FilterState
+import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.ButtonTone
-import com.medlenx.lab.ui.components.ConfidenceBadge
 import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.KpiCard
 import com.medlenx.lab.ui.components.MlxButton
@@ -83,6 +93,9 @@ import com.medlenx.lab.ui.theme.MlxType
 @Composable
 fun AnalyticsScreen(
     vm: AnalyticsViewModel,
+    currentUid: String? = null,
+    officerName: String? = null,
+    officerAvatarUri: String? = null,
     modifier: Modifier = Modifier,
     onOpenFilters: () -> Unit = {},
     onExport: () -> Unit = {},
@@ -122,6 +135,12 @@ fun AnalyticsScreen(
                         KpiCard(
                             label = kpi.label,
                             value = kpi.value,
+                            icon = when (kpi.label) {
+                                "Total Captured" -> Icons.Outlined.DocumentScanner
+                                "Identified Medicines" -> Icons.Outlined.Medication
+                                "Target Share" -> Icons.Outlined.DonutLarge
+                                else -> Icons.Outlined.PersonSearch
+                            },
                             delta = kpi.delta,
                             deltaPositive = kpi.deltaUp,
                             microPills = listOfNotNull(
@@ -170,7 +189,7 @@ fun AnalyticsScreen(
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor) }
+                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor, vm.leaderTopVolume) }
             }
             Row(
                 modifier = Modifier
@@ -199,13 +218,12 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(
-                title = "D. Generic vs Brand Matrix — Stacked Bar by Specialty",
+                title = "D. Company Medicine Mix by Specialty",
                 icon = Icons.Filled.AutoGraph,
             )
-            SpecialtyStackedBarChart(
-                data = vm.genericMatrix?.rows.orEmpty()
-                    .map { StackedDatum(it.specialty, it.values) },
-                series = vm.genericMatrix?.series.orEmpty(),
+            SpecialtyGroupedBarChart(
+                data = vm.specialtyComparison,
+                configured = vm.specialtyCompanyConfigured,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -217,7 +235,7 @@ fun AnalyticsScreen(
             onExportCsv = onExport,
         )
         RecentPrescriptions(
-            rows = vm.recentPrescriptions.toRecentRxRows(),
+            rows = vm.recentPrescriptions.toRecentRxRows(currentUid, officerName, officerAvatarUri),
             onSelect = onSelectPrescription,
         )
 
@@ -650,7 +668,7 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 
 /** One leaderboard row — Figma App.tsx:1157-1174. */
 @Composable
-private fun DoctorLeaderRowView(row: DoctorLeaderRow) {
+private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -664,7 +682,12 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow) {
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(Mlx.Accent50, CircleShape),
+                .background(when (row.rank) {
+                    1 -> Color(0xFFFFD700)
+                    2 -> Color(0xFFC0C0C0)
+                    3 -> Color(0xFFCD7F32)
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                }, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -686,9 +709,8 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow) {
                 color = Mlx.Text500,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
-            // Flat emerald-500, the web's leaderboard bar (`index.html:2667`). The
-            // web's threshold colouring is on the "N% conv" text, not on the bar.
-            ProgressTrack(progress = row.shareOfVoice / 100f, fillColor = Mlx.Ok400)
+            // Volume relative to the overall #1, even when paging.
+            ProgressTrack(progress = if (topDoctorCount > 0) row.rxCount.toFloat() / topDoctorCount else 0f, fillColor = Mlx.Ok400)
         }
 
         Column(horizontalAlignment = Alignment.End) {
@@ -728,8 +750,6 @@ fun LiveRecentScans(
     onChamberFilter: (ChamberFilter) -> Unit = {},
     onExportCsv: () -> Unit = {},
 ) {
-    var sort by remember { mutableStateOf("Time") }
-
     MlxCard(modifier = modifier, padding = 20.dp) {
         Row(
             modifier = Modifier
@@ -754,21 +774,11 @@ fun LiveRecentScans(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MlxButton(text = "CSV", tone = ButtonTone.Outline, onClick = onExportCsv)
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .background(Mlx.Surface, MlxShape.Chip)
-                        .border(1.dp, Mlx.Brand200, MlxShape.Chip)
-                        .clickable { },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = Mlx.Text600, modifier = Modifier.size(13.dp))
-                }
             }
         }
 
         Text(
-            text = "Every individual medicine detected, per MR",
+            text = "Saved prescriptions, newest first",
             style = MlxType.MicroPill,
             color = Mlx.Text500,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -789,38 +799,23 @@ fun LiveRecentScans(
             MlxFilterChip(
                 label = "Hospital",
                 selected = chamberFilter == ChamberFilter.HOSPITAL,
-                onClick = { onChamberFilter(ChamberFilter.HOSPITAL) },
+                onClick = { onChamberFilter(if (chamberFilter == ChamberFilter.HOSPITAL) ChamberFilter.ALL else ChamberFilter.HOSPITAL) },
             )
             MlxFilterChip(
                 label = "Private Chamber",
                 selected = chamberFilter == ChamberFilter.PRIVATE,
-                onClick = { onChamberFilter(ChamberFilter.PRIVATE) },
+                onClick = { onChamberFilter(if (chamberFilter == ChamberFilter.PRIVATE) ChamberFilter.ALL else ChamberFilter.PRIVATE) },
             )
         }
 
-        Row(
-            modifier = Modifier.padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            LiveScanSortColumns.forEach { column ->
-                val active = column == sort
-                Box(
-                    modifier = Modifier
-                        .background(if (active) Mlx.Brand900 else Mlx.Surface, MlxShape.Pill)
-                        .border(1.dp, if (active) Mlx.Brand900 else Mlx.Brand200, MlxShape.Pill)
-                        .clickable { sort = column }
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = "$column ${if (active) "\u2191" else "\u2195"}",
-                        style = MlxType.MicroPill,
-                        color = if (active) Color.White else Mlx.Text600,
-                    )
-                }
-            }
+        if (vm.livePage.isEmpty()) Text("No scans to show.", style = MlxType.BodySmall, color = Mlx.Text500)
+        vm.livePage.forEach { event ->
+            val p = event.prescription
+            val time = DateUtils.getRelativeTimeSpanString(p.createdAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+            AuditFeedCard(doctor = p.doctorName, time = if (p.restoreScanId != null) "Cloud date · $time" else time,
+                medicines = event.medicines.sortedBy { it.lineNumber }.map { it.brandName.ifBlank { it.generic.ifBlank { "Unidentified medicine" } } },
+                modifier = Modifier.padding(bottom = 8.dp))
         }
-
-        vm.livePage.toLiveScanRows().forEach { scan -> LiveScanRowView(scan) }
 
         Row(
             modifier = Modifier
@@ -876,82 +871,6 @@ private fun PingDot(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(8.dp)
                 .background(Mlx.Ok400, CircleShape),
-        )
-    }
-}
-
-@Composable
-private fun LiveScanRowView(scan: LiveScanRow) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .background(Mlx.Surface, MlxShape.Medium)
-            .border(1.dp, Mlx.Brand100, MlxShape.Medium)
-            .padding(12.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 4.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            // The export splits the brand into its first word and the remainder.
-            val parts = scan.brand.split(" ", limit = 2)
-            Row {
-                Text(
-                    text = parts[0] + " ",
-                    style = MlxType.Body.copy(fontWeight = FontWeight.SemiBold),
-                    color = Mlx.Text900,
-                )
-                Text(
-                    text = parts.getOrElse(1) { "" },
-                    style = MlxType.MicroPill,
-                    color = Mlx.Text500,
-                )
-            }
-            ConfidenceBadge(percent = scan.confidence)
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            if (scan.verified) Mlx.Ok400 else Mlx.Amber500,
-                            CircleShape,
-                        ),
-                )
-                // The export truncates company names past 22 characters.
-                Text(
-                    text = if (scan.company.length > 22) scan.company.take(22) + "…" else scan.company,
-                    style = MlxType.MicroPill,
-                    color = Mlx.Text600,
-                )
-                Text(
-                    text = if (scan.verified) "\u2713" else "\u26A0",
-                    style = MlxType.MicroPill,
-                    color = Mlx.Text600,
-                )
-            }
-            StatusPill(text = scan.specialty, tone = PillTone.Slate)
-        }
-
-        Text(
-            text = "${scan.doctor} · ${scan.time} · ${scan.location}",
-            style = MlxType.MicroPill,
-            color = Mlx.Text500,
         )
     }
 }
@@ -1034,10 +953,23 @@ fun RecentPrescriptions(
                             }
                         }
                         Text(
-                            text = "${rx.meds} meds • ${rx.area} • ${rx.mr} • tap for item breakdown",
+                            text = "${rx.meds} meds • ${rx.area} • tap for item breakdown",
                             style = MlxType.MicroPill,
                             color = Mlx.Text500,
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 6.dp)) {
+                            Box(Modifier.size(24.dp).clip(CircleShape).background(Mlx.Brand100), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Person, contentDescription = null, tint = Mlx.Text500, modifier = Modifier.size(14.dp))
+                                if (!rx.officerAvatarUri.isNullOrBlank()) {
+                                    AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(rx.officerAvatarUri)
+                                        .transformations(CircleCropTransformation()).build(), contentDescription = null,
+                                        contentScale = ContentScale.Crop, modifier = Modifier.size(24.dp))
+                                }
+                            }
+                            Text("📸 Scanned by ${rx.officerName ?: "Officer (name unavailable)"}",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     Text(text = "\u203A", style = MlxType.CardTitle, color = Mlx.Brand300)
                 }

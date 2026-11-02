@@ -155,7 +155,9 @@ private val rxStamp: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US)
         .withZone(ZoneId.systemDefault())
 
-fun List<PrescriptionEntity>.toRecentRxRows(): List<RecentRxRow> = map { p ->
+fun List<PrescriptionEntity>.toRecentRxRows(
+    currentUid: String? = null, officerName: String? = null, officerAvatarUri: String? = null,
+): List<RecentRxRow> = map { p ->
     RecentRxRow(
         id = p.id,
         doctor = p.doctorName.ifBlank { "Unknown doctor" },
@@ -165,6 +167,8 @@ fun List<PrescriptionEntity>.toRecentRxRows(): List<RecentRxRow> = map { p ->
             .joinToString(" ").ifBlank { "—" },
         mr = p.mrId.ifBlank { "—" },
         duplicate = p.duplicateOf != null,
+        officerName = officerName?.takeIf { currentUid != null && p.userId == currentUid && it.isNotBlank() },
+        officerAvatarUri = officerAvatarUri?.takeIf { currentUid != null && p.userId == currentUid },
     )
 }
 

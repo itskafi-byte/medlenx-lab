@@ -1,5 +1,7 @@
 package com.medlenx.lab.data.local
 
+import androidx.room.Embedded
+import androidx.room.Relation
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
@@ -309,6 +311,15 @@ data class DoctorTargetRow(
     val monthlyTarget: Int,
     val visits: Int,
 )
+
+/** Parent identity is the local prescription ID, including legacy blank scan IDs. */
+data class AuditFeedEvent(
+    @Embedded val prescription: PrescriptionEntity,
+    @Relation(parentColumn = "id", entityColumn = "prescription_id")
+    val medicines: List<ScannedMedicineEntity>,
+)
+
+data class SpecialtyCompanyCount(val specialty: String, val company: String, val count: Int)
 
 /** Projection for [PrescriptionDao.liveScanRows] — the Live Recent Scans feed. */
 data class LiveScanFeedRow(
