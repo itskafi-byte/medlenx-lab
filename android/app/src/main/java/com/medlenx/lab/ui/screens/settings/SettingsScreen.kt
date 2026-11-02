@@ -1,5 +1,8 @@
 package com.medlenx.lab.ui.screens.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -45,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.medlenx.lab.ui.components.OfficerAvatar
 import com.medlenx.lab.ui.components.CompanyBadge
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
@@ -65,6 +69,9 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onOpenHelp: () -> Unit = {},
 ) {
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.selectAvatar(uri)
+    }
     vm.purgeConfirmationCount?.let { count ->
         AlertDialog(
             onDismissRequest = vm::cancelPurge,
@@ -93,6 +100,18 @@ fun SettingsScreen(
                 color = Mlx.Text500,
                 modifier = Modifier.padding(bottom = MlxD.Space4),
             )
+
+            FieldLabel("Profile Avatar")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OfficerAvatar(imageUri = vm.avatarUri, size = 56.dp)
+                OutlinedButton(onClick = {
+                    avatarPicker.launch(PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly).build())
+                }) { Text(if (vm.avatarUri == null) "Choose photo" else "Change photo") }
+            }
+            Text("Photo link saved on this device; keep the original available.", style = MlxType.Meta, color = Mlx.Text500)
+            vm.avatarError?.let { MlxErrorLine(it) }
+            Spacer(Modifier.height(MlxD.Space4))
 
             FieldLabel("Pharmaceutical Company")
             MlxTextField(

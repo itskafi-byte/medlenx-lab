@@ -181,6 +181,7 @@ fun MedLenXShell(
                         navController.navigate(Destination.Settings.route) { launchSingleTop = true }
                     },
                     state = topBarState,
+                    avatarUri = settingsVm.avatarUri,
                     hazeState = hazeState,
                 )
                 HorizontalDivider(color = Mlx.Brand200, thickness = 1.dp)

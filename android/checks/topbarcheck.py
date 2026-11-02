@@ -20,8 +20,19 @@ assert 'prescriptionDao.observePendingUploads(uid)' in state and 'it.first == ui
 assert 'queueDao.observeCount(uid)' in state  # Processing queue remains independent.
 assert '"MedLenX Lab"' in bar and 'Icons.Filled.Search' in bar and 'OutlinedTextField' not in bar
 assert 'count == null' in bar and 'count > 0' in bar and 'Icons.Filled.CloudOff' in bar
-assert 'Icons.Filled.Cloud' in bar and 'Icons.Filled.CloudUpload' in bar
-assert 'DropdownMenuItem(' in bar and 'onSettingsClick()' in bar
+assert 'Icons.Filled.Cloud' in bar and 'Icons.Outlined.CloudUpload' in bar
+assert 'DropdownMenuItem(' not in bar and 'IconButton(onClick = onSettingsClick)' in bar
+assert 'contentDescription = "Settings"' in bar and 'OfficerAvatar(imageUri = avatarUri' in bar
+assert 'avatarUri = settingsVm.avatarUri' in shell
+settings = (root/'ui/screens/settings/SettingsScreen.kt').read_text()
+vm = (root/'ui/screens/settings/SettingsViewModel.kt').read_text()
+avatar = (root/'ui/components/OfficerAvatar.kt').read_text()
+assert 'ActivityResultContracts.PickVisualMedia.ImageOnly' in settings and 'vm.selectAvatar(uri)' in settings
+assert 'UserCaptureFiles.key(currentUid)' in vm and 'currentUser?.uid == currentUid' in vm
+assert 'takePersistableUriPermission' in vm and 'FLAG_GRANT_READ_URI_PERMISSION' in vm
+assert 'putString("uri", uri.toString()).commit()' in vm and 'avatarUri = uri.toString()' in vm
+assert 'SubcomposeAsyncImage' in avatar and 'error = { AvatarFallback(size) }' in avatar
+assert 'releasePersistableUriPermission' not in vm
 nav = (root/'ui/navigation/Destination.kt').read_text()
 assert 'listOf(Scan, Analytics, Hub, Team)' in nav and 'primaryRoutes: List<Destination> = bottomBar + Settings' in nav
 assert 'Destination.primaryRoutes.forEach' in shell and 'navController.navigate(Destination.Settings.route)' in shell

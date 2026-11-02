@@ -2,6 +2,8 @@ package com.medlenx.lab.ui.screens.settings
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.room.withTransaction
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -49,6 +51,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT).toString())
         private set
+    // Picker access and the URI are retained on this device, separately for each UID.
+    private val avatarPrefs = application.getSharedPreferences("officer_avatar_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
+    var avatarUri by mutableStateOf(avatarPrefs.getString("uri", null))
+        private set
+    var avatarError by mutableStateOf<String?>(null)
+        private set
+
+    fun selectAvatar(uri: Uri) {
+        avatarError = null
+        try {
+            check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+            require(uri.scheme == "content")
+            app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            check(avatarPrefs.edit().putString("uri", uri.toString()).commit())
+            avatarUri = uri.toString()
+        } catch (_: Exception) {
+            avatarError = "Couldn't save this image. Please choose another photo."
+        }
+    }
+
     private var editVersion = 0
     private var editing = false
     private fun changed() { editing = true; editVersion++ }
