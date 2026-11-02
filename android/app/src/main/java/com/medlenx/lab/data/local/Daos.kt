@@ -304,6 +304,33 @@ interface PrescriptionDao {
     )
     fun observeBrandCapturedRows(currentUid: String, since: Long, until: Long): Flow<List<BrandCapturedRow>>
 
+    /** Dashboard counts prescriptions, not duplicate medicine lines within one scan. */
+    @Query(
+        """
+        SELECT TRIM(sm.brand_name) AS brand, COUNT(DISTINCT p.id) AS captured
+        FROM scanned_medicines sm
+        INNER JOIN prescriptions p ON sm.prescription_id = p.id
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
+          AND TRIM(sm.brand_name) != ''
+        GROUP BY TRIM(sm.brand_name) COLLATE NOCASE
+        """
+    )
+    fun observeDashboardBrandScans(currentUid: String, since: Long, until: Long): Flow<List<BrandCapturedRow>>
+
+    /** One saved prescription is one scan; unnamed doctors are not ranked. */
+    @Query(
+        """
+        SELECT TRIM(p.doctor_name) AS name, COUNT(*) AS count
+        FROM prescriptions p
+        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
+          AND TRIM(IFNULL(p.doctor_name, '')) != ''
+        GROUP BY TRIM(p.doctor_name) COLLATE NOCASE
+        ORDER BY count DESC, name COLLATE NOCASE ASC
+        LIMIT 3
+        """
+    )
+    fun observeDashboardTopDoctors(currentUid: String, since: Long, until: Long): Flow<List<DrillCountRow>>
+
     /**
      * `get_geo_heatmap`: prescriptions aggregated by district + upazila with the
      * own/competitor split, for the territory penetration map.

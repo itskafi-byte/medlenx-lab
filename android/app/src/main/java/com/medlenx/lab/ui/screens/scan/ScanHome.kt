@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.repo.PharmaHub
@@ -134,6 +135,8 @@ fun ScanHome(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     CaptureHero(onCamera, onGallery)
                     DailyTargetCard(vm)
+                    MonthlyBrandTargets(vm.monthlyBrandKpis)
+                    TopDoctorsSummary(vm.weeklyTopDoctors)
                     ClaimAuditsCard(vm)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -148,6 +151,8 @@ fun ScanHome(
             ) {
                 CaptureHero(onCamera, onGallery)
                 DailyTargetCard(vm)
+                MonthlyBrandTargets(vm.monthlyBrandKpis)
+                TopDoctorsSummary(vm.weeklyTopDoctors)
                 ClaimAuditsCard(vm)
                 RecentCaptures(vm.recentCaptures, vm.currentUid) { selected = it }
                 HubFeed(hubVm, onOpenUrl, onOpenHub)
@@ -233,6 +238,62 @@ private fun DailyTargetCard(vm: ScanViewModel) {
                     .background(Mlx.Cyan500))
             }
             Text("Your scans · change your target in Settings", style = MlxType.Footnote, color = Mlx.Text500)
+        }
+    }
+}
+
+@Composable
+private fun MonthlyBrandTargets(rows: List<DashboardBrandKpi>?) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MlxShape.Medium,
+        color = Color.White, shadowElevation = 2.dp) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Monthly Brand Targets", style = MlxType.CardTitle)
+            Text("Saved scans containing each brand · current month", style = MlxType.Footnote, color = Mlx.Text500)
+            when {
+                rows == null -> Text("Loading targets…", style = MlxType.BodySmall, color = Mlx.Text500)
+                rows.isEmpty() -> Text("No brand targets yet. Add them in Settings.", style = MlxType.BodySmall, color = Mlx.Text500)
+                else -> rows.forEach { row ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(row.brand, modifier = Modifier.weight(1f), style = MlxType.BodySmall,
+                                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(if (row.target > 0) "${row.scans} / ${row.target}" else "${row.scans} scans · no target",
+                                style = MlxType.Meta, color = Mlx.Text500)
+                        }
+                        val progress = if (row.target > 0) (row.scans.toFloat() / row.target).coerceIn(0f, 1f) else 0f
+                        Box(Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(Mlx.Brand100)
+                            .progressSemantics(progress)) {
+                            Box(Modifier.fillMaxWidth(progress).height(8.dp).clip(CircleShape).background(Mlx.Cyan500))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopDoctorsSummary(rows: List<DrillCountRow>?) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MlxShape.Medium,
+        color = Color.White, shadowElevation = 2.dp) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Top Doctors (This Week)", style = MlxType.CardTitle)
+            Text("Monday–Sunday · saved scans", style = MlxType.Footnote, color = Mlx.Text500)
+            when {
+                rows == null -> Text("Loading doctors…", style = MlxType.BodySmall, color = Mlx.Text500)
+                rows.isEmpty() -> Text("No named doctors in this week's saved scans yet.", style = MlxType.BodySmall, color = Mlx.Text500)
+                else -> rows.forEachIndexed { index, row ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(28.dp).background(Mlx.Brand100, CircleShape), contentAlignment = Alignment.Center) {
+                            Text("${index + 1}", style = MlxType.MicroPill, color = Mlx.Brand700)
+                        }
+                        Text(row.name, modifier = Modifier.weight(1f), style = MlxType.BodySmall,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${row.count} ${if (row.count == 1) "scan" else "scans"}", style = MlxType.Meta, color = Mlx.Text500)
+                    }
+                }
+            }
         }
     }
 }

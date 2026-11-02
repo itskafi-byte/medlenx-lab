@@ -19,6 +19,7 @@ import com.medlenx.lab.data.local.UserCaptureFiles
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
 import com.medlenx.lab.data.local.DailyTargetSettings
+import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.ErrorReportEntity
 import com.medlenx.lab.data.local.OfficerProfileEntity
 import com.medlenx.lab.data.local.PrescriptionEntity
@@ -40,6 +41,7 @@ import com.medlenx.lab.data.repo.ScanProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Job
@@ -47,6 +49,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
+import java.util.Locale
+
+data class DashboardBrandKpi(val brand: String, val target: Int, val scans: Int)
 
 /** Where the capture pipeline currently is. */
 enum class ScanPhase {
@@ -124,6 +132,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var todayCount by mutableStateOf(0)
         private set
+    // Null means the Room flows have not emitted yet; empty means no data.
+    var monthlyBrandKpis by mutableStateOf<List<DashboardBrandKpi>?>(null)
+        private set
+    var weeklyTopDoctors by mutableStateOf<List<DrillCountRow>?>(null)
+        private set
     var recentCaptures by mutableStateOf<List<PrescriptionEntity>>(emptyList())
         private set
     private val targetListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
@@ -181,6 +194,50 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     val end = now.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
                     counter = launch { prescriptionDao.observeCountBetween(currentUid, start, end).collect { todayCount = it } }
                 }
+                delay(30_000)
+            }
+        }
+        viewModelScope.launch {
+            var monthKey: Pair<YearMonth, ZoneId>? = null
+            var weekKey: Pair<LocalDate, ZoneId>? = null
+            var monthJob: Job? = null
+            var weekJob: Job? = null
+            while (isActive) {
+                val zone = ZoneId.systemDefault()
+                val now = LocalDate.now(zone)
+                val month = YearMonth.from(now) to zone
+                val weekStart = now.minusDays((now.dayOfWeek.value - 1).toLong())
+                val week = weekStart to zone
+                if (month != monthKey) {
+                    monthKey = month
+                    monthJob?.cancel()
+                    monthlyBrandKpis = null
+                    val start = month.first.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    val end = month.first.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                    monthJob = launch {
+                        combine(app.graph.profileDao.observeTargets(currentUid),
+                            prescriptionDao.observeDashboardBrandScans(currentUid, start, end)) { targets, counts ->
+                            val byBrand = counts.associate { it.brand.trim().lowercase(Locale.ROOT) to it.captured }
+                            targets.filter { it.brand.isNotBlank() }.map { target ->
+                                DashboardBrandKpi(target.brand, target.target,
+                                    byBrand[target.brand.trim().lowercase(Locale.ROOT)] ?: 0)
+                            }.sortedWith(compareByDescending<DashboardBrandKpi> { it.scans }
+                                .thenBy { it.brand.lowercase(Locale.ROOT) }).take(3)
+                        }.collect { monthlyBrandKpis = it }
+                    }
+                }
+                if (week != weekKey) {
+                    weekKey = week
+                    weekJob?.cancel()
+                    weeklyTopDoctors = null
+                    val start = weekStart.atStartOfDay(zone).toInstant().toEpochMilli()
+                    val end = weekStart.plusDays(7).atStartOfDay(zone).toInstant().toEpochMilli()
+                    weekJob = launch {
+                        prescriptionDao.observeDashboardTopDoctors(currentUid, start, end)
+                            .collect { weeklyTopDoctors = it }
+                    }
+                }
+                // Rebind at local week/month or time-zone boundaries, even without DB writes.
                 delay(30_000)
             }
         }
