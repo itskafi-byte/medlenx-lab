@@ -16,7 +16,7 @@ assert 'scanJob?.cancel()' in vm[vm.index('    fun clear()'):]
 assert verify.index('result = result, progressIndeterminate = false') < verify.index('MedicineEnricher.enrich(')
 assert verify.index('MedicineEnricher.enrich(') < verify.index('progress = 0.85f') < verify.index('revealedMedicines = i') < verify.index('phase = ScanPhase.VerifyDoctor')
 assert 'state.progressIndeterminate' in screen and 'LinearProgressIndicator' in screen
-assert 'Illustrative stages and highlights' in screen and 'Illustrative scan animation' in screen
+assert 'Illustrative stages and highlights' in screen and 'text = "MedLenX VL Scanning"' in screen
 for text in ('Uploading image...', 'Detecting text regions...', 'Decoding handwriting...'):
     assert text in screen
 assert 'Cross-referencing drug database' in verify

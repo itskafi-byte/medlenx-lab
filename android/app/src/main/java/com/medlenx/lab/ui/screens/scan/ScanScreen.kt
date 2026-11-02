@@ -423,7 +423,7 @@ private fun ViewerCard(
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
-                        text = "Illustrative scan animation",
+                        text = "MedLenX VL Scanning",
                         tone = PillTone.Dark,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
