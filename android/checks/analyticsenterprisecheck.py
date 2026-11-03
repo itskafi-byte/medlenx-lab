@@ -82,7 +82,7 @@ card = (root / 'ui/components/AuditFeedCard.kt').read_text()
 mapping = (root / 'ui/screens/analytics/AnalyticsMapping.kt').read_text()
 assert '@Relation(parentColumn = "id", entityColumn = "prescription_id")' in entities
 assert 'observeAuditFeed(currentUid' in vm and 'observeAuditFeedCount(currentUid' in vm and 'snapshotFlow' in vm
-assert 'row.rxCount.toFloat() / MONTHLY_TARGET' in ui and 'vm.selectDoctor(doctor)' in ui
+assert '(row.brandMatchCount ?: 0).toFloat() / MONTHLY_TARGET' in ui and 'vm.selectDoctor(doctor)' in ui
 assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui

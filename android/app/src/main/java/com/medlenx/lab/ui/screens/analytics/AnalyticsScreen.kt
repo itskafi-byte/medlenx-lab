@@ -698,46 +698,47 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 
 private const val MONTHLY_TARGET = 10f
 
-/** Quota uses total prescriptions in the selected period; rank trend is explicitly illustrative. */
+/** Quota uses brand prescriptions in the selected period; rank trend is explicitly illustrative. */
 @Composable
 private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
-    val targetProgress = (row.rxCount.toFloat() / MONTHLY_TARGET).coerceIn(0f, 1f)
-    val progress by animateFloatAsState(targetValue = targetProgress, label = "prescriptions toward monthly target")
+    val targetProgress = ((row.brandMatchCount ?: 0).toFloat() / MONTHLY_TARGET).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetValue = targetProgress, label = "brand prescriptions toward target")
     val mockUp = row.rank % 2 == 1
     Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = MlxShape.Medium, color = Mlx.Surface) {
-        Row(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(28.dp).background(when {
-                    row.rxCount >= 20 -> Color(0xFFFFD700)
-                    row.rxCount >= 10 -> Color(0xFFC0C0C0)
-                    else -> MaterialTheme.colorScheme.surfaceVariant
-                }, CircleShape), contentAlignment = Alignment.Center) {
-                    Text(row.rank.toString(), style = MlxType.Meta.copy(fontWeight = FontWeight.Bold), color = Mlx.Brand700)
+        Column(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)
+            .padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(modifier = Modifier.size(28.dp).background(when {
+                        row.rxCount >= 20 -> Color(0xFFFFD700)
+                        row.rxCount >= 10 -> Color(0xFFC0C0C0)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    }, CircleShape), contentAlignment = Alignment.Center) {
+                        Text(row.rank.toString(), style = MlxType.Meta.copy(fontWeight = FontWeight.Bold), color = Mlx.Brand700)
+                    }
+                    Text(if (mockUp) "↑" else "↓", color = if (mockUp) Mlx.Ok600 else MaterialTheme.colorScheme.error,
+                        style = MlxType.Meta.copy(fontWeight = FontWeight.Bold))
                 }
-                Text(if (mockUp) "↑" else "↓", color = if (mockUp) Mlx.Ok600 else MaterialTheme.colorScheme.error,
-                    style = MlxType.Meta.copy(fontWeight = FontWeight.Bold))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(row.name, style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold), color = Mlx.Text900)
+                    Text(row.meta, style = MlxType.MicroPill, color = Mlx.Text500)
+                }
+                Column(modifier = Modifier.weight(1.15f), horizontalAlignment = Alignment.End) {
+                    Text("${row.brandMatchCount?.toString() ?: "—"} / 10 Rx Target", style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary)
+                    Text("Avg Share: ${row.avgSharePerRx?.let { PyMath.fixed1(it) + "%" } ?: "—"}",
+                        style = MaterialTheme.typography.labelSmall, color = Mlx.Text500)
+                    Text("Competitor: ${row.topCompetitor ?: "—"}",
+                        style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                        color = MaterialTheme.colorScheme.error)
+                }
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(row.name, style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold), color = Mlx.Text900)
-                Text(row.meta, style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.padding(bottom = 4.dp))
-                LinearProgressIndicator(progress = { progress },
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                    color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {})
-                Text("${row.rxCount} period Rx / 10 monthly target", style = MlxType.MicroPill, color = Mlx.Text500)
-            }
-            Column(modifier = Modifier.weight(1.15f), horizontalAlignment = Alignment.End) {
-                Text("${row.brandMatchCount?.toString() ?: "—"} Brand Rx", style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary)
-                Text("Avg Share per Rx: ${row.avgSharePerRx?.let { PyMath.fixed1(it) + "%" } ?: "—"}",
-                    style = MaterialTheme.typography.labelSmall, color = Mlx.Text500)
-                Text("Top Competitor: ${row.topCompetitor ?: "—"}",
-                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                    color = MaterialTheme.colorScheme.error)
-            }
+            LinearProgressIndicator(progress = { progress },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {})
         }
     }
 }
