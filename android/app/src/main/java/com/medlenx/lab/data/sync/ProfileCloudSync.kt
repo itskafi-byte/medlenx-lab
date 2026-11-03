@@ -6,6 +6,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
+import kotlinx.coroutines.tasks.await
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.BrandTargetEntity
 import com.medlenx.lab.data.local.DailyTargetSettings
@@ -59,6 +61,30 @@ object ProfileCloudSync {
             try { enqueue(context, profile, targets, daily, token) }
             catch (_: Exception) { errors.tryEmit(uid to "Saved locally, but cloud backup could not be queued. It will retry on sign-in.") }
         }
+    }
+
+    /** Onboarding requires a server check before creating an otherwise empty profile. */
+    suspend fun saveCompany(context: Context, uid: String, company: String) {
+        requireUser(context, uid)
+        require(com.medlenx.lab.data.local.CompanySelection.isAssigned(company))
+        val snapshot = firestore(context).collection("users").document(uid).get(Source.SERVER).await()
+        requireUser(context, uid)
+        val app = context.applicationContext as MedLenXApp
+        val local = app.graph.profileDao.current(uid)
+        val remoteMap = snapshot.get("officerProfile") as? Map<*, *>
+        val remote = remoteMap?.let { parse(uid, it) }
+        if (snapshot.contains("officerProfile") && remote == null) {
+            error("Your cloud profile could not be read safely. Contact support before continuing.")
+        }
+        // A dirty local profile has unsynced edits; otherwise prefer the checked
+        // server snapshot so a fresh-device stub cannot erase cloud details.
+        val useLocal = local != null && (remote == null || prefs(context, uid).contains("profile_sync_dirty"))
+        val profile = (if (useLocal) local else remote?.first)
+            ?: OfficerProfileEntity(uid, "", "", "", "", "", "", "")
+        val targets = if (useLocal) app.graph.profileDao.observeTargets(uid).first() else remote?.second.orEmpty()
+        val daily = if (useLocal) prefs(context, uid).getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT)
+            else remote?.third ?: DailyTargetSettings.DEFAULT
+        save(context, profile.copy(company = company.trim()), targets, daily)
     }
 
     private fun enqueue(context: Context, profile: OfficerProfileEntity, targets: List<BrandTargetEntity>, daily: Int, token: String) {

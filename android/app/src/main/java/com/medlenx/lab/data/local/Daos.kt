@@ -1091,6 +1091,9 @@ interface RsmDao {
 
 @Dao
 interface ManufacturerAliasDao {
+    @Query("SELECT DISTINCT canonical_company_id FROM manufacturer_aliases ORDER BY canonical_company_id COLLATE NOCASE")
+    suspend fun canonicalCompanies(): List<String>
+
     // Exact equality is intentional: LIKE would interpret OCR '%' and '_' as wildcards.
     @Query("SELECT canonical_company_id FROM manufacturer_aliases WHERE alias_string = TRIM(:name) COLLATE NOCASE LIMIT 1")
     suspend fun canonicalFor(name: String): String?

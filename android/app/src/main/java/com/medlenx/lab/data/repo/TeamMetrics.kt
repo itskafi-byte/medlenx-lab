@@ -23,8 +23,6 @@ import com.medlenx.lab.data.local.TrendItemRow
  */
 object TeamMetrics {
 
-    /** Python's fallback when no own company is configured. */
-    const val DEFAULT_OWN_COMPANY = "Healthcare Pharmaceuticals Ltd."
 
     /**
      * `get_doctor_tiers`: classify doctors by monthly audit volume and flag
@@ -40,7 +38,7 @@ object TeamMetrics {
         days: Int = 30,
         tier: String = "",
     ): DoctorTiering {
-        val company = ownCompany.ifBlank { DEFAULT_OWN_COMPANY }
+        val company = ownCompany
 
         val doctors = rows.map { r ->
             val items = r.items
@@ -251,7 +249,7 @@ object TeamMetrics {
         baseMillis: Long = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000,
     ): RsmTrends {
         val bucketCount = maxOf(1, (days + 6) / 7)
-        val company = ownCompany.ifBlank { DEFAULT_OWN_COMPANY }
+        val company = ownCompany
         val ownToken = company.split(" ").first()
 
         val own = IntArray(bucketCount)

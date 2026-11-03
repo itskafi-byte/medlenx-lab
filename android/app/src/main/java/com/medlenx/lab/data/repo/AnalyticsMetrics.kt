@@ -14,15 +14,9 @@ import com.medlenx.lab.data.local.TopBrandRow
  * Counts arrive as arguments rather than being queried here, so the arithmetic
  * can be verified without a database.
  *
- * **Two different own-company fallbacks exist in the Python.** These widgets
- * default to `"Square Pharmaceuticals Ltd."`, whereas `get_doctor_tiers` and
- * `get_stewardship_summary` default to `"Healthcare Pharmaceuticals Ltd."`. Both
- * are reproduced as written; on a configured install neither fires.
+ * Company-specific values use the officer's configured company; none is guessed.
  */
 object AnalyticsMetrics {
-
-    /** The Analytics widgets' fallback — deliberately not [TeamMetrics.DEFAULT_OWN_COMPANY]. */
-    const val DEFAULT_OWN_COMPANY = "Square Pharmaceuticals Ltd."
 
     /** `pct_delta`: a zero baseline reports +100% when there is anything, else 0. */
     fun pctDelta(cur: Int, prev: Int): Double = when {
@@ -46,7 +40,7 @@ object AnalyticsMetrics {
         totalDoctors: Int,
         ownCompanyName: String = "",
     ): DashboardKpis {
-        val ownCompany = ownCompanyName.ifBlank { DEFAULT_OWN_COMPANY }
+        val ownCompany = ownCompanyName
         val marketShare = if (itemsTotal != 0) {
             PyMath.round1(ownCount * 100.0 / itemsTotal)
         } else {
@@ -183,7 +177,7 @@ object AnalyticsMetrics {
         offset: Int,
         ownCompanyName: String = "",
     ): DoctorLeaderboard {
-        val ownCompany = ownCompanyName.ifBlank { DEFAULT_OWN_COMPANY }
+        val ownCompany = ownCompanyName
         val doctors = rows.map { r ->
             val totalCnt = r.totalMeds
             val ownCnt = r.ownMeds

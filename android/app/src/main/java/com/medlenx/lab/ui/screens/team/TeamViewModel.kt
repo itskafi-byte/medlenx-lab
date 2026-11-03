@@ -158,12 +158,11 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 // company instead of the officer's own.
                 val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 ownCompanyUsed = ownCompany
-                // `own_token = own_company.split()[0]`, then `%token%`.
-                val ownToken = ownCompany.ifBlank { TeamMetrics.DEFAULT_OWN_COMPANY }
-                    .split(" ").first()
+                // A blank company must never become LIKE '%%'.
+                val ownToken = ownCompany.split(" ").first()
                 tierRows = prescriptionDao.doctorTierRows(currentUid,
                     since = since,
-                    ownLike = "%$ownToken%",
+                    ownLike = if (ownToken.isBlank()) "" else "%$ownToken%",
                     minRx = 1,
                     limit = 200,
                 )
@@ -172,7 +171,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 val centroids = app.graph.locationRepository.geo().districts
                     .mapValues { Centroid(it.value.lat, it.value.lng) }
                 // Same `%token%` own-brand matcher the tiering query above uses.
-                val ownLike = "%$ownToken%"
+                val ownLike = if (ownToken.isBlank()) "" else "%$ownToken%"
                 geoRegions = TeamMetrics.geoHeatmap(
                     rows = prescriptionDao.geoRegionRows(currentUid, since = since, ownLike = ownLike),
                     centroids = centroids,

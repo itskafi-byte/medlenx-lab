@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -42,6 +43,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.sync.AvatarCloudSync
 import com.medlenx.lab.data.sync.ProfileCloudSync
+import com.medlenx.lab.data.local.CompanySelection
+import com.medlenx.lab.data.local.OfficerProfileEntity
+import kotlinx.coroutines.launch
 import com.medlenx.lab.data.sync.HistoryRestoreScheduling
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
@@ -106,13 +110,39 @@ fun AuthGate(content: @Composable () -> Unit) {
             Button(onClick = { auth?.signOut() }) { Text("Sign out") }
         }
     } else {
-        // Activity-owned ViewModels survive sign-out. Give each authenticated
-        // session its own store so old screen state is discarded on account change.
-        val owner = remember(currentUid) {
-            object : ViewModelStoreOwner { override val viewModelStore = ViewModelStore() }
+        val graph = (context.applicationContext as MedLenXApp).graph
+        var profile by remember(currentUid) { mutableStateOf<OfficerProfileEntity?>(null) }
+        var profileLoaded by remember(currentUid) { mutableStateOf(false) }
+        var profileError by remember(currentUid) { mutableStateOf<String?>(null) }
+        var saving by remember(currentUid) { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        LaunchedEffect(currentUid) {
+            try {
+                graph.profileDao.observe(currentUid).collect { profile = it; profileLoaded = true }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { profileError = "Could not read your local profile. Please restart the app."; profileLoaded = true }
         }
-        DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
-        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) { content() }
+        if (!profileLoaded) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (!CompanySelection.isAssigned(profile?.company) || saving || profileError != null) {
+            CompanyOnboardingScreen(graph.database.manufacturerAliasDao(), saving, profileError) { company ->
+                saving = true
+                profileError = null
+                scope.launch {
+                    try { ProfileCloudSync.saveCompany(context.applicationContext, currentUid, company) }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { profileError = e.message ?: "Connect to the internet to check your cloud profile, then retry." }
+                    finally { saving = false }
+                }
+            }
+        } else {
+            // A new graph is composed only after onboarding; no back-stack entry can reopen it.
+            val owner = remember(currentUid) {
+                object : ViewModelStoreOwner { override val viewModelStore = ViewModelStore() }
+            }
+            DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
+            CompositionLocalProvider(LocalViewModelStoreOwner provides owner) { content() }
+        }
     }
 }
 

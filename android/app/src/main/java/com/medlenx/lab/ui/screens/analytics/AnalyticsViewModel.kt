@@ -240,9 +240,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         val prescription = prescriptionDao.byId(currentUid, prescriptionId) ?: return null
         val rows = failureAsNull { prescriptionDao.medicinesFor(currentUid, prescriptionId) }
             .orEmpty()
-        // Never blank, and the flag says whether the rep picked it: a blank own company
-        // would silently drop every portfolio match in the drawer, which is the pills and
-        // the pitch button gone from every row (`main.py:102` always resolves one).
+        // No assumed company: a missing profile must not produce portfolio matches.
         val own = MedicineMatcher.resolveOwnCompany(app.graph.profileDao.current(currentUid)?.company)
         val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(own.name) ?: own.name
         val lines = rows.map { RxAudit.lineOf(it) }
@@ -511,9 +509,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val prevStart = since - span
                 val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
-                val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
-                    .split(" ").first()
-                val ownLike = "%$ownToken%"
+                val ownToken = ownCompany.split(" ").first()
+                val ownLike = if (ownToken.isBlank()) "" else "%$ownToken%"
 
                 val itemsTotal = prescriptionDao.itemCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source)
                 kpis = AnalyticsMetrics.dashboardKpis(
@@ -524,9 +521,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     scansCur = prescriptionDao.prescriptionCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     scansPrev = prescriptionDao.prescriptionCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     itemsTotal = itemsTotal,
-                    ownCount = prescriptionDao.ownItemCountSince(currentUid, since, ownCompany.ifBlank { "Square Pharmaceuticals PLC" }, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    ownCount = prescriptionDao.ownItemCountSince(currentUid, since, ownCompany, f.district, f.territory, f.specialty, f.mrId, f.source),
                     prevItems = prescriptionDao.itemCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    prevOwn = prescriptionDao.ownItemCountBetween(currentUid, prevStart, since, ownCompany.ifBlank { "Square Pharmaceuticals PLC" }, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevOwn = prescriptionDao.ownItemCountBetween(currentUid, prevStart, since, ownCompany, f.district, f.territory, f.specialty, f.mrId, f.source),
                     topBrand = prescriptionDao.topBrandRow(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     activeDoctors = prescriptionDao.activeDoctorCount(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     totalDoctors = prescriptionDao.allDoctorCount(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
@@ -596,9 +593,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val since = System.currentTimeMillis() - span
                 val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
-                val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
-                    .split(" ").first()
-                loadLeaderPageSync(since, "%$ownToken%", ownCompany)
+                val ownToken = ownCompany.split(" ").first()
+                loadLeaderPageSync(since, if (ownToken.isBlank()) "" else "%$ownToken%", ownCompany)
             }.onFailure { error = it.message ?: "Could not page the leaderboard" }
         }
     }

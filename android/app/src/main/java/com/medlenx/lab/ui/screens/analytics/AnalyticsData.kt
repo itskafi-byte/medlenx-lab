@@ -167,7 +167,7 @@ data class RxAuditDrawer(
     val prescription: PrescriptionEntity,
     val lines: List<RxAuditLine>,
     val portfolios: List<Substitution?>,
-    /** The resolved own company — never blank; see [MedicineMatcher.resolveOwnCompany]. */
+    /** The configured own company; blank means it has not been selected. */
     val ownCompany: String,
     /**
      * False when [ownCompany] is the fallback rather than the rep's own choice. The
