@@ -61,7 +61,11 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
                             continue
                         }
                         val id = dao.insertRestored(restored.first)
-                        if (id != -1L) dao.insertMedicines(restored.second.map { it.copy(prescriptionId = id) })
+                        if (id != -1L) dao.insertMedicines(restored.second.map { medicine ->
+                            val original = medicine.companyName
+                            medicine.copy(prescriptionId = id, rawCompanyName = original,
+                                companyName = original?.let { db.manufacturerAliasDao().canonicalFor(it) ?: it })
+                        })
                     }
                     check(auth.currentUser?.uid == uid)
                 }

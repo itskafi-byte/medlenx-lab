@@ -186,7 +186,9 @@ class ScanRepository(
                 // The catalogue-resolved manufacturer wins. The VL is told never to guess a
                 // company, so `med.company` is blank in almost every read, and the analytics
                 // queries all filter on a non-empty company_name.
-                val company = audit?.company?.takeIf { it.isNotBlank() } ?: med.company
+                val originalCompany = audit?.company?.takeIf { it.isNotBlank() } ?: med.company
+                val company = database.manufacturerAliasDao().canonicalFor(originalCompany) ?: originalCompany
+                val canonicalOwn = ownCompany?.let { database.manufacturerAliasDao().canonicalFor(it) ?: it }
                 val dosage = med.dosageNormalized.ifBlank { Bengali.normalizeDosage(med.dosage) }
                 ScannedMedicineEntity(
                     prescriptionId = id,
@@ -198,8 +200,9 @@ class ScanRepository(
                     dosage = dosage,
                     raw = med.rawText,
                     companyName = company.takeIf { it.isNotBlank() },
+                    rawCompanyName = med.company.takeIf { it.isNotBlank() } ?: originalCompany.takeIf { it.isNotBlank() },
                     companyVerified = audit?.companyVerified ?: false,
-                    isOwn = ownCompany != null && company.equals(ownCompany, ignoreCase = true),
+                    isOwn = canonicalOwn != null && company.equals(canonicalOwn, ignoreCase = true),
                     confidenceScore = med.confidence,
                     imageUrl = audit?.imageUrl,
                     matchType = audit?.matchType?.label ?: "pending",

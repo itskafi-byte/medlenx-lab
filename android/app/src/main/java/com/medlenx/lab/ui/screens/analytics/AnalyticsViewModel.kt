@@ -57,6 +57,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     private val app = application as MedLenXApp
     private val prescriptionDao = app.graph.database.prescriptionDao()
     private val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    fun exportUid(): String = currentUid
 
     /** The global filter bar's dimensions. Null dimensions contribute no clause. */
     var filters by mutableStateOf(FilterState.None)
@@ -243,7 +244,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         // would silently drop every portfolio match in the drawer, which is the pills and
         // the pitch button gone from every row (`main.py:102` always resolves one).
         val own = MedicineMatcher.resolveOwnCompany(app.graph.profileDao.current(currentUid)?.company)
-        val ownCompany = own.name
+        val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(own.name) ?: own.name
         val lines = rows.map { RxAudit.lineOf(it) }
 
         // Only fetched when there is something to pitch; a drawer opened on an
@@ -295,6 +296,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
+    private var loadJob: Job? = null
     var loaded by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -464,7 +466,10 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         // `updateFilters`.
         load()
         viewModelScope.launch {
-            app.graph.profileDao.observe(currentUid).collect { currentCompanyName = it?.company.orEmpty() }
+            app.graph.profileDao.observe(currentUid).collect {
+                val company = it?.company.orEmpty()
+                currentCompanyName = app.graph.database.manufacturerAliasDao().canonicalFor(company) ?: company
+            }
         }
         viewModelScope.launch {
             prescriptionDao.observeRecent(currentUid, 8).collect { recentPrescriptions = it }
@@ -488,7 +493,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loaded = false
+        loadJob = viewModelScope.launch {
             error = null
             runCatching {
                 val f = filters
@@ -502,7 +509,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val span = filterSpan()
                 val since = now - span
                 val prevStart = since - span
-                val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
+                val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
+                val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
                 val ownLike = "%$ownToken%"
@@ -516,9 +524,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     scansCur = prescriptionDao.prescriptionCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     scansPrev = prescriptionDao.prescriptionCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     itemsTotal = itemsTotal,
-                    ownCount = prescriptionDao.ownItemCountSince(currentUid, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    ownCount = prescriptionDao.ownItemCountSince(currentUid, since, ownCompany.ifBlank { "Square Pharmaceuticals PLC" }, f.district, f.territory, f.specialty, f.mrId, f.source),
                     prevItems = prescriptionDao.itemCountBetween(currentUid, prevStart, since, f.district, f.territory, f.specialty, f.mrId, f.source),
-                    prevOwn = prescriptionDao.ownItemCountBetween(currentUid, prevStart, since, ownLike, f.district, f.territory, f.specialty, f.mrId, f.source),
+                    prevOwn = prescriptionDao.ownItemCountBetween(currentUid, prevStart, since, ownCompany.ifBlank { "Square Pharmaceuticals PLC" }, f.district, f.territory, f.specialty, f.mrId, f.source),
                     topBrand = prescriptionDao.topBrandRow(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     activeDoctors = prescriptionDao.activeDoctorCount(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source),
                     totalDoctors = prescriptionDao.allDoctorCount(currentUid, f.district, f.territory, f.specialty, f.mrId, f.source),
@@ -552,6 +560,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 loadLeaderPageSync(since, ownLike, ownCompany)
 
             }.onFailure { e ->
+                if (e is CancellationException) throw e
                 error = e.message ?: "Could not load analytics"
             }
             loaded = true
@@ -585,7 +594,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val span = filters.days?.let { it * 24L * 60 * 60 * 1000 }
                     ?: System.currentTimeMillis()
                 val since = System.currentTimeMillis() - span
-                val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
+                val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
+                val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
                 loadLeaderPageSync(since, "%$ownToken%", ownCompany)

@@ -17,12 +17,14 @@ import androidx.room.RoomDatabase
         DoctorTargetEntity::class,
         DoctorVisitEntity::class,
         ErrorReportEntity::class,
+        ManufacturerAlias::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
 
+    abstract fun manufacturerAliasDao(): ManufacturerAliasDao
     abstract fun doctorDao(): DoctorDao
     abstract fun medexDao(): MedexDao
     abstract fun prescriptionDao(): PrescriptionDao
@@ -40,7 +42,12 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 "medlenx.db",
             )
                 // Never silently wipe unsynced local data on an unknown schema.
-                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7, Migrations.MIGRATION_7_8, Migrations.MIGRATION_8_9, Migrations.MIGRATION_9_10, Migrations.MIGRATION_10_11)
+                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7, Migrations.MIGRATION_7_8, Migrations.MIGRATION_8_9, Migrations.MIGRATION_9_10, Migrations.MIGRATION_10_11, Migrations.migration11To12(context.applicationContext))
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        ManufacturerAliases.seed(context.applicationContext, db)
+                    }
+                })
                 .build()
                 .also { instance = it }
         }

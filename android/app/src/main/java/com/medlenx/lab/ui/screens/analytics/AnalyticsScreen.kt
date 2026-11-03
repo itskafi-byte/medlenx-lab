@@ -105,7 +105,8 @@ fun AnalyticsScreen(
     officerAvatarId: String? = null,
     modifier: Modifier = Modifier,
     onOpenFilters: () -> Unit = {},
-    onExport: () -> Unit = {},
+    onExportPdf: () -> Unit = {},
+    onExportCsv: () -> Unit = {},
     onSelectPrescription: (RecentRxRow) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
@@ -127,7 +128,7 @@ fun AnalyticsScreen(
         FilterBar(
             activeCount = vm.filters.activeCount,
             onOpenFilters = onOpenFilters,
-            onExport = onExport,
+            onExport = onExportPdf,
         )
 
         SectionHeader(title = "Top Summary KPIs", icon = Icons.Filled.AutoGraph)
@@ -248,7 +249,7 @@ fun AnalyticsScreen(
             vm = vm,
             chamberFilter = vm.chamberFilter,
             onChamberFilter = vm::updateChamberFilter,
-            onExportCsv = onExport,
+            onExportCsv = onExportCsv,
         )
         RecentPrescriptions(
             rows = vm.recentPrescriptions.toRecentRxRows(currentUid, officerName, officerAvatarUri, officerAvatarId),
@@ -666,7 +667,7 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
                 modifier = Modifier.weight(1f),
             )
             MlxButton(
-                text = "Export Data",
+                text = "Export PDF",
                 tone = ButtonTone.Primary,
                 onClick = onExport,
                 icon = Icons.Filled.FileDownload,
@@ -786,7 +787,7 @@ fun LiveRecentScans(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MlxButton(text = "CSV", tone = ButtonTone.Outline, onClick = onExportCsv)
+                MlxButton(text = "Export CSV", tone = ButtonTone.Outline, onClick = onExportCsv)
             }
         }
 

@@ -169,6 +169,19 @@ object Migrations {
         }
     }
 
+    /** Preserve the previously recorded manufacturer before canonicalizing known aliases. */
+    fun migration11To12(context: android.content.Context): Migration = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `manufacturer_aliases` (`alias_string` TEXT NOT NULL COLLATE NOCASE, `canonical_company_id` TEXT NOT NULL, PRIMARY KEY(`alias_string`))")
+            db.execSQL("ALTER TABLE `scanned_medicines` ADD COLUMN `raw_company_name` TEXT")
+            ManufacturerAliases.seed(context, db)
+            db.execSQL("UPDATE scanned_medicines SET raw_company_name = company_name")
+            db.execSQL("""UPDATE scanned_medicines SET company_name =
+                (SELECT canonical_company_id FROM manufacturer_aliases WHERE alias_string = TRIM(scanned_medicines.company_name) COLLATE NOCASE)
+                WHERE EXISTS (SELECT 1 FROM manufacturer_aliases WHERE alias_string = TRIM(scanned_medicines.company_name) COLLATE NOCASE)""")
+        }
+    }
+
     /**
      * Fills `territory` from the most recent prescription that has one.
      *

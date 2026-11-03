@@ -44,6 +44,10 @@ import com.medlenx.lab.data.config.AppGraph
 import com.medlenx.lab.data.model.PitchCompliance
 import com.medlenx.lab.data.repo.Compliance
 import com.medlenx.lab.data.export.ExportDocuments
+import com.medlenx.lab.data.export.AnalyticsExportManager
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.ui.components.copyToClipboard
 import com.medlenx.lab.ui.navigation.Destination
@@ -282,23 +286,38 @@ fun MedLenXShell(
                                     // RecentPrescriptions, but never supplied here, so
                                     // the rows fell through to the empty default.
                                     onSelectPrescription = analyticsVm::showBreakdown,
-                                    // The web navigates at /api/export/recent-medicines.csv
-                                    // and lets the browser download it. There is no server
-                                    // here, so the same rows are queried, serialised and
-                                    // handed to the system picker.
-                                    onExport = {
+                                    onExportCsv = {
                                         scope.launch {
-                                            runCatching { analyticsVm.buildExportCsv() }
-                                                .onSuccess { csv ->
-                                                    documentSaver.saveCsv(
-                                                        exportFileName(
-                                                            "recent_scanned_medicines",
-                                                            extension = "csv",
-                                                        ),
-                                                        csv.toByteArray(Charsets.UTF_8),
-                                                    )
+                                            runCatching {
+                                                val uid = analyticsVm.exportUid()
+                                                check(uid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == uid) { "Sign in again to export" }
+                                                val dao = (context.applicationContext as com.medlenx.lab.MedLenXApp).graph.database.prescriptionDao()
+                                                val file = withContext(Dispatchers.IO) { AnalyticsExportManager.csv(context, dao, uid) }
+                                                check(FirebaseAuth.getInstance().currentUser?.uid == uid) { "Account changed during export" }
+                                                AnalyticsExportManager.share(context, file, "text/csv")
+                                            }.onFailure(exportFailed)
+                                        }
+                                    },
+                                    onExportPdf = {
+                                        scope.launch {
+                                            runCatching {
+                                                val uid = analyticsVm.exportUid()
+                                                check(uid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == uid) { "Sign in again to export" }
+                                                check(analyticsVm.loaded && analyticsVm.error == null) { "Analytics is still loading or could not be refreshed" }
+                                                val kpis = checkNotNull(analyticsVm.kpis) { "Analytics is still loading" }
+                                                val filters = analyticsVm.filters
+                                                val caption = listOf(filters.days?.let { "Last $it days" } ?: "All time",
+                                                    filters.district, filters.territory, filters.specialty, filters.mrId, filters.source)
+                                                    .filterNotNull().joinToString(" · ")
+                                                val name = scanVm.officerProfile?.fullName.orEmpty()
+                                                val avatarUri = settingsVm.avatarUri
+                                                val avatarId = settingsVm.avatarId
+                                                val file = withContext(Dispatchers.IO) {
+                                                    AnalyticsExportManager.pdf(context, name, avatarUri, avatarId, kpis, caption)
                                                 }
-                                                .onFailure(exportFailed)
+                                                check(FirebaseAuth.getInstance().currentUser?.uid == uid) { "Account changed during export" }
+                                                AnalyticsExportManager.share(context, file, "application/pdf")
+                                            }.onFailure(exportFailed)
                                         }
                                     },
                                 )

@@ -136,6 +136,7 @@ data class ScannedMedicineEntity(
     val dosage: String,
     val raw: String,
     @ColumnInfo(name = "company_name") val companyName: String?,
+    @ColumnInfo(name = "raw_company_name") val rawCompanyName: String? = null,
     @ColumnInfo(name = "company_verified") val companyVerified: Boolean,
     @ColumnInfo(name = "is_own") val isOwn: Boolean,
     @ColumnInfo(name = "confidence_score") val confidenceScore: Double,
@@ -449,4 +450,19 @@ data class DoctorVisitRow(
     val mrId: String,
     val visitedAt: Long,
     val rxNo: String,
+)
+
+/** UID-scoped export row; scans without medicines remain represented. */
+data class ScanExportRow(
+    val createdAt: Long,
+    val doctorName: String,
+    val specialty: String,
+    val medicine: String,
+    val manufacturer: String,
+)
+
+@Entity(tableName = "manufacturer_aliases")
+data class ManufacturerAlias(
+    @PrimaryKey @ColumnInfo(name = "alias_string", collate = ColumnInfo.NOCASE) val aliasString: String,
+    @ColumnInfo(name = "canonical_company_id") val canonicalCompanyId: String,
 )

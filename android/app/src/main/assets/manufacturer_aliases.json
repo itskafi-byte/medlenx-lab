@@ -1,0 +1,42 @@
+[
+  {
+    "canonical": "ACME Laboratories Ltd.",
+    "aliases": ["ACME", "Acme Lab", "Acme Pharma", "ACME Laboratories", "The ACME Laboratories", "ACME Labs"]
+  },
+  {
+    "canonical": "Square Pharmaceuticals PLC",
+    "aliases": ["Square", "Square Pharma", "Square Pharmaceuticals", "Square Pharm", "Square PLC"]
+  },
+  {
+    "canonical": "Beximco Pharmaceuticals Ltd.",
+    "aliases": ["Beximco", "Beximco Pharma", "Beximco Pharmaceuticals", "BPL"]
+  },
+  {
+    "canonical": "Incepta Pharmaceuticals Ltd.",
+    "aliases": ["Incepta", "Incepta Pharma", "Incepta Pharmaceuticals"]
+  },
+  {
+    "canonical": "Renata PLC",
+    "aliases": ["Renata", "Renata Limited", "Renata Pharma", "Renata Ltd"]
+  },
+  {
+    "canonical": "Healthcare Pharmaceuticals Ltd.",
+    "aliases": ["Healthcare", "Healthcare Pharma", "HPL", "Healthcare Pharmaceuticals"]
+  },
+  {
+    "canonical": "Radiant Pharmaceuticals Ltd.",
+    "aliases": ["Radiant", "Radiant Pharma", "Radiant Pharmaceuticals"]
+  },
+  {
+    "canonical": "Alco Pharma Ltd.",
+    "aliases": ["Alco", "Alco Pharma", "Alco Pharmaceuticals"]
+  },
+  {
+    "canonical": "Eskayef Pharmaceuticals Ltd.",
+    "aliases": ["Eskayef", "SKF", "SK+F", "Eskayef Pharma", "Eskayef Pharmaceuticals"]
+  },
+  {
+    "canonical": "Aristopharma Ltd.",
+    "aliases": ["Aristopharma", "Aristo", "Aristo Pharma", "Aristopharma Limited"]
+  }
+]

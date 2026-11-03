@@ -414,7 +414,7 @@ interface PrescriptionDao {
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "LEFT JOIN doctors d ON p.doctor_id = d.id " +
-            "WHERE sm.company_name LIKE :ownLike AND p.created_at >= :since" + RX_FILTER_SQL
+            "WHERE TRIM(sm.company_name) = TRIM(:ownLike) COLLATE NOCASE AND p.created_at >= :since" + RX_FILTER_SQL
     )
     suspend fun ownItemCountSince(currentUid: String,
         since: Long,
@@ -430,7 +430,7 @@ interface PrescriptionDao {
         "SELECT COUNT(*) FROM scanned_medicines sm " +
             "INNER JOIN prescriptions p ON sm.prescription_id = p.id " +
             "LEFT JOIN doctors d ON p.doctor_id = d.id " +
-            "WHERE sm.company_name LIKE :ownLike " +
+            "WHERE TRIM(sm.company_name) = TRIM(:ownLike) COLLATE NOCASE " +
             "AND p.created_at >= :from AND p.created_at < :to" + RX_FILTER_SQL
     )
     suspend fun ownItemCountBetween(currentUid: String,
@@ -706,6 +706,17 @@ interface PrescriptionDao {
         mrId: String?,
         source: String?,
     ): List<RecentMedicineRow>
+
+    @Query("""
+        SELECT p.created_at AS createdAt, p.doctor_name AS doctorName,
+               IFNULL(p.doctor_specialty, '') AS specialty,
+               COALESCE(NULLIF(sm.brand_name, ''), sm.generic, '') AS medicine,
+               IFNULL(sm.company_name, '') AS manufacturer
+        FROM prescriptions p LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.user_id = :currentUid
+        ORDER BY p.created_at DESC, p.id DESC, sm.line_number ASC
+    """)
+    suspend fun scanExportRows(currentUid: String): List<ScanExportRow>
 
     /** Widget A: most prescribed brands. */
     @Query(
@@ -1076,4 +1087,11 @@ interface RsmDao {
 
     @Query("SELECT * FROM error_reports WHERE user_id = :currentUid ORDER BY created_at DESC")
     fun observeErrors(currentUid: String): Flow<List<ErrorReportEntity>>
+}
+
+@Dao
+interface ManufacturerAliasDao {
+    // Exact equality is intentional: LIKE would interpret OCR '%' and '_' as wildcards.
+    @Query("SELECT canonical_company_id FROM manufacturer_aliases WHERE alias_string = TRIM(:name) COLLATE NOCASE LIMIT 1")
+    suspend fun canonicalFor(name: String): String?
 }
