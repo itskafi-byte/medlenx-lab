@@ -293,10 +293,11 @@ fun ShareOfVoiceDonut(
 fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolean, modifier: Modifier = Modifier) {
     val maxValue = (data.maxOfOrNull { maxOf(it.own, it.other) } ?: 0).coerceAtLeast(1).toFloat()
     val ownColor = MaterialTheme.colorScheme.primary
-    val otherColor = MaterialTheme.colorScheme.outline
+    val otherColor = Color(0xFF607D8B)
     val textMeasurer = rememberTextMeasurer()
-    val labelWidthPx = data.flatMap { listOf(it.own, it.other) }
-        .maxOfOrNull { textMeasurer.measure(it.toString(), style = MaterialTheme.typography.labelSmall).size.width } ?: 0
+    fun label(count: Int, total: Int): String = "$count (${if (total > 0) (count.toFloat() / total * 100).toInt() else 0}%)"
+    val labelWidthPx = data.flatMap { row -> listOf(label(row.own, row.own + row.other), label(row.other, row.own + row.other)) }
+        .maxOfOrNull { textMeasurer.measure(it, style = MaterialTheme.typography.labelSmall).size.width } ?: 0
     val labelWidth = with(LocalDensity.current) { labelWidthPx.toDp() }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -321,7 +322,7 @@ fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolea
                             Box(Modifier.width(available * fraction).height(16.dp)
                                 .background(color, RoundedCornerShape(2.dp)))
                             Spacer(Modifier.width(8.dp))
-                            Text(count.toString(), modifier = Modifier.weight(1f, fill = false),
+                            Text(label(count, row.own + row.other), modifier = Modifier.weight(1f, fill = false),
                                 style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
                     }

@@ -1,6 +1,7 @@
 package com.medlenx.lab.ui.screens.analytics
 
 import android.text.format.DateUtils
+import kotlinx.coroutines.launch
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
@@ -44,13 +45,20 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -100,6 +108,9 @@ fun AnalyticsScreen(
     onExport: () -> Unit = {},
     onSelectPrescription: (RecentRxRow) -> Unit = {},
 ) {
+    val scrollState = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
+    var feedPosition by remember { mutableIntStateOf(0) }
     Column(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
         //
@@ -109,7 +120,7 @@ fun AnalyticsScreen(
         // from -- not from a window inset and not from AppBarHeight.
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HeroBanner()
@@ -187,9 +198,13 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
-            val maxRx = (vm.leaders.maxOfOrNull { it.prescriptions } ?: 0).coerceAtLeast(1)
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor -> DoctorLeaderRowView(doctor, maxRx) }
+                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor ->
+                    DoctorLeaderRowView(doctor, onDoctorClick = {
+                        vm.selectDoctor(doctor)
+                        scrollScope.launch { scrollState.animateScrollTo(feedPosition) }
+                    })
+                }
             }
             Row(
                 modifier = Modifier
@@ -229,6 +244,7 @@ fun AnalyticsScreen(
         }
 
         LiveRecentScans(
+            modifier = Modifier.onGloballyPositioned { feedPosition = (it.positionInRoot().y + scrollState.value).toInt() },
             vm = vm,
             chamberFilter = vm.chamberFilter,
             onChamberFilter = vm::updateChamberFilter,
@@ -668,13 +684,13 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 
 /** One leaderboard row — Figma App.tsx:1157-1174. */
 @Composable
-private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
-    val targetProgress = (row.rxCount.toFloat() / topDoctorCount.coerceAtLeast(1)).coerceIn(0f, 1f)
-    val progress by animateFloatAsState(targetValue = targetProgress, label = "doctor volume")
+private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
+    val targetProgress = if (row.rxCount > 0) ((row.brandMatchCount ?: 0).toFloat() / row.rxCount).coerceIn(0f, 1f) else 0f
+    val progress by animateFloatAsState(targetValue = targetProgress, label = "doctor conversion")
+    Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = MlxShape.Medium, color = Mlx.Surface) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
             .background(Mlx.Surface, MlxShape.Medium)
             .border(1.dp, Mlx.Brand200, MlxShape.Medium)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -730,6 +746,7 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
             Text(text = "brand Rx / total Rx", style = MlxType.RegulatoryPill, color = Mlx.Brand400)
         }
     }
+    }
 }
 
 /**
@@ -780,6 +797,12 @@ fun LiveRecentScans(
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
+        vm.selectedDoctor?.let { doctor ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Doctor: ${doctor.name}", style = MlxType.BodySmall)
+                MlxButton(text = "Clear", tone = ButtonTone.Outline, onClick = { vm.selectDoctor(null) })
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -776,7 +776,7 @@ interface PrescriptionDao {
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds,
                CASE WHEN TRIM(:ownCompany) = '' THEN NULL ELSE
                    COUNT(DISTINCT CASE WHEN TRIM(IFNULL(sm.company_name, '')) = TRIM(:ownCompany) COLLATE NOCASE THEN p.id END)
-               END AS brandMatchRx
+               END AS brandMatchRx, p.doctor_id AS doctorId
         FROM prescriptions p
         LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
@@ -856,19 +856,21 @@ interface PrescriptionDao {
     @Query("""
         SELECT p.* FROM prescriptions p
         WHERE p.user_id = :currentUid
+          AND (:doctorSelected = 0 OR p.doctor_id IS :doctorId)
           AND (:chamber = 'ALL' OR (:chamber = 'HOSPITAL' AND IFNULL(p.prescription_source, '') LIKE '%hospital%')
                OR (:chamber = 'PRIVATE' AND IFNULL(p.prescription_source, '') NOT LIKE '%hospital%'))
         ORDER BY p.created_at DESC, p.id DESC LIMIT :limit OFFSET :offset
     """)
-    fun observeAuditFeed(currentUid: String, chamber: String, limit: Int, offset: Int): Flow<List<AuditFeedEvent>>
+    fun observeAuditFeed(currentUid: String, chamber: String, limit: Int, offset: Int, doctorSelected: Boolean, doctorId: Long?): Flow<List<AuditFeedEvent>>
 
     @Query("""
         SELECT COUNT(*) FROM prescriptions p
         WHERE p.user_id = :currentUid
+          AND (:doctorSelected = 0 OR p.doctor_id IS :doctorId)
           AND (:chamber = 'ALL' OR (:chamber = 'HOSPITAL' AND IFNULL(p.prescription_source, '') LIKE '%hospital%')
                OR (:chamber = 'PRIVATE' AND IFNULL(p.prescription_source, '') NOT LIKE '%hospital%'))
     """)
-    fun observeAuditFeedCount(currentUid: String, chamber: String): Flow<Int>
+    fun observeAuditFeedCount(currentUid: String, chamber: String, doctorSelected: Boolean, doctorId: Long?): Flow<Int>
 
     @Query("""
         SELECT p.doctor_specialty AS specialty, IFNULL(sm.company_name, '') AS company, COUNT(*) AS count

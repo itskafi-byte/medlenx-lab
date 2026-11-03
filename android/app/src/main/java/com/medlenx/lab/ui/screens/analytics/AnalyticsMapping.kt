@@ -113,6 +113,7 @@ fun List<CompanySlice>.centreSoV(ownCompany: String): Pair<String, String> {
 fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =
     mapIndexed { i, d ->
         DoctorLeaderRow(
+            doctorId = d.doctorId,
             rank = offset + i + 1,
             name = d.doctorName,
             meta = listOf(d.specialty, d.chamber, d.district)

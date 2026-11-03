@@ -188,6 +188,7 @@ object AnalyticsMetrics {
             val totalCnt = r.totalMeds
             val ownCnt = r.ownMeds
             DoctorLeader(
+                doctorId = r.doctorId,
                 doctorName = r.doctorName.ifBlank { "Unknown" },
                 chamber = r.chamber.ifBlank { "N/A" },
                 specialty = r.specialty.ifBlank { "General" },
@@ -261,6 +262,7 @@ data class CompanySlice(
 )
 
 data class DoctorLeader(
+    val doctorId: Long?,
     val doctorName: String,
     val chamber: String,
     val specialty: String,

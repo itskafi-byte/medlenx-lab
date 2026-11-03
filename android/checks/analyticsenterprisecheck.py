@@ -39,13 +39,16 @@ assert [r[0] for r in leaders] == ['High volume', 'High conversion', 'Low conver
 assert leaders[0][5] == 3 and leaders[1][5] == leaders[2][5] == 2
 assert db.execute(query('doctorLeaderRows'), dict(args, limit=1, offset=1)).fetchone()[0] == 'High conversion'
 feed = query('observeAuditFeed')
-params = dict(currentUid='alice', chamber='ALL', limit=3, offset=0)
+params = dict(currentUid='alice', chamber='ALL', limit=3, offset=0, doctorSelected=0, doctorId=None)
 first_page = db.execute(feed, params).fetchall()
 assert [r[0] for r in first_page] == [9, 7, 6]  # parent events, no-med event included
 assert [r[0] for r in db.execute(feed, dict(params, offset=3)).fetchall()] == [5,4,3]
 assert db.execute(query('observeAuditFeedCount'), params).fetchone()[0] == 8
 assert db.execute(query('observeAuditFeedCount'), dict(params, chamber='PRIVATE')).fetchone()[0] == 3
 assert db.execute(query('observeAuditFeedCount'), dict(params, currentUid='bob')).fetchone()[0] == 1
+assert [r[0] for r in db.execute(feed, dict(params, doctorSelected=1, doctorId=2))] == [5,4]
+assert db.execute(query('observeAuditFeedCount'), dict(params, doctorSelected=1, doctorId=2)).fetchone()[0] == 2
+assert db.execute(query('observeAuditFeedCount'), dict(params, currentUid='bob', doctorSelected=1, doctorId=2)).fetchone()[0] == 0
 mix = db.execute(query('specialtyCompanyCounts'), args).fetchall()
 assert sorted(mix) == [('Cardiology', 'Other',5), ('Cardiology','Own',3)], mix
 assert db.execute(query('specialtyCompanyCounts'), dict(args, currentUid='bob')).fetchall() == [('Cardiology','Own',1)]
@@ -66,7 +69,7 @@ card = (root / 'ui/components/AuditFeedCard.kt').read_text()
 mapping = (root / 'ui/screens/analytics/AnalyticsMapping.kt').read_text()
 assert '@Relation(parentColumn = "id", entityColumn = "prescription_id")' in entities
 assert 'observeAuditFeed(currentUid' in vm and 'observeAuditFeedCount(currentUid' in vm and 'snapshotFlow' in vm
-assert 'vm.leaders.maxOfOrNull { it.prescriptions }' in ui and 'row.rxCount.toFloat() / topDoctorCount' in ui
+assert '(row.brandMatchCount ?: 0).toFloat() / row.rxCount' in ui and 'vm.selectDoctor(doctor)' in ui
 assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui

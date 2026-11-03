@@ -114,6 +114,7 @@ sealed interface Drilldown {
 data class SpecialtyComparison(val specialty: String, val own: Int, val other: Int)
 
 data class DoctorLeaderRow(
+    val doctorId: Long?,
     val rank: Int,
     val name: String,
     val meta: String,

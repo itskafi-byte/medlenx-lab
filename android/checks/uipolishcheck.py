@@ -7,23 +7,20 @@ vm = (root/'ui/screens/analytics/AnalyticsViewModel.kt').read_text()
 chart = (root/'ui/screens/analytics/AnalyticsCharts.kt').read_text()
 card = (root/'ui/components/AuditFeedCard.kt').read_text()
 avatar = (root/'ui/components/OfficerAvatar.kt').read_text()
-assert 'vm.leaders.maxOfOrNull { it.prescriptions }' in ui and '.coerceAtLeast(1)' in ui
-assert '(row.rxCount.toFloat() / topDoctorCount.coerceAtLeast(1)).coerceIn(0f, 1f)' in ui
+assert 'if (row.rxCount > 0)' in ui and '(row.brandMatchCount ?: 0).toFloat() / row.rxCount' in ui
 assert 'animateFloatAsState(targetValue = targetProgress' in ui
 assert 'LinearProgressIndicator(progress = { progress }' in ui and '.clip(RoundedCornerShape(4.dp))' in ui
-assert 'leaderTopVolume' not in vm
-# Verify representative expected ratios independently of Compose.
-def ratio(value, rows):
-    maximum = max(1, max(rows, default=0))
-    return min(1, max(0, value / maximum))
-assert [ratio(n, [10, 4, 0]) for n in [10, 4, 0]] == [1, .4, 0]
-assert ratio(0, []) == 0
+assert 'Surface(onClick = { onDoctorClick(row.name) }' in ui and 'vm.selectDoctor(doctor)' in ui
+assert 'selectedDoctor' in vm and 'doctor?.doctorId' in vm
+# Conversion is zero-safe and cannot exceed the track.
+def ratio(brand, total): return min(1, max(0, brand / total)) if total > 0 else 0
+assert [ratio(*r) for r in [(0,1), (1,2), (2,2), (3,2), (0,0)]] == [0, .5, 1, 1, 0]
 section = chart[chart.index('fun SpecialtyGroupedBarChart'):]
 assert 'rememberTextMeasurer()' in section and 'labelWidth' in section
 assert 'Modifier.width(available * fraction).height(16.dp)' in section
 assert 'Spacer(Modifier.width(8.dp))' in section and 'Arrangement.SpaceBetween' not in section
 assert 'Arrangement.spacedBy(4.dp)' in section
-assert 'Modifier.weight(1f, fill = false)' in section and 'MaterialTheme.colorScheme.outline' in section
+assert 'Modifier.weight(1f, fill = false)' in section and 'Color(0xFF607D8B)' in section and 'label(count, row.own + row.other)' in section
 assert 'row.brandMatchCount?.toString()' in ui and ' / ${row.rxCount}' in ui
 assert 'MaterialTheme.colorScheme.primary' in ui and 'MaterialTheme.colorScheme.surfaceVariant' in ui
 live_audit = (root/'ui/screens/rx/RxAuditScreen.kt').read_text()

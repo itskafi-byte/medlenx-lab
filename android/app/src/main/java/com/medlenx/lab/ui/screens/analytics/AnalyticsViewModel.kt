@@ -102,6 +102,14 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         get() = if (liveTotal == 0) "No saved scans yet"
         else "${liveOffset + 1}–${minOf(liveOffset + livePageSize, liveTotal)} of $liveTotal scans"
 
+    var selectedDoctor by mutableStateOf<DoctorLeaderRow?>(null)
+        private set
+    fun selectDoctor(row: DoctorLeaderRow?) {
+        selectedDoctor = row
+        chamberFilter = ChamberFilter.ALL
+        liveOffset = 0
+    }
+
     var chamberFilter by mutableStateOf(ChamberFilter.ALL)
         private set
     fun updateChamberFilter(filter: ChamberFilter) {
@@ -463,12 +471,12 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             var feedJob: Job? = null
-            snapshotFlow { chamberFilter to liveOffset }.collect { (filter, offset) ->
+            snapshotFlow { Triple(chamberFilter, liveOffset, selectedDoctor) }.collect { (filter, offset, doctor) ->
                 feedJob?.cancel()
                 livePage = emptyList()
                 feedJob = launch {
-                    combine(prescriptionDao.observeAuditFeed(currentUid, filter.name, livePageSize, offset),
-                        prescriptionDao.observeAuditFeedCount(currentUid, filter.name)) { events, count -> events to count }
+                    combine(prescriptionDao.observeAuditFeed(currentUid, filter.name, livePageSize, offset, doctor != null, doctor?.doctorId),
+                        prescriptionDao.observeAuditFeedCount(currentUid, filter.name, doctor != null, doctor?.doctorId)) { events, count -> events to count }
                         .collect { (events, count) ->
                             liveTotal = count
                             if (offset > 0 && offset >= count) liveOffset = if (count == 0) 0 else ((count - 1) / livePageSize) * livePageSize
