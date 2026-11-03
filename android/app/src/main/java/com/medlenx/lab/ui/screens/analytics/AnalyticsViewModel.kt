@@ -24,6 +24,7 @@ import com.medlenx.lab.data.repo.AnalyticsMetrics
 import com.medlenx.lab.data.repo.CompanySlice
 import com.medlenx.lab.data.repo.DashboardKpis
 import com.medlenx.lab.data.repo.DoctorLeader
+import com.medlenx.lab.data.repo.DoctorIntelligence
 import com.medlenx.lab.data.repo.Intelligence
 import com.medlenx.lab.data.repo.MedexIndex
 import com.medlenx.lab.data.repo.MostPrescribed
@@ -83,6 +84,15 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
     var currentCompanyName by mutableStateOf("")
         private set
+    var leaderPeriod by mutableStateOf(LeaderPeriod.THIS_MONTH)
+        private set
+    private var leaderJob: Job? = null
+    fun updateLeaderPeriod(period: LeaderPeriod) {
+        if (period == leaderPeriod) return
+        leaderPeriod = period
+        leaderOffset = 0
+        loadLeaderPage()
+    }
     var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
         private set
 
@@ -321,6 +331,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateFilters(next: FilterState) {
         filters = next
         leaderOffset = 0
+        leaderJob?.cancel()
         load()
     }
 
@@ -509,9 +520,6 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val prevStart = since - span
                 val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
-                val ownToken = ownCompany.split(" ").first()
-                val ownLike = if (ownToken.isBlank()) "" else "%$ownToken%"
-
                 val itemsTotal = prescriptionDao.itemCountSince(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source)
                 kpis = AnalyticsMetrics.dashboardKpis(
                     totalToday = prescriptionDao.prescriptionCountSince(currentUid, startOfToday(), f.district, f.territory, f.specialty, f.mrId, f.source),
@@ -552,9 +560,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                             entries.filter { MedicineMatcher.sameCompany(it.company, ownCompany) }.sumOf { it.count },
                             entries.filterNot { MedicineMatcher.sameCompany(it.company, ownCompany) }.sumOf { it.count })
                     }
-                leaderTotal = prescriptionDao.doctorLeaderTotal(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
-                if (leaderOffset >= leaderTotal) leaderOffset = 0
-                loadLeaderPageSync(since, ownLike, ownCompany)
+                loadLeaderPage()
 
             }.onFailure { e ->
                 if (e is CancellationException) throw e
@@ -564,38 +570,35 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private suspend fun loadLeaderPageSync(since: Long, ownLike: String, ownCompany: String) {
-        val f = filters
-        leaders = AnalyticsMetrics.doctorLeaders(
-            rows = prescriptionDao.doctorLeaderRows(currentUid,
-                since = since,
-                ownLike = ownLike,
-                ownCompany = ownCompany,
-                limit = pageSize,
-                offset = leaderOffset,
-                district = f.district,
-                territory = f.territory,
-                specialty = f.specialty,
-                mrId = f.mrId,
-                source = f.source,
-            ),
-            total = leaderTotal,
-            limit = pageSize,
-            offset = leaderOffset,
-        ).doctors
-    }
-
     private fun loadLeaderPage() {
-        viewModelScope.launch {
-            runCatching {
-                val span = filters.days?.let { it * 24L * 60 * 60 * 1000 }
-                    ?: System.currentTimeMillis()
-                val since = System.currentTimeMillis() - span
+        leaderJob?.cancel()
+        leaders = emptyList()
+        leaderTotal = 0
+        val period = leaderPeriod
+        val f = filters
+        val requestedOffset = leaderOffset
+        leaderJob = viewModelScope.launch {
+            try {
+                val since = period.startMillis()
                 val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
                 val ownToken = ownCompany.split(" ").first()
-                loadLeaderPageSync(since, if (ownToken.isBlank()) "" else "%$ownToken%", ownCompany)
-            }.onFailure { error = it.message ?: "Could not page the leaderboard" }
+                val total = prescriptionDao.doctorLeaderTotal(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source)
+                val offset = if (requestedOffset >= total) 0 else requestedOffset
+                val page = AnalyticsMetrics.doctorLeaders(
+                    rows = prescriptionDao.doctorLeaderRows(currentUid, since,
+                        if (ownToken.isBlank()) "" else "%$ownToken%", ownCompany, pageSize, offset,
+                        f.district, f.territory, f.specialty, f.mrId, f.source),
+                    total = total, limit = pageSize, offset = offset,
+                ).doctors
+                val intelligence = if (page.isEmpty()) emptyList() else prescriptionDao.doctorLeaderIntelligence(
+                    currentUid, since, page.mapNotNull { it.doctorId }, page.any { it.doctorId == null },
+                    f.district, f.territory, f.specialty, f.mrId, f.source)
+                leaderOffset = offset
+                leaderTotal = total
+                leaders = DoctorIntelligence.enrich(page, intelligence, ownCompany)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { error = e.message ?: "Could not load the leaderboard" }
         }
     }
 
@@ -624,3 +627,17 @@ private const val BRAND_DOCTOR_LIMIT = 15
 
 /** The web's `limit=5000` default on `/api/export/recent-medicines.csv`. */
 private const val EXPORT_LIMIT = 5000
+
+/** Calendar periods in the user's local time zone, independent of the global date filter. */
+enum class LeaderPeriod(val title: String) {
+    THIS_WEEK("This Week"), THIS_MONTH("This Month"), ALL_TIME("All Time");
+    fun startMillis(): Long {
+        val today = java.time.LocalDate.now()
+        val start = when (this) {
+            THIS_WEEK -> today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+            THIS_MONTH -> today.withDayOfMonth(1)
+            ALL_TIME -> return 0L
+        }
+        return start.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    }
+}

@@ -818,6 +818,24 @@ interface PrescriptionDao {
         source: String?,
     ): List<DoctorLeaderRow2>
 
+    /** Medicine counts per prescription and company for the displayed doctor page. */
+    @Query("""
+        SELECT p.doctor_id AS doctorId, p.id AS prescriptionId,
+               IFNULL(sm.company_name, '') AS company, COUNT(sm.id) AS medicineCount
+        FROM prescriptions p LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
+          AND (p.doctor_id IN (:doctorIds) OR (:includeUnassigned = 1 AND p.doctor_id IS NULL))
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
+        GROUP BY p.id, IFNULL(sm.company_name, '') COLLATE NOCASE
+    """)
+    suspend fun doctorLeaderIntelligence(currentUid: String, since: Long, doctorIds: List<Long>,
+        includeUnassigned: Boolean, district: String?, territory: String?, specialty: String?,
+        mrId: String?, source: String?): List<DoctorPrescriptionCompanyCount>
+
     /** Widget C: total matching doctors, for the pagination caption. */
     @Query(
         // Grouped by doctor_id to match the page it counts; the web's total does

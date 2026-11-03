@@ -121,6 +121,8 @@ data class DoctorLeaderRow(
     val brandMatchCount: Int?,
     val conversion: Int,
     val rxCount: Int,
+    val avgSharePerRx: Double?,
+    val topCompetitor: String?,
 )
 
 data class LiveScanRow(

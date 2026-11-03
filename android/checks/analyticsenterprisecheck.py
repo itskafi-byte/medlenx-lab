@@ -38,6 +38,19 @@ leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
 assert [r[0] for r in leaders] == ['High volume', 'High conversion', 'Low conversion', 'No meds'], leaders
 assert leaders[0][5] == 3 and leaders[1][5] == leaders[2][5] == 2
 assert db.execute(query('doctorLeaderRows'), dict(args, limit=1, offset=1)).fetchone()[0] == 'High conversion'
+# SQL counts per-Rx ingredients without leaking another account or flattening the average.
+params_intel = dict(args, doctorIds=2, includeUnassigned=0)
+intelligence = db.execute(query('doctorLeaderIntelligence'), params_intel).fetchall()
+assert sorted(intelligence) == [(2,4,'Other',1), (2,4,'Own',1), (2,5,'Other',1)]
+per_rx = {}
+for doctor, rx, company, count in intelligence:
+    own, total = per_rx.get(rx, (0,0))
+    per_rx[rx] = (own + (count if company.lower() == 'own' else 0), total + count)
+avg = sum(own / total for own,total in per_rx.values() if total) / sum(total > 0 for _,total in per_rx.values())
+assert avg == .25  # Rx shares 50% and 0%, not 1/3 pooled medicines
+assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, currentUid='bob')).fetchall() == []
+assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, since=14)).fetchall() == [(2,5,'Other',1)]
+assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, doctorIds=4)).fetchall() == [(4,9,'',0)]
 feed = query('observeAuditFeed')
 params = dict(currentUid='alice', chamber='ALL', limit=3, offset=0, doctorSelected=0, doctorId=None)
 first_page = db.execute(feed, params).fetchall()
@@ -69,7 +82,7 @@ card = (root / 'ui/components/AuditFeedCard.kt').read_text()
 mapping = (root / 'ui/screens/analytics/AnalyticsMapping.kt').read_text()
 assert '@Relation(parentColumn = "id", entityColumn = "prescription_id")' in entities
 assert 'observeAuditFeed(currentUid' in vm and 'observeAuditFeedCount(currentUid' in vm and 'snapshotFlow' in vm
-assert '(row.brandMatchCount ?: 0).toFloat() / maxBrandVolume.coerceAtLeast(1)' in ui and 'vm.selectDoctor(doctor)' in ui
+assert 'row.rxCount.toFloat() / MONTHLY_TARGET' in ui and 'vm.selectDoctor(doctor)' in ui
 assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui

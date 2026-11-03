@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -62,7 +64,9 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -70,6 +74,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.local.DrillCountRow
 import com.medlenx.lab.data.local.FilterState
+import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.components.OfficerAvatar
 import com.medlenx.lab.ui.components.AuditMedicineChip
 import com.medlenx.lab.ui.components.AuditFeedCard
@@ -200,10 +205,16 @@ fun AnalyticsScreen(
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
             val doctorList = vm.leaders.toLeaderRows(vm.leaderOffset)
-            val maxBrandVolume = maxOf(1, doctorList.maxOfOrNull { it.brandMatchCount ?: 0 } ?: 0)
+            ScrollableTabRow(selectedTabIndex = vm.leaderPeriod.ordinal, edgePadding = 0.dp) {
+                LeaderPeriod.entries.forEach { period ->
+                    Tab(selected = vm.leaderPeriod == period, onClick = { vm.updateLeaderPeriod(period) },
+                        text = { Text(period.title) })
+                }
+            }
+            Text("Trend arrows are illustrative, not historical data.", style = MlxType.MicroPill, color = Mlx.Text500)
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 doctorList.forEach { doctor ->
-                    DoctorLeaderRowView(doctor, maxBrandVolume, onDoctorClick = {
+                    DoctorLeaderRowView(doctor, onDoctorClick = {
                         vm.selectDoctor(doctor)
                         scrollScope.launch { scrollState.animateScrollTo(feedPosition) }
                     })
@@ -685,70 +696,49 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
     }
 }
 
-/** One leaderboard row — Figma App.tsx:1157-1174. */
+private const val MONTHLY_TARGET = 10f
+
+/** Quota uses total prescriptions in the selected period; rank trend is explicitly illustrative. */
 @Composable
-private fun DoctorLeaderRowView(row: DoctorLeaderRow, maxBrandVolume: Int, onDoctorClick: (String) -> Unit) {
-    val targetProgress = ((row.brandMatchCount ?: 0).toFloat() / maxBrandVolume.coerceAtLeast(1)).coerceIn(0f, 1f)
-    val progress by animateFloatAsState(targetValue = targetProgress, label = "relative brand volume")
-    Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = MlxShape.Medium, color = Mlx.Surface) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Mlx.Surface, MlxShape.Medium)
-            .border(1.dp, Mlx.Brand200, MlxShape.Medium)
+private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
+    val targetProgress = (row.rxCount.toFloat() / MONTHLY_TARGET).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetValue = targetProgress, label = "prescriptions toward monthly target")
+    val mockUp = row.rank % 2 == 1
+    Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        shape = MlxShape.Medium, color = Mlx.Surface) {
+        Row(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .background(when (row.rank) {
-                    1 -> Color(0xFFFFD700)
-                    2 -> Color(0xFFC0C0C0)
-                    3 -> Color(0xFFCD7F32)
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(modifier = Modifier.size(28.dp).background(when {
+                    row.rxCount >= 20 -> Color(0xFFFFD700)
+                    row.rxCount >= 10 -> Color(0xFFC0C0C0)
                     else -> MaterialTheme.colorScheme.surfaceVariant
-                }, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = row.rank.toString(),
-                style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
-                color = Mlx.Brand700,
-            )
+                }, CircleShape), contentAlignment = Alignment.Center) {
+                    Text(row.rank.toString(), style = MlxType.Meta.copy(fontWeight = FontWeight.Bold), color = Mlx.Brand700)
+                }
+                Text(if (mockUp) "↑" else "↓", color = if (mockUp) Mlx.Ok600 else MaterialTheme.colorScheme.error,
+                    style = MlxType.Meta.copy(fontWeight = FontWeight.Bold))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(row.name, style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold), color = Mlx.Text900)
+                Text(row.meta, style = MlxType.MicroPill, color = Mlx.Text500, modifier = Modifier.padding(bottom = 4.dp))
+                LinearProgressIndicator(progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {})
+                Text("${row.rxCount} period Rx / 10 monthly target", style = MlxType.MicroPill, color = Mlx.Text500)
+            }
+            Column(modifier = Modifier.weight(1.15f), horizontalAlignment = Alignment.End) {
+                Text("${row.brandMatchCount?.toString() ?: "—"} Brand Rx", style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary)
+                Text("Avg Share per Rx: ${row.avgSharePerRx?.let { PyMath.fixed1(it) + "%" } ?: "—"}",
+                    style = MaterialTheme.typography.labelSmall, color = Mlx.Text500)
+                Text("Top Competitor: ${row.topCompetitor ?: "—"}",
+                    style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.error)
+            }
         }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = row.name,
-                style = MlxType.BodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = Mlx.Text900,
-            )
-            Text(
-                text = row.meta,
-                style = MlxType.MicroPill,
-                color = Mlx.Text500,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-            LinearProgressIndicator(progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
-        }
-
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = "${row.brandMatchCount?.toString() ?: "—"} / ${row.rxCount}",
-                style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
-                color = Mlx.Text900,
-            )
-            Text(
-                text = if (row.brandMatchCount == null) "Set company in Settings" else "${row.conversion}% conv",
-                style = MlxType.MicroPill,
-                color = if (row.conversion >= 50) Mlx.Ok500 else Mlx.Warn500,
-            )
-            Text(text = "brand Rx / total Rx", style = MlxType.RegulatoryPill, color = Mlx.Brand400)
-        }
-    }
     }
 }
 

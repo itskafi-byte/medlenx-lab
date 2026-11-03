@@ -403,6 +403,13 @@ data class DoctorLeaderRow2(
     val doctorId: Long?,
 )
 
+data class DoctorPrescriptionCompanyCount(
+    val doctorId: Long?,
+    val prescriptionId: Long,
+    val company: String,
+    val medicineCount: Int,
+)
+
 /** Projection for [PrescriptionDao.topBrandRow]. */
 data class TopBrandRow(val brandName: String, val companyName: String?, val count: Int)
 

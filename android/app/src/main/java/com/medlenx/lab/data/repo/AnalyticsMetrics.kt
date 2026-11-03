@@ -268,6 +268,8 @@ data class DoctorLeader(
     val volumeCompetitor: Int,
     val total: Int,
     val conversionRate: Double,
+    val avgSharePerRx: Double? = null,
+    val topCompetitor: String? = null,
 )
 
 data class DoctorLeaderboard(

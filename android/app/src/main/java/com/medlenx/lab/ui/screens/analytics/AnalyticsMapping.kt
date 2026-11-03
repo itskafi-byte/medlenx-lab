@@ -122,6 +122,8 @@ fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =
             brandMatchCount = d.brandMatchRx,
             conversion = d.conversionRate.toInt(),
             rxCount = d.prescriptions,
+            avgSharePerRx = d.avgSharePerRx,
+            topCompetitor = d.topCompetitor,
         )
     }
 
