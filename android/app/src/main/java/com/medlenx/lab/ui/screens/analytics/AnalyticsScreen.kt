@@ -199,9 +199,11 @@ fun AnalyticsScreen(
 
         MlxCard {
             SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
+            val doctorList = vm.leaders.toLeaderRows(vm.leaderOffset)
+            val maxBrandVolume = maxOf(1, doctorList.maxOfOrNull { it.brandMatchCount ?: 0 } ?: 0)
             Column(modifier = Modifier.padding(top = 12.dp)) {
-                vm.leaders.toLeaderRows(vm.leaderOffset).forEach { doctor ->
-                    DoctorLeaderRowView(doctor, onDoctorClick = {
+                doctorList.forEach { doctor ->
+                    DoctorLeaderRowView(doctor, maxBrandVolume, onDoctorClick = {
                         vm.selectDoctor(doctor)
                         scrollScope.launch { scrollState.animateScrollTo(feedPosition) }
                     })
@@ -685,9 +687,9 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 
 /** One leaderboard row — Figma App.tsx:1157-1174. */
 @Composable
-private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
-    val targetProgress = if (row.rxCount > 0) ((row.brandMatchCount ?: 0).toFloat() / row.rxCount).coerceIn(0f, 1f) else 0f
-    val progress by animateFloatAsState(targetValue = targetProgress, label = "doctor conversion")
+private fun DoctorLeaderRowView(row: DoctorLeaderRow, maxBrandVolume: Int, onDoctorClick: (String) -> Unit) {
+    val targetProgress = ((row.brandMatchCount ?: 0).toFloat() / maxBrandVolume.coerceAtLeast(1)).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(targetValue = targetProgress, label = "relative brand volume")
     Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = MlxShape.Medium, color = Mlx.Surface) {
     Row(
         modifier = Modifier

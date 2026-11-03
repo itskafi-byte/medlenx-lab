@@ -7,14 +7,18 @@ vm = (root/'ui/screens/analytics/AnalyticsViewModel.kt').read_text()
 chart = (root/'ui/screens/analytics/AnalyticsCharts.kt').read_text()
 card = (root/'ui/components/AuditFeedCard.kt').read_text()
 avatar = (root/'ui/components/OfficerAvatar.kt').read_text()
-assert 'if (row.rxCount > 0)' in ui and '(row.brandMatchCount ?: 0).toFloat() / row.rxCount' in ui
+assert 'doctorList.maxOfOrNull { it.brandMatchCount ?: 0 }' in ui
+assert '(row.brandMatchCount ?: 0).toFloat() / maxBrandVolume.coerceAtLeast(1)' in ui
 assert 'animateFloatAsState(targetValue = targetProgress' in ui
 assert 'LinearProgressIndicator(progress = { progress }' in ui and '.clip(RoundedCornerShape(4.dp))' in ui
 assert 'Surface(onClick = { onDoctorClick(row.name) }' in ui and 'vm.selectDoctor(doctor)' in ui
 assert 'selectedDoctor' in vm and 'doctor?.doctorId' in vm
-# Conversion is zero-safe and cannot exceed the track.
-def ratio(brand, total): return min(1, max(0, brand / total)) if total > 0 else 0
-assert [ratio(*r) for r in [(0,1), (1,2), (2,2), (3,2), (0,0)]] == [0, .5, 1, 1, 0]
+# Bars use the maximum target count on the displayed page, independent of conversion.
+def ratio(brand, rows):
+    maximum = max(1, max((v or 0 for v in rows), default=0))
+    return min(1, max(0, (brand or 0) / maximum))
+assert [ratio(n, [10, 1, 0, None]) for n in [10, 1, 0, None]] == [1, .1, 0, 0]
+assert ratio(0, [0, 0]) == 0 and ratio(None, []) == 0
 section = chart[chart.index('fun SpecialtyGroupedBarChart'):]
 assert 'rememberTextMeasurer()' in section and 'labelWidth' in section
 assert 'Modifier.width(available * fraction).height(16.dp)' in section
