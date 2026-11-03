@@ -64,7 +64,7 @@ enum class RxAuditFilter(val label: String) {
     All("All"),
     OwnPharma("Own Pharma"),
     Competitors("Competitors"),
-    LowConfidence("<80%"),
+    LowConfidence("Low Conf. (<80%)"),
 }
 
 /**
@@ -172,6 +172,10 @@ fun RxAuditScreen(
             }
         }
 
+        if (duplicateOfRxIds.isNotEmpty()) {
+            DuplicateFraudNote(duplicateOfRxIds)
+        }
+
         ClinicalStrip(
             antibiotics = antibiotics,
             broadSpectrum = broadSpectrum,
@@ -179,20 +183,6 @@ fun RxAuditScreen(
             offTerritory = offTerritory,
             slices = classBreakdown(medicines),
         )
-
-        if (duplicateOfRxIds.isNotEmpty()) {
-            DuplicateFraudNote(duplicateOfRxIds)
-        }
-
-        filtered.forEach { med ->
-            AuditItemCard(
-                medicine = med,
-                isOwn = med in own,
-                isDuplicate = rxId in duplicateOfRxIds,
-                onPitchCard = { onPitchCard(med) },
-                onVerifyAgainstMedex = { onVerifyAgainstMedex(med) },
-            )
-        }
 
         MarketShareCard(
             ownLabel = share.ownCompany.ifBlank { "Own portfolio" },
@@ -215,6 +205,16 @@ fun RxAuditScreen(
                 )
             },
         )
+
+        filtered.forEach { med ->
+            AuditItemCard(
+                medicine = med,
+                isOwn = med in own,
+                isDuplicate = rxId in duplicateOfRxIds,
+                onPitchCard = { onPitchCard(med) },
+                onVerifyAgainstMedex = { onVerifyAgainstMedex(med) },
+            )
+        }
     }
 }
 

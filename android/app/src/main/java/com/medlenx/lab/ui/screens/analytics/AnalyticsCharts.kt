@@ -296,7 +296,7 @@ fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolea
     val otherColor = MaterialTheme.colorScheme.outline
     val textMeasurer = rememberTextMeasurer()
     val labelWidthPx = data.flatMap { listOf(it.own, it.other) }
-        .maxOfOrNull { textMeasurer.measure(it.toString(), style = MlxType.Meta).size.width } ?: 0
+        .maxOfOrNull { textMeasurer.measure(it.toString(), style = MaterialTheme.typography.labelSmall).size.width } ?: 0
     val labelWidth = with(LocalDensity.current) { labelWidthPx.toDp() }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -316,12 +316,13 @@ fun SpecialtyGroupedBarChart(data: List<SpecialtyComparison>, configured: Boolea
                 listOf(row.own to ownColor, row.other to otherColor).forEach { (count, color) ->
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val available = (maxWidth - labelWidth - 8.dp).coerceAtLeast(0.dp)
-                        val fraction = (count.toFloat() / maxValue).coerceIn(0f, 1f)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        val fraction = (count.toFloat() / maxValue).coerceIn(0.01f, 1f)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.width(available * fraction).height(16.dp)
-                                .background(color, RoundedCornerShape(4.dp)))
+                                .background(color, RoundedCornerShape(2.dp)))
                             Spacer(Modifier.width(8.dp))
-                            Text(count.toString(), style = MlxType.Meta, maxLines = 1)
+                            Text(count.toString(), modifier = Modifier.weight(1f, fill = false),
+                                style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
                     }
                 }

@@ -117,11 +117,9 @@ data class DoctorLeaderRow(
     val rank: Int,
     val name: String,
     val meta: String,
-    val own: Int,
-    val competitor: Int,
+    val brandMatchCount: Int?,
     val conversion: Int,
     val rxCount: Int,
-    val shareOfVoice: Int,
 )
 
 data class LiveScanRow(

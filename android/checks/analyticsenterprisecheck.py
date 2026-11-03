@@ -32,7 +32,7 @@ INSERT INTO scanned_medicines VALUES
  (4,4,'Own'),(5,4,'Other'),(6,5,'Other'),
  (7,6,'Own'),(8,7,'Own'),(9,8,'Own');
 ''')
-args = dict(currentUid='alice', since=0, ownLike='%Own%', limit=10, offset=0,
+args = dict(currentUid='alice', since=0, ownLike='%Own%', ownCompany='Own', limit=10, offset=0,
             district=None, territory=None, specialty=None, mrId=None, source=None)
 leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
 assert [r[0] for r in leaders] == ['High volume', 'High conversion', 'Low conversion', 'No meds'], leaders
@@ -50,6 +50,14 @@ mix = db.execute(query('specialtyCompanyCounts'), args).fetchall()
 assert sorted(mix) == [('Cardiology', 'Other',5), ('Cardiology','Own',3)], mix
 assert db.execute(query('specialtyCompanyCounts'), dict(args, currentUid='bob')).fetchall() == [('Cardiology','Own',1)]
 assert db.execute(query('specialtyCompanyCounts'), dict(args, since=16)).fetchall() == [('Cardiology','Own',1)]
+# Brand matches count distinct prescriptions, not medicine rows or substring company matches.
+db.executemany('INSERT INTO scanned_medicines VALUES (?,?,?)', [(10,4,'own'), (11,5,'Owned Other')])
+leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
+by_name = {r[0]: r for r in leaders}
+assert by_name['Low conversion'][5] == 2 and by_name['Low conversion'][8] == 1
+assert by_name['High conversion'][5] == 2 and by_name['High conversion'][8] == 2
+assert all(r[8] is None for r in db.execute(query('doctorLeaderRows'), dict(args, ownCompany='')).fetchall())
+
 entities = (root / 'data/local/Entities.kt').read_text()
 vm = (root / 'ui/screens/analytics/AnalyticsViewModel.kt').read_text()
 ui = (root / 'ui/screens/analytics/AnalyticsScreen.kt').read_text()

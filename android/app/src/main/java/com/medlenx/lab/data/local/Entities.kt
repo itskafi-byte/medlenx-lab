@@ -398,6 +398,7 @@ data class DoctorLeaderRow2(
     val prescriptions: Int,
     val totalMeds: Int,
     val ownMeds: Int,
+    val brandMatchRx: Int?,
 )
 
 /** Projection for [PrescriptionDao.topBrandRow]. */

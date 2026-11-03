@@ -773,7 +773,10 @@ interface PrescriptionDao {
                IFNULL(p.district, '') AS district, IFNULL(p.territory, '') AS territory,
                COUNT(DISTINCT p.id) AS prescriptions,
                SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) AS totalMeds,
-               IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds
+               IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds,
+               CASE WHEN TRIM(:ownCompany) = '' THEN NULL ELSE
+                   COUNT(DISTINCT CASE WHEN TRIM(IFNULL(sm.company_name, '')) = TRIM(:ownCompany) COLLATE NOCASE THEN p.id END)
+               END AS brandMatchRx
         FROM prescriptions p
         LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
@@ -785,9 +788,7 @@ interface PrescriptionDao {
           AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
         GROUP BY p.doctor_id
         ORDER BY prescriptions DESC,
-                 CASE WHEN SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) > 0
-                    THEN 1.0 * SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END) /
-                         SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END)
+                 CASE WHEN prescriptions > 0 THEN 1.0 * IFNULL(brandMatchRx, 0) / prescriptions
                     ELSE 0.0 END DESC,
                  IFNULL(p.doctor_name, '') COLLATE NOCASE ASC, p.doctor_id ASC
         LIMIT :limit OFFSET :offset
@@ -796,6 +797,7 @@ interface PrescriptionDao {
     suspend fun doctorLeaderRows(currentUid: String,
         since: Long,
         ownLike: String,
+        ownCompany: String,
         limit: Int,
         offset: Int,
         district: String?,

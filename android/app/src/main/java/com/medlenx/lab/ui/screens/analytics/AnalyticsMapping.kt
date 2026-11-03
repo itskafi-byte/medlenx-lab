@@ -118,11 +118,9 @@ fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =
             meta = listOf(d.specialty, d.chamber, d.district)
                 .filter { it.isNotBlank() && it != "N/A" }
                 .joinToString(" • "),
-            own = d.volumeOwn,
-            competitor = d.volumeCompetitor,
+            brandMatchCount = d.brandMatchRx,
             conversion = d.conversionRate.toInt(),
             rxCount = d.prescriptions,
-            shareOfVoice = d.conversionRate.toInt(),
         )
     }
 

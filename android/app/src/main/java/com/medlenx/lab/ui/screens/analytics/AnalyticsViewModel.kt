@@ -541,7 +541,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 leaderTotal = prescriptionDao.doctorLeaderTotal(currentUid, since = since, district = f.district, territory = f.territory, specialty = f.specialty, mrId = f.mrId, source = f.source)
                 if (leaderOffset >= leaderTotal) leaderOffset = 0
-                loadLeaderPageSync(since, ownLike)
+                loadLeaderPageSync(since, ownLike, ownCompany)
 
             }.onFailure { e ->
                 error = e.message ?: "Could not load analytics"
@@ -550,12 +550,13 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private suspend fun loadLeaderPageSync(since: Long, ownLike: String) {
+    private suspend fun loadLeaderPageSync(since: Long, ownLike: String, ownCompany: String) {
         val f = filters
         leaders = AnalyticsMetrics.doctorLeaders(
             rows = prescriptionDao.doctorLeaderRows(currentUid,
                 since = since,
                 ownLike = ownLike,
+                ownCompany = ownCompany,
                 limit = pageSize,
                 offset = leaderOffset,
                 district = f.district,
@@ -579,7 +580,7 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 val ownCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownToken = ownCompany.ifBlank { AnalyticsMetrics.DEFAULT_OWN_COMPANY }
                     .split(" ").first()
-                loadLeaderPageSync(since, "%$ownToken%")
+                loadLeaderPageSync(since, "%$ownToken%", ownCompany)
             }.onFailure { error = it.message ?: "Could not page the leaderboard" }
         }
     }

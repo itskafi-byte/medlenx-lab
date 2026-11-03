@@ -713,28 +713,21 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow, topDoctorCount: Int) {
             )
             LinearProgressIndicator(progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                color = Mlx.Ok400, trackColor = Mlx.Brand100)
+                color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
         }
 
         Column(horizontalAlignment = Alignment.End) {
-            Row {
-                Text(
-                    text = "${row.own}",
-                    style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
-                    color = Mlx.Ok600,
-                )
-                Text(
-                    text = " / ${row.competitor}",
-                    style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
-                    color = Mlx.Brand400,
-                )
-            }
             Text(
-                text = "${row.conversion}% conv",
+                text = "${row.brandMatchCount?.toString() ?: "—"} / ${row.rxCount}",
+                style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
+                color = Mlx.Text900,
+            )
+            Text(
+                text = if (row.brandMatchCount == null) "Set company in Settings" else "${row.conversion}% conv",
                 style = MlxType.MicroPill,
                 color = if (row.conversion >= 50) Mlx.Ok500 else Mlx.Warn500,
             )
-            Text(text = "${row.rxCount} Rx", style = MlxType.RegulatoryPill, color = Mlx.Brand400)
+            Text(text = "brand Rx / total Rx", style = MlxType.RegulatoryPill, color = Mlx.Brand400)
         }
     }
 }

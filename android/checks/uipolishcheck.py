@@ -23,6 +23,15 @@ assert 'rememberTextMeasurer()' in section and 'labelWidth' in section
 assert 'Modifier.width(available * fraction).height(16.dp)' in section
 assert 'Spacer(Modifier.width(8.dp))' in section and 'Arrangement.SpaceBetween' not in section
 assert 'Arrangement.spacedBy(4.dp)' in section
+assert 'Modifier.weight(1f, fill = false)' in section and 'MaterialTheme.colorScheme.outline' in section
+assert 'row.brandMatchCount?.toString()' in ui and ' / ${row.rxCount}' in ui
+assert 'MaterialTheme.colorScheme.primary' in ui and 'MaterialTheme.colorScheme.surfaceVariant' in ui
+live_audit = (root/'ui/screens/rx/RxAuditScreen.kt').read_text()
+saved_audit = (root/'ui/screens/analytics/RxBreakdownSheet.kt').read_text()
+assert 'LowConfidence("Low Conf. (<80%)")' in live_audit
+assert live_audit.index('        ClinicalStrip(') < live_audit.index('        MarketShareCard(') < live_audit.index('        filtered.forEach { med ->')
+assert saved_audit.index('ClinicalStrip(') < saved_audit.index('MarketShareCard(') < saved_audit.index('ItemCards(')
+assert 'onExportCsv = {' in saved_audit and 'onCopyClipboard = {' in saved_audit
 assert 'fallbackName = rx.officerName' in ui and 'CircleCropTransformation()' in avatar
 assert 'URLEncoder.encode(it, "UTF-8")' in avatar and '&background=random&bold=true' in avatar
 assert '!imageUri.isNullOrBlank() && !photoFailed' in avatar and 'resource != null' in avatar

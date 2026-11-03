@@ -194,11 +194,12 @@ object AnalyticsMetrics {
                 district = r.district,
                 territory = r.territory,
                 prescriptions = r.prescriptions,
+                brandMatchRx = r.brandMatchRx,
                 volumeOwn = ownCnt,
                 volumeCompetitor = maxOf(totalCnt - ownCnt, 0),
                 total = totalCnt,
-                conversionRate = if (totalCnt != 0) {
-                    PyMath.round1(ownCnt * 100.0 / totalCnt)
+                conversionRate = if (r.prescriptions != 0) {
+                    PyMath.round1((r.brandMatchRx ?: 0) * 100.0 / r.prescriptions)
                 } else {
                     0.0
                 },
@@ -266,6 +267,7 @@ data class DoctorLeader(
     val district: String,
     val territory: String,
     val prescriptions: Int,
+    val brandMatchRx: Int?,
     val volumeOwn: Int,
     val volumeCompetitor: Int,
     val total: Int,

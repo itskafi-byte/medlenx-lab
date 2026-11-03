@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -81,7 +83,7 @@ import java.util.Locale
  * A port of the web's `#rxDrawer` (`templates/index.html:552`) and its renderer
  * (`:2764`), fed by the single payload `GET /api/prescriptions/{id}` returns
  * (`app/main.py:928`). Four regions, top to bottom, in the web's order: header, toolbar
- * with the filter pills, clinical strip, item table, then the market-share footer.
+ * with the filter pills, clinical strip, market-share summary, then the item cards.
  *
  * Two things about this screen are deliberate and worth knowing before changing it:
  *
@@ -314,8 +316,7 @@ private fun DrawerBody(
             counts = counts,
         )
 
-        // The scrollable middle: the item table, then the duplicate note. One vertical
-        // scroll for the whole region, so the table does not get its own nested one.
+        // One vertical scroll for the clinical strip, share summary and item cards.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -343,29 +344,7 @@ private fun DrawerBody(
                 modifier = Modifier.padding(bottom = MlxD.Space3),
             )
 
-            // No wrapper card: every medicine is a card of its own now, so an outer
-            // one would only put a white box around a stack of white boxes.
-            ItemCards(
-                drawer = drawer,
-                visible = visible,
-                expanded = expanded,
-                onTogglePortfolio = { i ->
-                    expanded = if (i in expanded) expanded - i else expanded + i
-                },
-                onPitchCard = onPitchCard,
-                onCopyPitch = onCopyPitch,
-                onVerifyAgainstMedex = onVerifyAgainstMedex,
-            )
-        }
-
-        // Footer: market share + the two export actions. Outside the scroll so it stays
-        // reachable, which is where the web's `border-t` footer sits too.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Mlx.Surface)
-                .padding(horizontal = MlxD.Space4, vertical = MlxD.Space3),
-        ) {
+            // Summary and its export actions precede the medicine cards.
             MarketShareCard(
                 ownLabel = drawer.ownCompany.ifBlank { "Your company" },
                 ownCount = drawer.marketShare.ownCount,
@@ -395,6 +374,21 @@ private fun DrawerBody(
                 },
                 showCropHint = false,
                 ownCompanyAssumed = !drawer.ownCompanyConfirmed,
+            )
+            Spacer(Modifier.height(MlxD.Space3))
+
+            // No wrapper card: every medicine is a card of its own now, so an outer
+            // one would only put a white box around a stack of white boxes.
+            ItemCards(
+                drawer = drawer,
+                visible = visible,
+                expanded = expanded,
+                onTogglePortfolio = { i ->
+                    expanded = if (i in expanded) expanded - i else expanded + i
+                },
+                onPitchCard = onPitchCard,
+                onCopyPitch = onCopyPitch,
+                onVerifyAgainstMedex = onVerifyAgainstMedex,
             )
         }
     }
