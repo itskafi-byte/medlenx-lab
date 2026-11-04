@@ -124,6 +124,11 @@ fun List<DoctorLeader>.toLeaderRows(offset: Int): List<DoctorLeaderRow> =
             rxCount = d.prescriptions,
             avgSharePerRx = d.avgSharePerRx,
             topCompetitor = d.topCompetitor,
+            avgMedicinesPerRx = d.avgMedicinesPerRx,
+            ourAvgMedicines = d.ourAvgMedicines,
+            ourSharePct = d.ourSharePct,
+            topCompetitorSharePct = d.topCompetitorSharePct,
+            otherSharePct = d.otherSharePct,
         )
     }
 

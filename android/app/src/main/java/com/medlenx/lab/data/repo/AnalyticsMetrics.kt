@@ -270,6 +270,11 @@ data class DoctorLeader(
     val conversionRate: Double,
     val avgSharePerRx: Double? = null,
     val topCompetitor: String? = null,
+    val avgMedicinesPerRx: Int = 0,
+    val ourAvgMedicines: Int = 0,
+    val ourSharePct: Float? = null,
+    val topCompetitorSharePct: Float? = null,
+    val otherSharePct: Float? = null,
 )
 
 data class DoctorLeaderboard(

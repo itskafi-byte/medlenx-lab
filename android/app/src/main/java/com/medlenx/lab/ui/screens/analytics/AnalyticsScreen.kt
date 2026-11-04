@@ -3,12 +3,12 @@ package com.medlenx.lab.ui.screens.analytics
 import android.text.format.DateUtils
 import kotlinx.coroutines.launch
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Surface
@@ -64,7 +63,8 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -696,19 +696,14 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
     }
 }
 
-private const val MONTHLY_TARGET = 10f
-
-/** Quota uses brand prescriptions in the selected period; rank trend is explicitly illustrative. */
+/** Trend arrows are explicitly illustrative, not a computed rank change. */
 @Composable
 private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
-    val targetProgress = ((row.brandMatchCount ?: 0).toFloat() / MONTHLY_TARGET).coerceIn(0f, 1f)
-    val progress by animateFloatAsState(targetValue = targetProgress, label = "brand prescriptions toward target")
     val mockUp = row.rank % 2 == 1
     Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = MlxShape.Medium, color = Mlx.Surface) {
-        Column(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)
-            .padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        Column(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(modifier = Modifier.size(28.dp).background(when {
@@ -726,19 +721,46 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) ->
                     Text(row.meta, style = MlxType.MicroPill, color = Mlx.Text500)
                 }
                 Column(modifier = Modifier.weight(1.15f), horizontalAlignment = Alignment.End) {
-                    Text("${row.brandMatchCount?.toString() ?: "—"} / 10 Rx Target", style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
+                    Text("${row.brandMatchCount?.toString() ?: "—"} Brand Rx", style = MlxType.Meta.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary)
+                    RxHabitIndicator(row.avgMedicinesPerRx, row.ourAvgMedicines)
                     Text("Avg Share: ${row.avgSharePerRx?.let { PyMath.fixed1(it) + "%" } ?: "—"}",
                         style = MaterialTheme.typography.labelSmall, color = Mlx.Text500)
-                    Text("Competitor: ${row.topCompetitor ?: "—"}",
+                    Text("Top Competitor: ${row.topCompetitor ?: "—"}",
                         style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
                         color = MaterialTheme.colorScheme.error)
                 }
             }
-            LinearProgressIndicator(progress = { progress },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
-                color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {})
+            MarketShareStackedBar(row.ourSharePct, row.topCompetitorSharePct, row.otherSharePct)
+        }
+    }
+}
+
+/** Rounded average item counts; scroll instead of squeezing slots on narrow screens. */
+@Composable
+private fun RxHabitIndicator(avgMedicinesPerRx: Int, ourAvgMedicines: Int) {
+    Row(modifier = Modifier.horizontalScroll(rememberScrollState()).semantics {
+        contentDescription = if (avgMedicinesPerRx == 0) "No medicine data" else
+            "Average $avgMedicinesPerRx medicines per prescription, $ourAvgMedicines from your company"
+    }, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        repeat(avgMedicinesPerRx.coerceAtLeast(0)) { index ->
+            Box(Modifier.size(6.dp).background(if (index < ourAvgMedicines) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant, CircleShape))
+        }
+    }
+}
+
+/** Null means no measurable share, not a claim that every item belongs to Other. */
+@Composable
+private fun MarketShareStackedBar(own: Float?, competitor: Float?, other: Float?) {
+    val hasData = own != null && competitor != null && other != null
+    val description = if (hasData) "Average prescription share: own ${((own ?: 0f) * 100).toInt()} percent, competitor ${((competitor ?: 0f) * 100).toInt()} percent, other ${((other ?: 0f) * 100).toInt()} percent" else "Average prescription share unavailable"
+    Row(Modifier.fillMaxWidth().height(6.dp).semantics { contentDescription = description }) {
+        if (!hasData) Box(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant))
+        else {
+            if (own != null && own > 0f) Box(Modifier.weight(own).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+            if (competitor != null && competitor > 0f) Box(Modifier.weight(competitor).fillMaxHeight().background(MaterialTheme.colorScheme.error))
+            if (other != null && other > 0f) Box(Modifier.weight(other).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant))
         }
     }
 }

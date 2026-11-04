@@ -48,6 +48,11 @@ for doctor, rx, company, count in intelligence:
     per_rx[rx] = (own + (count if company.lower() == 'own' else 0), total + count)
 avg = sum(own / total for own,total in per_rx.values() if total) / sum(total > 0 for _,total in per_rx.values())
 assert avg == .25  # Rx shares 50% and 0%, not 1/3 pooled medicines
+from math import floor
+counts = list(per_rx.values())
+assert floor(sum(t for _,t in counts) / len(counts) + .5) == 2
+assert floor(sum(o for o,_ in counts) / len(counts) + .5) == 1
+assert sum((total-own)/total for own,total in counts) / len(counts) == .75
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, currentUid='bob')).fetchall() == []
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, since=14)).fetchall() == [(2,5,'Other',1)]
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, doctorIds=4)).fetchall() == [(4,9,'',0)]
@@ -82,7 +87,7 @@ card = (root / 'ui/components/AuditFeedCard.kt').read_text()
 mapping = (root / 'ui/screens/analytics/AnalyticsMapping.kt').read_text()
 assert '@Relation(parentColumn = "id", entityColumn = "prescription_id")' in entities
 assert 'observeAuditFeed(currentUid' in vm and 'observeAuditFeedCount(currentUid' in vm and 'snapshotFlow' in vm
-assert '(row.brandMatchCount ?: 0).toFloat() / MONTHLY_TARGET' in ui and 'vm.selectDoctor(doctor)' in ui
+assert 'MarketShareStackedBar(row.ourSharePct, row.topCompetitorSharePct, row.otherSharePct)' in ui and 'vm.selectDoctor(doctor)' in ui
 assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui

@@ -123,6 +123,11 @@ data class DoctorLeaderRow(
     val rxCount: Int,
     val avgSharePerRx: Double?,
     val topCompetitor: String?,
+    val avgMedicinesPerRx: Int,
+    val ourAvgMedicines: Int,
+    val ourSharePct: Float?,
+    val topCompetitorSharePct: Float?,
+    val otherSharePct: Float?,
 )
 
 data class LiveScanRow(
