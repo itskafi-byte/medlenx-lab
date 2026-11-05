@@ -41,7 +41,7 @@ hero = home.split('private fun CaptureHero(')[1].split('private fun DailyTargetC
 assert 'Open Camera' in hero and 'Choose File' in hero and 'queued locally' not in hero and 'saved on this device' not in hero
 assert '.height(16.dp)' in home and '.background(Mlx.Cyan500)' in home
 assert 'DateUtils.getRelativeTimeSpanString' in home and 'Text("Processed"' in home
-assert 'statusBarsPadding()' in shell and 'WindowInsets.displayCutout' in shell and 'top = 20.dp' in shell
+assert 'statusBarsPadding()' in shell and 'WindowInsets.displayCutout' in shell and 'top = if (dest == Destination.Analytics) 16.dp else 20.dp' in shell
 assert 'AnimatedVisibility(' in shell and 'onQueryChange = { query = it; searchVm.search(it) }' in shell
 assert 'BackHandler(onBack = onClose)' in search and 'Icons.Filled.Close' in search and '.shadow(' in search
 print('topbarcheck: UID-scoped pending count and responsive search/header wiring PASS (static only)')

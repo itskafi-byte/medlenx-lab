@@ -15,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +39,6 @@ import androidx.compose.material.icons.rounded.AssignmentInd
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Person
@@ -90,7 +88,6 @@ import com.medlenx.lab.ui.components.OfficerAvatar
 import com.medlenx.lab.ui.components.AuditMedicineChip
 import com.medlenx.lab.ui.components.AuditFeedCard
 import com.medlenx.lab.ui.components.ButtonTone
-import com.medlenx.lab.ui.components.DarkHero
 import com.medlenx.lab.ui.components.KpiCard
 import com.medlenx.lab.ui.components.MlxButton
 import com.medlenx.lab.ui.components.MlxCard
@@ -108,9 +105,7 @@ import com.medlenx.lab.ui.theme.MlxType
 /**
  * Analytics — Figma `AnalyticsOverview` (App.tsx:1069-1211).
  *
- * Dark hero, filter bar, the four summary KPIs, the four chart widgets, the live
- * medicine feed and the recent-prescriptions list. Every figure is the export's own
- * dataset; the Room-backed aggregation that replaces it is a later step.
+ * Filter bar, summary KPIs, charts, the live medicine feed and recent prescriptions.
  */
 @Composable
 fun AnalyticsScreen(
@@ -123,7 +118,6 @@ fun AnalyticsScreen(
     onOpenFilters: () -> Unit = {},
     onExportPdf: () -> Unit = {},
     onExportCsv: () -> Unit = {},
-    onCapture: () -> Unit = {},
     onSelectPrescription: (RecentRxRow) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
@@ -132,18 +126,13 @@ fun AnalyticsScreen(
     var scrollTop by remember { mutableIntStateOf(0) }
     Column(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
-        //
-        // No top padding: MedLenXShell's Scaffold already places this below the app
-        // bar via inner.calculateTopPadding(). Padding here as well offset the hero
-        // a second time, which is where the gap above "Prescription Capture" came
-        // from -- not from a window inset and not from AppBarHeight.
+        // The shell supplies the app-bar inset and standard screen margins once.
         modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { scrollTop = it.positionInRoot().y.toInt() }
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        HeroBanner(onCapture)
         FilterBar(
             activeCount = vm.filters.activeCount,
             onOpenFilters = onOpenFilters,
@@ -649,61 +638,6 @@ private fun formatDrillDate(epochMillis: Long): String =
 @Composable
 private fun RowScope.Spacer1Cell() {
     Box(modifier = Modifier.weight(1f))
-}
-
-/**
- * The dark hero — Figma `DarkHero` plus the dashed upload banner inside it.
- *
- * The banner is a shortcut into the Scan tab; on the web it is the same drop zone.
- */
-@Composable
-private fun HeroBanner(onCapture: () -> Unit) {
-    DarkHero {
-        Text(
-            text = "Prescription Capture",
-            style = MlxType.HeroTitle.copy(letterSpacing = (-0.02).em),
-            color = Color.White,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-        Text(
-            text = "Choose a prescription image to review its medicines.",
-            style = MlxType.Body,
-            color = Color.White.copy(alpha = 0.8f),
-            modifier = Modifier.padding(bottom = 12.dp),
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.08f), MlxShape.Medium)
-                .clickable(onClick = onCapture)
-                .border(
-                    1.dp,
-                    Color.White.copy(alpha = 0.3f),
-                    MlxShape.Medium,
-                )
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(
-                Icons.Filled.CloudUpload,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier
-                    .padding(bottom = 4.dp)
-                    .size(20.dp),
-            )
-            Text(
-                text = "Choose a prescription image",
-                style = MlxType.Body.copy(fontWeight = FontWeight.Medium),
-                color = Color.White,
-            )
-            Text(
-                text = "Open image picker",
-                style = MlxType.Meta,
-                color = Color.White.copy(alpha = 0.7f),
-            )
-        }
-    }
 }
 
 /** The filter summary card — Figma App.tsx:1085-1094. */
