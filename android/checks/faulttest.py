@@ -356,8 +356,8 @@ FAULTS: list[tuple[str, str, str, str, str, str]] = [
         # HubScreen has one delegated property: removing the `by` leaves
         # the import with nothing to serve.
         "android/app/src/main/java/com/medlenx/lab/ui/screens/hub/HubScreen.kt",
-        "var tabIndex by remember { mutableIntStateOf(0) }",
-        "var tabIndex = remember { mutableIntStateOf(0) }",
+        "var tabIndex by rememberSaveable { mutableIntStateOf(0) }",
+        "var tabIndex = rememberSaveable { mutableIntStateOf(0) }",
         "no delegated property",
     ),
     (

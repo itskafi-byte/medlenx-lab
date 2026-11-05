@@ -1,5 +1,6 @@
 package com.medlenx.lab.ui.screens.hub
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import android.content.ClipData
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,11 +46,14 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +73,7 @@ import com.medlenx.lab.data.model.HealthDayEntry
 import com.medlenx.lab.data.model.MedexProduct
 import com.medlenx.lab.data.model.NewsItem
 import com.medlenx.lab.data.repo.TripsMoleculeVolume
+import com.medlenx.lab.ui.components.FrostedIcon
 import com.medlenx.lab.ui.components.MedicineThumb
 import com.medlenx.lab.ui.components.ButtonTone
 import com.medlenx.lab.ui.components.DarkHero
@@ -77,7 +85,6 @@ import com.medlenx.lab.ui.components.MlxFilterChip
 import com.medlenx.lab.ui.components.MlxIconButton
 import com.medlenx.lab.ui.components.CompanyBadge
 import com.medlenx.lab.ui.components.MiniKpiTile
-import com.medlenx.lab.ui.components.MlxSegmented
 import com.medlenx.lab.ui.components.MlxTextField
 import com.medlenx.lab.ui.components.RegulatoryPill
 import com.medlenx.lab.ui.components.SectionHeader
@@ -114,7 +121,7 @@ fun HubScreen(
     onShareDayPdf: (HealthDayDetail) -> Unit = {},
     onShareDayWhatsApp: (HealthDayDetail) -> Unit = {},
 ) {
-    var tabIndex by remember { mutableIntStateOf(0) }
+    var tabIndex by rememberSaveable { mutableIntStateOf(0) }
     val tabs = HubTab.entries
 
     val copyTarget = LocalContext.current
@@ -140,38 +147,37 @@ fun HubScreen(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(MlxD.CardGap),
     ) {
-        // DarkHero, matching the Analytics and Teams header cards. It used to be a
-        // plain MlxCard, which rendered solid white and broke the visual hierarchy
-        // set by the other three tabs.
         DarkHero {
             Text("Pharma Intelligence Hub", style = MlxType.HeroTitle, color = Color.White)
             Text(
-                text = "Real-time Medex market intelligence, DGDA notifications, " +
-                    "industry jobs & WHO health campaigns",
+                text = "MedEx catalogue, industry news, jobs and health campaigns",
                 style = MlxType.BodySmall,
                 color = Color.White.copy(alpha = 0.80f),
                 modifier = Modifier.padding(top = MlxD.Space1),
             )
         }
-
-        MlxSegmented(
-            options = tabs.map { it.label },
-            selectedIndex = tabIndex,
-            onSelect = { tabIndex = it },
-        )
-
-        when (tabs[tabIndex]) {
-            HubTab.Index -> DrugIndexTab(vm)
-            HubTab.Trips -> TripsTab(vm)
-            HubTab.News -> NewsTab(vm, onOpenJob)
-            HubTab.Jobs -> JobsTab(vm, onOpenJob)
-            HubTab.HealthDays -> HealthDaysTab(vm)
-            HubTab.Dgda -> DgdaTab(vm)
+        ScrollableTabRow(selectedTabIndex = tabIndex, edgePadding = 0.dp, modifier = Modifier.fillMaxWidth()) {
+            tabs.forEachIndexed { index, tab ->
+                Tab(selected = tabIndex == index, onClick = { tabIndex = index }, text = { Text(tab.label) })
+            }
+        }
+        Crossfade(targetState = tabs[tabIndex], modifier = Modifier.weight(1f).fillMaxWidth(), label = "Hub section") { tab ->
+            when (tab) {
+                HubTab.News -> NewsTab(vm, onOpenJob)
+                HubTab.Jobs -> JobsTab(vm, onOpenJob)
+                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    when (tab) {
+                        HubTab.Index -> DrugIndexTab(vm)
+                        HubTab.Trips -> TripsTab(vm)
+                        HubTab.HealthDays -> HealthDaysTab(vm)
+                        HubTab.Dgda -> DgdaTab(vm)
+                        else -> Unit
+                    }
+                }
+            }
         }
     }
 }
@@ -567,8 +573,8 @@ private fun bdt(v: Double?): String {
 private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
     val feed = vm.news
 
-    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
-        MlxCard {
+    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        item { MlxCard {
             SectionHeader(
                 title = "Industry News",
                 icon = Icons.AutoMirrored.Filled.Article,
@@ -586,27 +592,27 @@ private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
                 text = if (feed == null) {
                     "Loading headlines…"
                 } else if (feed.liveCount == 0) {
-                    "Live RSS unreachable — showing the bundled snapshot only. " +
-                        "${feed.curatedCount} curated item(s)."
+                    "Live RSS unreachable — showing the unverified bundled snapshot only. " +
+                        "${feed.curatedCount} bundled item(s)."
                 } else {
                     "${feed.liveCount} live from the WHO feed · " +
-                        "${feed.curatedCount} curated. Live items are marked."
+                        "${feed.curatedCount} unverified bundled items. Live items are marked."
                 },
                 style = MlxType.Meta,
                 color = Mlx.Text500,
                 modifier = Modifier.padding(top = MlxD.Space2),
             )
-        }
+        } }
 
         val items = feed?.items.orEmpty()
-        if (items.isEmpty()) {
-            MlxEmptyState(
+        if (feed != null && items.isEmpty()) {
+            item { MlxEmptyState(
                 message = "No headlines available. The bundled feed could not be read " +
                     "and no live items came through.",
                 icon = Icons.AutoMirrored.Filled.Article,
-            )
-        } else {
-            items.forEachIndexed { index, item ->
+            ) }
+        } else if (items.isNotEmpty()) {
+            itemsIndexed(items) { index, item ->
                 if (index == 0) FeaturedNewsCard(item, onOpenUrl) else NewsRow(item, onOpenUrl)
             }
         }
@@ -616,12 +622,13 @@ private fun NewsTab(vm: HubViewModel, onOpenUrl: (String) -> Unit) {
 @Composable
 private fun FeaturedNewsCard(item: NewsItem, onOpenUrl: (String) -> Unit) {
     DarkHero {
+        FrostedIcon(Icons.AutoMirrored.Filled.Article, Color(0xFF7DD3FC))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
                 if (item.live) {
                     StatusPill(text = "LIVE", tone = PillTone.EmeraldSolid)
                 }
-                StatusPill(text = item.source, tone = PillTone.BlueSolid)
+                StatusPill(text = "Source: ${item.source.ifBlank { "Unknown" }}", tone = PillTone.BlueSolid)
             }
         }
         Text(
@@ -665,6 +672,7 @@ private fun FeaturedNewsCard(item: NewsItem, onOpenUrl: (String) -> Unit) {
 @Composable
 private fun NewsRow(item: NewsItem, onOpenUrl: (String) -> Unit) {
     MlxCard {
+        FrostedIcon(Icons.AutoMirrored.Filled.Article, Color(0xFF0EA5E9))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -674,7 +682,7 @@ private fun NewsRow(item: NewsItem, onOpenUrl: (String) -> Unit) {
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    text = item.source,
+                    text = "Source: ${item.source.ifBlank { "Unknown" }}",
                     style = MlxType.SectionLabel,
                     color = Mlx.Text600,
                 )
@@ -747,12 +755,12 @@ private fun TripsTab(vm: HubViewModel) {
                     modifier = Modifier.weight(1f),
                 )
                 StatusPill(
-                    text = "LDC waiver → ${p.waiverExpiry.ifBlank { "unknown" }}",
+                    text = "LDC limit: 2033",
                     tone = PillTone.Amber,
                 )
             }
             Text(
-                text = p.context,
+                text = "The WTO pharmaceutical transition for LDC members runs until 1 January 2033 or LDC graduation, whichever is earlier. Bangladesh's graduation is scheduled for 24 November 2029 (UN decision reported by Xinhua, 30 October 2026). Export rules depend on destination-country law and licences. Verify current WTO and national decisions; this is not legal advice. Sources: wto.org/english/tratop_e/trips_e/pharmpatenoftxt_e.htm and english.news.cn/20261030/8e86931a3256488395a4d3bdb99b0066/c.html",
                 style = MlxType.Meta,
                 color = Mlx.Text500,
                 modifier = Modifier.padding(top = MlxD.Space2, bottom = MlxD.Space3),
@@ -796,12 +804,12 @@ private fun TripsTab(vm: HubViewModel) {
             )
         }
 
-        p.molecules.forEach { mol -> TripsMoleculeCard(mol, p.waiverExpiry) }
+        p.molecules.forEach { mol -> TripsMoleculeCard(mol) }
     }
 }
 
 @Composable
-private fun TripsMoleculeCard(mol: TripsMoleculeVolume, waiverExpiry: String) {
+private fun TripsMoleculeCard(mol: TripsMoleculeVolume) {
     MlxCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -833,11 +841,6 @@ private fun TripsMoleculeCard(mol: TripsMoleculeVolume, waiverExpiry: String) {
             horizontalSpacing = MlxD.Space4,
             verticalSpacing = MlxD.Space1,
         ) {
-            Text(
-                text = "Window → ${waiverExpiry.ifBlank { "unknown" }}",
-                style = MlxType.MicroPill,
-                color = Mlx.Text400,
-            )
             Text(
                 text = "${mol.currentVolume} items",
                 style = MlxType.BodySmall,
@@ -883,14 +886,6 @@ private fun TripsMoleculeCard(mol: TripsMoleculeVolume, waiverExpiry: String) {
                 }
             }
         }
-        if (mol.note.isNotBlank()) {
-            Text(
-                text = mol.note,
-                style = MlxType.Meta,
-                color = Mlx.Text500,
-                modifier = Modifier.padding(top = MlxD.Space2),
-            )
-        }
     }
 }
 
@@ -916,11 +911,13 @@ private fun DrugIndexTab(vm: HubViewModel) {
     val companies = remember(vm.products) {
         vm.products.map { it.company.trim() }.filter { it.isNotEmpty() }.distinct().size
     }
-    val topCompanies = remember(vm.products) {
-        PharmaHub.uniqueCompaniesFrom(vm.products, limit = 1)
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        MlxTextField(
+            value = vm.indexQuery,
+            onValueChange = { vm.searchIndex(it) },
+            placeholder = "Search Napa, Seclo, Injection, Square, Omeprazole...",
+            modifier = Modifier.fillMaxWidth(),
+        )
         MlxCard {
             SectionHeader(
                 title = "25K+ Drug Index & Search",
@@ -930,17 +927,15 @@ private fun DrugIndexTab(vm: HubViewModel) {
                 modifier = Modifier.padding(top = MlxD.Space3),
                 horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
             ) {
-                MiniKpiTile("Total medicines", vm.products.size.toString(), Modifier.weight(1f))
-                MiniKpiTile("Dosage forms", dosageForms.toString(), Modifier.weight(1f))
+                MiniKpiTile("Total medicines", vm.products.size.toString(), Modifier.weight(1f), background = Color(0xFFE8F5FF), borderColor = Color.Transparent)
+                MiniKpiTile("Dosage forms", dosageForms.toString(), Modifier.weight(1f), background = Color(0xFFF2ECFF), borderColor = Color.Transparent)
             }
             Row(
                 modifier = Modifier.padding(top = MlxD.Space2),
                 horizontalArrangement = Arrangement.spacedBy(MlxD.Space2),
             ) {
-                MiniKpiTile("Companies", companies.toString(), Modifier.weight(1f))
-                // Every catalogue row is decorated as registered by medex_browse,
-                // so this equals the row count rather than a separate lookup.
-                MiniKpiTile("DGDA registered", vm.products.size.toString(), Modifier.weight(1f))
+                MiniKpiTile("Companies", companies.toString(), Modifier.weight(1f), background = Color(0xFFE5F8F0), borderColor = Color.Transparent)
+                MiniKpiTile("DGDA registered", "Unavailable", Modifier.weight(1f), background = Color(0xFFFFF4DE), borderColor = Color.Transparent)
             }
 
             FlowRowCompat(
@@ -957,20 +952,11 @@ private fun DrugIndexTab(vm: HubViewModel) {
                 }
             }
 
-            MlxTextField(
-                value = vm.indexQuery,
-                onValueChange = { vm.searchIndex(it) },
-                placeholder = "Search Napa, Seclo, Injection, Square, Omeprazole...",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = MlxD.Space3),
-            )
-
             Text(
                 text = if (vm.indexQuery.isBlank()) {
                     "Showing the ${BROWSE_FILTERS.first { it.first == vm.browseCategory }.second} " +
                         "slice — ${browse.total} matches from the bundled catalogue, " +
-                        "top ${rows.size} shown. Every product is DGDA-registered."
+                        "top ${rows.size} shown. Registration is not independently verified."
                 } else {
                     "${rows.size} result(s) for \"${vm.indexQuery.trim()}\"."
                 },
@@ -1050,7 +1036,7 @@ private fun TopCompaniesHero(vm: HubViewModel) {
                         .weight(1f)
                         .padding(horizontal = MlxD.Space2),
                 )
-                StatusPill(text = "${entry.brands} brands", tone = PillTone.BlueSolid)
+                StatusPill(text = "${entry.brands} brands", tone = PillTone.Amber)
             }
         }
     }
@@ -1107,9 +1093,7 @@ private fun ProductRow(product: MedexProduct) {
                     horizontalSpacing = MlxD.Space1,
                     verticalSpacing = MlxD.Space1,
                 ) {
-                    // medex_browse stamps every returned row as registered; the
-                    // NEML pill is resolved per molecule rather than asserted.
-                    StatusPill(text = "DGDA Registered", tone = PillTone.EmeraldSolid)
+                    StatusPill(text = "Registration unverified", tone = PillTone.Slate)
                 }
             }
         }
@@ -1160,6 +1144,10 @@ private fun HealthDaysTab(vm: HubViewModel) {
 
         MlxCard {
             Text("International Health Days Calendar", style = MlxType.PanelTitle)
+            if (vm.healthDays != null && vm.healthDays?.year != calendar.year) {
+                Text("Dates come from the ${vm.healthDays?.year} bundled calendar; movable observances can change. Verify dates before planning.",
+                    style = MlxType.Meta, color = Mlx.Danger, modifier = Modifier.padding(top = MlxD.Space2))
+            }
             Text(
                 text = "Click any WHO / global health day to pull a pre-generated " +
                     "promotional script & campaign brand focus for your doctor visits.",
@@ -1343,8 +1331,8 @@ private fun CalendarCell(
 private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
     val board = vm.board()
 
-    Column(verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
-        DarkHero {
+    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MlxD.CardGap)) {
+        item { DarkHero {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Work, contentDescription = null, tint = Color.White)
                 Text(
@@ -1355,24 +1343,15 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                 )
             }
             Text(
-                text = "Curated MPO, Senior Territory Manager, Executive Product " +
-                    "Management (PMD) & Regulatory Affairs vacancies with direct " +
-                    "apply links.",
+                text = "Bundled job-listing snapshot. Listings may be outdated; verify availability with the employer.",
                 style = MlxType.BodySmall,
                 color = Mlx.Brand100,
                 modifier = Modifier.padding(top = MlxD.Space2, bottom = MlxD.Space3),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
-                JobKpi("Open roles", board.total.toString(), Modifier.weight(1f))
-                JobKpi(
-                    "Fresh today",
-                    board.jobs.count { it.fresh }.toString(),
-                    Modifier.weight(1f),
-                )
-            }
-        }
+            JobKpi("Listings in snapshot", board.total.toString(), Modifier.fillMaxWidth())
+        } }
 
-        MlxCard {
+        item { MlxCard {
             Text("Filter roles", style = MlxType.SectionLabel)
             // App.tsx:1465 - the keyword box. `jobQuery` already feeds
             // PharmaHub.pharmaJobs(q = ...); without a field to set it the ported
@@ -1442,17 +1421,19 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                     )
                 }
             }
-        }
+        } }
 
         if (board.jobs.isEmpty()) {
-            MlxEmptyState(
+            item { MlxEmptyState(
                 message = "No vacancies match those filters. Clear a filter to see " +
                     "all ${board.total} roles.",
-            )
+            ) }
         } else {
-            board.jobs.forEach { enriched ->
+            items(board.jobs) { enriched ->
                 val job = enriched.job
                 MlxCard {
+                    FrostedIcon(Icons.Filled.Work, Color(0xFFF59E0B))
+                    StatusPill(text = "Source: ${vm.jobs?.source?.ifBlank { "Bundled snapshot" } ?: "Bundled snapshot"}", tone = PillTone.Slate)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1502,13 +1483,9 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                     ) {
                         IconLine(Icons.Filled.Paid, job.salary)
                         Text(
-                            text = if (enriched.fresh) {
-                                "Posted today"
-                            } else {
-                                "Posted ${enriched.postedOn}"
-                            },
+                            text = "Deadline: ${job.deadline.ifBlank { "Not provided" }}",
                             style = MlxType.Meta,
-                            color = if (enriched.fresh) Mlx.Ok600 else Mlx.Text500,
+                            color = Mlx.Text500,
                         )
                     }
                     Row(
@@ -1520,7 +1497,7 @@ private fun JobsTab(vm: HubViewModel, onOpenJob: (String) -> Unit) {
                         IconLine(Icons.Filled.Schedule, job.type)
                     }
                     MlxButton(
-                        text = "Apply now",
+                        text = "Open careers / search",
                         onClick = { onOpenJob(enriched.applyUrl) },
                         icon = Icons.AutoMirrored.Filled.OpenInNew,
                         modifier = Modifier
