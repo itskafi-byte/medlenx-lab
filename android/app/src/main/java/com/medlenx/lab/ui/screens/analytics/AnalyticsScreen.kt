@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
@@ -26,7 +27,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material.icons.rounded.AssignmentInd
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Medication
@@ -46,7 +47,7 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -232,18 +233,22 @@ fun AnalyticsScreen(
                         contentDescription = if (searchOpen) "Close and clear doctor search" else "Search doctors")
                 }
             }
-            LeaderSpecialtyFilter(vm)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LeaderSpecialtyFilter(vm, modifier = Modifier.weight(1f, fill = false))
+                LeaderSortMenu(vm)
+            }
             val doctorList = vm.leaders.toLeaderRows(vm.leaderOffset)
-            ScrollableTabRow(selectedTabIndex = vm.leaderPeriod.ordinal, edgePadding = 0.dp) {
+            TabRow(selectedTabIndex = vm.leaderPeriod.ordinal, modifier = Modifier.fillMaxWidth()) {
                 LeaderPeriod.entries.forEach { period ->
                     Tab(selected = vm.leaderPeriod == period, onClick = { vm.updateLeaderPeriod(period) },
-                        text = { Text(period.title) })
-                }
-            }
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LeaderSort.entries.forEach { sort ->
-                    MlxFilterChip(label = sort.title, selected = vm.leaderSort == sort,
-                        onClick = { vm.updateLeaderSort(sort) })
+                        modifier = Modifier.height(48.dp)) {
+                        Text(period.title, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 2.dp))
+                    }
                 }
             }
             Text("Trend arrows are illustrative, not historical data.", style = MlxType.MicroPill, color = Mlx.Text500)
@@ -759,16 +764,19 @@ private fun MedicineBreakdownColumn(title: String, rows: List<DoctorBrandCount>,
 }
 
 @Composable
-private fun LeaderSpecialtyFilter(vm: AnalyticsViewModel) {
+private fun LeaderSpecialtyFilter(vm: AnalyticsViewModel, modifier: Modifier = Modifier) {
     var menuOpen by remember { mutableStateOf(false) }
     val active = vm.leaderSpecialty.isNotBlank()
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box {
-            TextButton(onClick = { menuOpen = true }, modifier = Modifier.widthIn(max = 200.dp)
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.weight(1f, fill = false)) {
+            TextButton(onClick = { menuOpen = true }, modifier = Modifier.fillMaxWidth()
                 .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, MlxShape.Medium)
-                .then(if (active) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, MlxShape.Medium) else Modifier)) {
+                .then(if (active) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, MlxShape.Medium) else Modifier),
+                contentPadding = PaddingValues(horizontal = 4.dp)) {
                 Text(vm.leaderSpecialty.ifBlank { "All Specialties" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
+                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f, fill = false))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(text = { Text("All Specialties") }, onClick = { vm.updateLeaderSpecialty(""); menuOpen = false })
@@ -777,7 +785,29 @@ private fun LeaderSpecialtyFilter(vm: AnalyticsViewModel) {
                 }
             }
         }
-        if (active) TextButton(onClick = { vm.updateLeaderSpecialty("") }) { Text("Clear") }
+        if (active) IconButton(onClick = { vm.updateLeaderSpecialty("") }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = "Clear specialty filter", modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun LeaderSortMenu(vm: AnalyticsViewModel) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { menuOpen = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+            Text(if (vm.leaderSort == LeaderSort.DEFEND) "Sort: Defend" else "Sort: Attack",
+                style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            LeaderSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                    text = { Text((if (vm.leaderSort == sort) "✓ " else "") + sort.title) },
+                    onClick = { vm.updateLeaderSort(sort); menuOpen = false },
+                )
+            }
+        }
     }
 }
 

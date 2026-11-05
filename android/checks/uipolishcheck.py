@@ -9,7 +9,7 @@ card = (root/'ui/components/AuditFeedCard.kt').read_text()
 avatar = (root/'ui/components/OfficerAvatar.kt').read_text()
 assert 'Surface(onClick = onDoctorClick' in ui and 'vm.selectDoctor(doctor)' in ui
 assert 'selectedDoctor' in vm and 'doctor?.doctorId' in vm
-assert 'LeaderSpecialtyFilter(vm)' in ui and 'AnimatedContent(targetState = searchOpen' in ui and 'AnimatedVisibility(visible = expanded)' in ui
+assert 'LeaderSpecialtyFilter(vm, modifier = Modifier.weight(1f, fill = false))' in ui and 'AnimatedContent(targetState = searchOpen' in ui and 'AnimatedVisibility(visible = expanded)' in ui
 assert 'vm.toggleLeader(doctor)' in ui and 'View scan history' in ui
 assert 'updateLeaderSearch' in vm and 'updateLeaderSpecialty' in vm and 'updateLeaderSort' in vm
 assert 'Volume (Defend)' in vm and 'Opportunity (Attack)' in vm

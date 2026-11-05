@@ -9,10 +9,10 @@ assert 'LeaderSearchBar' not in ui
 header = ui[ui.index('var searchOpen by remember'):ui.index('val doctorList =')]
 assert 'Icons.Filled.Search' in header and 'AnimatedContent(targetState = searchOpen' in header
 assert 'if (searchOpen) vm.updateLeaderSearch("")' in header
-assert 'LeaderSpecialtyFilter(vm)' in header
+assert 'LeaderSpecialtyFilter(vm, modifier = Modifier.weight(1f, fill = false))' in header
 specialty = ui[ui.index('private fun LeaderSpecialtyFilter'):ui.index('/** Rounded average item counts')]
 assert 'primaryContainer' in specialty and 'Modifier.border(1.dp, MaterialTheme.colorScheme.primary' in specialty
-assert 'if (active) TextButton(onClick = { vm.updateLeaderSpecialty("") })' in specialty
+assert 'if (active) IconButton(onClick = { vm.updateLeaderSpecialty("") }' in specialty
 assert '!vm.leaderLoading && vm.leaderError == null && vm.leaderTotal == 0' in ui
 assert '0 results for ${vm.leaderSpecialty}' in ui
 assert 'leaderLoading = true' in vm and 'leaderLoading = false' in vm
