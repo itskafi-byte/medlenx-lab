@@ -176,6 +176,30 @@ fun MedLenXShell(
     // bytes waiting for a destination; the scope is for the one export whose
     // payload has to come out of Room before the picker can open.
     val scope = rememberCoroutineScope()
+    var auditActionBusy by remember { mutableStateOf(false) }
+    fun runAuditAction(id: Long, delete: Boolean, onSuccess: () -> Unit) {
+        if (auditActionBusy) return
+        val uid = scanVm.currentUid
+        auditActionBusy = true
+        scope.launch {
+            try {
+                if (delete) com.medlenx.lab.data.repo.AuditActions.delete(context, uid, id)
+                else com.medlenx.lab.data.repo.AuditActions.approve(context, uid, id)
+                if (FirebaseAuth.getInstance().currentUser?.uid == uid) {
+                    if (!delete && scanVm.state.savedPrescriptionId == id) scanVm.clearDuplicateAlert()
+                    analyticsVm.load()
+                    teamVm.load()
+                    onSuccess()
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                Toast.makeText(context, "Could not ${if (delete) "delete" else "override"} scan: ${e.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+            } finally {
+                auditActionBusy = false
+            }
+        }
+    }
     val documentSaver = rememberDocumentSaver { message ->
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     }
@@ -495,6 +519,11 @@ fun MedLenXShell(
                         offTerritory = s.geo.offTerritory,
                         duplicateOfRxIds = scanVm.duplicateOfRxIds,
                         onBack = { navController.popBackStack() },
+                        actionsEnabled = s.savedPrescriptionId != null && !auditActionBusy,
+                        onDelete = { s.savedPrescriptionId?.let { id -> runAuditAction(id, true) {
+                            if (scanVm.state.savedPrescriptionId == id) { scanVm.clear(); navController.popBackStack() }
+                        } } },
+                        onApprove = { s.savedPrescriptionId?.let { id -> runAuditAction(id, false) {} } },
                         onPitchCard = { med ->
                             val sub = med.substitution
                             if (sub != null) {
@@ -654,6 +683,14 @@ fun MedLenXShell(
                 loading = analyticsVm.breakdownLoading,
                 loadError = analyticsVm.breakdownError,
                 onDismiss = analyticsVm::dismissBreakdown,
+                actionsEnabled = analyticsVm.breakdown != null && !auditActionBusy,
+                onDelete = { analyticsVm.breakdown?.prescription?.id?.let { id -> runAuditAction(id, true) {
+                    if (scanVm.state.savedPrescriptionId == id) scanVm.clear()
+                    if (analyticsVm.breakdown?.prescription?.id == id) analyticsVm.dismissBreakdown()
+                } } },
+                onApprove = { analyticsVm.breakdown?.prescription?.id?.let { id -> runAuditAction(id, false) {
+                    analyticsVm.markBreakdownApproved(id)
+                } } },
                 // The web downloads `/api/prescriptions/{id}/export.csv`; the string
                 // comes from RxAudit.itemsToCsv, so this only changes where it goes.
                 onExportCsv = { csv ->

@@ -36,6 +36,8 @@ db.executemany('INSERT INTO scanned_medicines VALUES (?,?)', [
     (1, ' Brand X '), (1, 'brand x'), (2, 'BRAND X'), (3, 'Brand Y'),
     (6, 'Brand Y'), (7, 'Brand X'), (9, 'Brand X'), (10, 'Brand X'),
 ])
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_of INTEGER')
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_approved INTEGER NOT NULL DEFAULT 0')
 week = dict(currentUid='a', since=ms('2026-11-02T00:00'), until=ms('2026-11-09T00:00'))
 doctors = db.execute(query('observeDashboardTopDoctors'), week).fetchall()
 assert [(n.lower(), c) for n, c in doctors] == [('dr a',2), ('dr b',1), ('dr c',1)], doctors

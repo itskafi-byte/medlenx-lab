@@ -57,6 +57,7 @@ data class FilterState(
  */
 const val RX_FILTER_SQL =
     " AND p.user_id = :currentUid" +
+    " AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1)" +
     " AND (:district IS NULL OR :district = '' OR p.district = :district)" +
         " AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)" +
         " AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)" +

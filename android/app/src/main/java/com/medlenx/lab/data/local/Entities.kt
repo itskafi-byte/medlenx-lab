@@ -113,6 +113,7 @@ data class PrescriptionEntity(
     @ColumnInfo(name = "total_medicines") val totalMedicines: Int,
     @ColumnInfo(name = "mr_id") val mrId: String,
     @ColumnInfo(name = "duplicate_of") val duplicateOf: Long?,
+    @ColumnInfo(name = "duplicate_approved", defaultValue = "0") val duplicateApproved: Boolean = false,
     @ColumnInfo(name = "off_territory") val offTerritory: Boolean,
     @ColumnInfo(name = "territory_note") val territoryNote: String?,
     val lat: Double?,
@@ -475,4 +476,12 @@ data class ScanExportRow(
 data class ManufacturerAlias(
     @PrimaryKey @ColumnInfo(name = "alias_string", collate = ColumnInfo.NOCASE) val aliasString: String,
     @ColumnInfo(name = "canonical_company_id") val canonicalCompanyId: String,
+)
+
+/** Device-local marker to stop a deleted cloud scan being restored to this account. */
+@Entity(tableName = "deleted_scan_tombstones", primaryKeys = ["user_id", "company_id", "scan_id"])
+data class DeletedScanTombstone(
+    @ColumnInfo(name = "user_id") val userId: String,
+    @ColumnInfo(name = "company_id") val companyId: String,
+    @ColumnInfo(name = "scan_id") val scanId: String,
 )

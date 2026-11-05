@@ -181,6 +181,8 @@ class ScanRepository(
                     doctorId = resolveDoctorId(prescription, uid),
                 ),
             )
+            // Room's AUTOINCREMENT primary key survives deletes, unlike row count.
+            prescriptionDao.setRxNumber(uid, id, "RX-$id")
             val rows = result.medicines.mapIndexed { index, med ->
                 val audit = enriched.getOrNull(index)
                 // The catalogue-resolved manufacturer wins. The VL is told never to guess a

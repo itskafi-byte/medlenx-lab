@@ -72,6 +72,8 @@ import com.medlenx.lab.ui.screens.rx.ClinicalStrip
 import com.medlenx.lab.ui.screens.rx.RxAuditFilter
 import com.medlenx.lab.ui.screens.rx.PillButton
 import com.medlenx.lab.ui.theme.MlxShape
+import com.medlenx.lab.ui.screens.rx.DeleteScanButton
+import com.medlenx.lab.ui.screens.rx.DuplicateOverrideButton
 import com.medlenx.lab.ui.theme.MlxType
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -107,6 +109,9 @@ fun RxBreakdownSheet(
     /** Shown in place of the panel body when the payload could not be read. */
     loadError: String?,
     onDismiss: () -> Unit,
+    actionsEnabled: Boolean,
+    onDelete: () -> Unit,
+    onApprove: () -> Unit,
     onExportCsv: (String) -> Unit,
     onCopyList: (String) -> Unit,
     onCopyPitch: (String) -> Unit,
@@ -147,9 +152,11 @@ fun RxBreakdownSheet(
                 if (drawer == null) {
                     LoadingHeader(loading = loading, loadError = loadError, onDismiss = onDismiss)
                 } else {
-                    DrawerHeader(drawer = drawer, onDismiss = onDismiss)
+                    DrawerHeader(drawer = drawer, onDismiss = onDismiss, actionsEnabled = actionsEnabled, onDelete = onDelete)
                     DrawerBody(
                         drawer = drawer,
+                        actionsEnabled = actionsEnabled,
+                        onApprove = onApprove,
                         onExportCsv = onExportCsv,
                         onCopyList = onCopyList,
                         onCopyPitch = onCopyPitch,
@@ -171,6 +178,8 @@ private fun DrawerTopBar(
     subtitle: String,
     tag: (@Composable () -> Unit)?,
     onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    actionsEnabled: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -209,6 +218,7 @@ private fun DrawerTopBar(
                 )
             }
         }
+        if (onDelete != null) DeleteScanButton(enabled = actionsEnabled, onDelete = onDelete)
         MlxIconButton(Icons.Filled.Close, "Close", onDismiss)
     }
 }
@@ -228,7 +238,7 @@ private fun LoadingHeader(loading: Boolean, loadError: String?, onDismiss: () ->
 }
 
 @Composable
-private fun DrawerHeader(drawer: RxAuditDrawer, onDismiss: () -> Unit) {
+private fun DrawerHeader(drawer: RxAuditDrawer, onDismiss: () -> Unit, actionsEnabled: Boolean, onDelete: () -> Unit) {
     val p = drawer.prescription
     // `${doctor (specialty)} • N Medicines Detected • MR x • district` — the web builds
     // this list, drops the blanks, and joins with a bullet (`index.html:2806`). The
@@ -247,7 +257,7 @@ private fun DrawerHeader(drawer: RxAuditDrawer, onDismiss: () -> Unit) {
         DrawerTopBar(
             title = "Prescription Audit Summary — Rx #${p.rxNo}",
             subtitle = subtitle,
-            tag = if (p.duplicateOf != null) {
+            tag = if (p.duplicateOf != null && !p.duplicateApproved) {
                 {
                     StatusPill(
                         text = "Duplicate Rx Detected",
@@ -259,6 +269,8 @@ private fun DrawerHeader(drawer: RxAuditDrawer, onDismiss: () -> Unit) {
                 null
             },
             onDismiss = onDismiss,
+            actionsEnabled = actionsEnabled,
+            onDelete = onDelete,
         )
     }
 }
@@ -268,6 +280,8 @@ private fun DrawerHeader(drawer: RxAuditDrawer, onDismiss: () -> Unit) {
 @Composable
 private fun DrawerBody(
     drawer: RxAuditDrawer,
+    actionsEnabled: Boolean,
+    onApprove: () -> Unit,
     onExportCsv: (String) -> Unit,
     onCopyList: (String) -> Unit,
     onCopyPitch: (String) -> Unit,
@@ -331,7 +345,7 @@ private fun DrawerBody(
                 Text("Prescription image unavailable on this device.", style = MlxType.BodySmall,
                     color = Mlx.Text600, modifier = Modifier.padding(bottom = MlxD.Space3))
             }
-            DuplicateNote(drawer)
+            DuplicateNote(drawer, actionsEnabled, onApprove)
 
             if (drawer.prescription.restoreScanId == null) ClinicalStrip(
                 antibiotics = drawer.lines.count { it.isAntibiotic },
@@ -900,36 +914,21 @@ private fun PortfolioChip(
  * than inside the table, where it is on the web.
  */
 @Composable
-private fun DuplicateNote(drawer: RxAuditDrawer) {
-    val original = drawer.duplicateOf ?: return
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = MlxD.Space3)
+private fun DuplicateNote(drawer: RxAuditDrawer, actionsEnabled: Boolean, onApprove: () -> Unit) {
+    if (drawer.prescription.duplicateOf == null || drawer.prescription.duplicateApproved) return
+    val original = drawer.duplicateOf
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = MlxD.Space3)
             .background(Mlx.DangerBg, MlxShape.Small)
-            .border(1.dp, Mlx.DangerBorder, MlxShape.Small)
-            .padding(MlxD.Space2),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .border(1.dp, Mlx.DangerBorder, MlxShape.Small).padding(MlxD.Space2),
     ) {
-        Icon(
-            imageVector = Icons.Filled.Warning,
-            contentDescription = null,
-            tint = Mlx.DangerText,
-            modifier = Modifier.size(13.dp),
-        )
         Text(
-            text = buildString {
-                append("Fraud alert: this physical prescription appears to have been ")
-                append("scanned before — first captured as Rx #${original.rxNo} ")
-                append("(${original.mrId.ifBlank { "unknown MR" }}")
-                if (original.createdAt > 0L) {
-                    append(", ${scannedStamp(original.createdAt)}")
-                }
-                append("). Excluded from target credit pending RSM review.")
-            },
-            style = MlxType.Footnote,
-            color = Mlx.DangerText,
+            text = "Fraud alert: this prescription appears to have been scanned before. " +
+                (original?.let { "First captured as Rx #${it.rxNo}. " } ?: "The original scan is no longer available locally. ") +
+                "Excluded from local target credit until overridden. This testing override is not manager approval and does not change cloud records.",
+            style = MlxType.Footnote, color = Mlx.DangerText,
         )
+        DuplicateOverrideButton(enabled = actionsEnabled, onApprove = onApprove)
     }
 }
 

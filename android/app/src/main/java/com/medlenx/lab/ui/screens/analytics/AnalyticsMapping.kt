@@ -173,7 +173,7 @@ fun List<PrescriptionEntity>.toRecentRxRows(
         area = listOf(p.upazila, p.district).filter { it.isNotBlank() }
             .joinToString(" ").ifBlank { "—" },
         mr = p.mrId.ifBlank { "—" },
-        duplicate = p.duplicateOf != null,
+        duplicate = p.duplicateOf != null && !p.duplicateApproved,
         officerName = officerName?.takeIf { currentUid != null && p.userId == currentUid && it.isNotBlank() },
         officerAvatarUri = officerAvatarUri?.takeIf { currentUid != null && p.userId == currentUid },
         officerAvatarId = officerAvatarId?.takeIf { currentUid != null && p.userId == currentUid },

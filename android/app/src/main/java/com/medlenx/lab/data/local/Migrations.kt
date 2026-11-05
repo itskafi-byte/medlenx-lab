@@ -169,6 +169,14 @@ object Migrations {
         }
     }
 
+    /** Device-local approvals and deletion tombstones do not alter cloud records. */
+    val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `prescriptions` ADD COLUMN `duplicate_approved` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `deleted_scan_tombstones` (`user_id` TEXT NOT NULL, `company_id` TEXT NOT NULL, `scan_id` TEXT NOT NULL, PRIMARY KEY(`user_id`, `company_id`, `scan_id`))")
+        }
+    }
+
     /** Preserve the previously recorded manufacturer before canonicalizing known aliases. */
     fun migration11To12(context: android.content.Context): Migration = object : Migration(11, 12) {
         override fun migrate(db: SupportSQLiteDatabase) {

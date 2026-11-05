@@ -88,6 +88,7 @@ data class ScanUiState(
     val selectedMedicine: Int = 0,
     val brandSuggestions: List<MedexProduct> = emptyList(),
     val receipt: SavedReceipt? = null,
+    val savedPrescriptionId: Long? = null,
 
     /** True when the current capture is parked in the offline queue awaiting a replay. */
     val parked: Boolean = false,
@@ -1071,14 +1072,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val match = hash?.let { findDuplicate(it) }
                 val repId = profile?.employeeId?.takeIf { it.isNotBlank() } ?: DEFAULT_MR_ID
-                // Prescriptions are never deleted in this app, so the row count is a
-                // safe monotonic sequence and the number can be known before insert -
-                // no read-modify-write round trip to fill it in afterwards.
-                val rxNo = "RX-${prescriptionDao.prescriptionCount(currentUid) + 1}"
-
-                scanRepository.saveVerified(
+                val savedPrescriptionId = scanRepository.saveVerified(
                     prescription = PrescriptionEntity(
-                        rxNo = rxNo,
+                        rxNo = "", // assigned from the auto-incremented ID in the save transaction
                         imagePath = imageFile?.absolutePath.orEmpty(),
                         imageHash = hash,
                         doctorName = doctor.name,
@@ -1106,9 +1102,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     expectedUid = currentUid,
                     enriched = audit,
                 )
+                val rxNo = "RX-$savedPrescriptionId"
                 duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()
                 state = state.copy(
                     phase = ScanPhase.Saved,
+                    savedPrescriptionId = savedPrescriptionId,
                     receipt = SavedReceipt(
                         rxNumber = rxNo,
                         medicineCount = corrected.medicines.size,
@@ -1147,6 +1145,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Resets to the empty state so the rep can capture the next prescription. */
+    fun clearDuplicateAlert() { duplicateOfRxIds = emptyList() }
+
     fun scanAnother() { clear() }
 
     /** Captures a GPS fix and immediately geofences it against the assigned territory. */

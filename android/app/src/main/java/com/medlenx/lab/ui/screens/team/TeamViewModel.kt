@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.stateIn
 import com.medlenx.lab.data.sync.TeamFeedRepository
 import com.medlenx.lab.data.sync.TeamFeedState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 
 /**
  * Backs the Territory Manager / RSM command screen.
@@ -146,8 +148,11 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
         tierFilter = tier
     }
 
+    private var loadJob: Job? = null
+
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             error = null
             runCatching {
                 val since = System.currentTimeMillis() - windowMillis
@@ -207,6 +212,7 @@ class TeamViewModel(application: Application) : AndroidViewModel(application) {
                 doctorTargets = app.graph.profileDao.doctorTargetRows(currentUid)
                 visitLog = app.graph.profileDao.recentVisits(currentUid, limit = 20)
             }.onFailure { e ->
+                if (e is CancellationException) throw e
                 error = e.message ?: "Could not load team aggregates"
             }
             loaded = true

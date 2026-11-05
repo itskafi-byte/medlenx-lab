@@ -262,6 +262,12 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun markBreakdownApproved(id: Long) {
+        breakdown = breakdown?.let { current ->
+            if (current.prescription.id == id) current.copy(prescription = current.prescription.copy(duplicateApproved = true)) else current
+        }
+    }
+
     fun dismissBreakdown() {
         auditLoadJob?.cancel()
         auditLoadJob = null

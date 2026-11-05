@@ -100,6 +100,9 @@ fun RxAuditScreen(
     offTerritory: Boolean,
     duplicateOfRxIds: List<String>,
     onBack: () -> Unit,
+    actionsEnabled: Boolean,
+    onDelete: () -> Unit,
+    onApprove: () -> Unit,
     onPitchCard: (EnrichedMedicine) -> Unit,
     onVerifyAgainstMedex: (EnrichedMedicine) -> Unit,
     onExportCsv: (String) -> Unit,
@@ -147,6 +150,8 @@ fun RxAuditScreen(
             },
             duplicateDetected = duplicateOfRxIds.isNotEmpty(),
             onBack = onBack,
+            actionsEnabled = actionsEnabled,
+            onDelete = onDelete,
         )
 
         // Filter pills - horizontal scroll, exactly as the web's overflow-x row.
@@ -173,7 +178,7 @@ fun RxAuditScreen(
         }
 
         if (duplicateOfRxIds.isNotEmpty()) {
-            DuplicateFraudNote(duplicateOfRxIds)
+            DuplicateFraudNote(duplicateOfRxIds, actionsEnabled, onApprove)
         }
 
         ClinicalStrip(
@@ -226,6 +231,8 @@ private fun AuditHeader(
     subtitle: String,
     duplicateDetected: Boolean,
     onBack: () -> Unit,
+    actionsEnabled: Boolean,
+    onDelete: () -> Unit,
 ) {
     MlxCard {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MlxD.Space2)) {
@@ -234,6 +241,7 @@ private fun AuditHeader(
                 contentDescription = "Back to verification",
                 onClick = onBack,
             )
+            DeleteScanButton(enabled = actionsEnabled, onDelete = onDelete)
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -273,7 +281,7 @@ private fun AuditHeader(
 // ------------------------------------------------------------ fraud notice ----
 
 @Composable
-private fun DuplicateFraudNote(duplicateOfRxIds: List<String>) {
+private fun DuplicateFraudNote(duplicateOfRxIds: List<String>, actionsEnabled: Boolean, onApprove: () -> Unit) {
     // #FEF2F2 / #FECACA / #B31D1D, per App.tsx:838.
     Box(
         modifier = Modifier
@@ -282,21 +290,24 @@ private fun DuplicateFraudNote(duplicateOfRxIds: List<String>) {
             .background(Mlx.DangerSoftBg)
             .padding(MlxD.Space3),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(
-                imageVector = Icons.Filled.Warning,
-                contentDescription = null,
-                tint = Mlx.DangerDeep,
-                modifier = Modifier.size(14.dp),
-            )
-            Text(
-                text = "Fraud alert: this physical prescription appears to have been " +
-                    "scanned before — first captured as " +
-                    duplicateOfRxIds.joinToString(", ") { "Rx #$it" } +
-                    ". Excluded from target credit pending RSM review.",
-                style = MlxType.BodySmall,
-                color = Mlx.DangerDeep,
-            )
+        Column {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = Mlx.DangerDeep,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = "Fraud alert: this physical prescription appears to have been " +
+                        "scanned before — first captured as " +
+                        duplicateOfRxIds.joinToString(", ") { "Rx #$it" } +
+                        ". Excluded from local target credit until overridden. This testing override is not manager approval and does not change cloud records.",
+                    style = MlxType.BodySmall,
+                    color = Mlx.DangerDeep,
+                )
+            }
+            DuplicateOverrideButton(enabled = actionsEnabled, onApprove = onApprove)
         }
     }
 }

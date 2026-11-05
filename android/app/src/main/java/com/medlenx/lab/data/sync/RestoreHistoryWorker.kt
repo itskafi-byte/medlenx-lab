@@ -50,6 +50,7 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
                     check(auth.currentUser?.uid == uid)
                     for (doc in page.documents) {
                         if (doc.metadata.hasPendingWrites() || doc.getString("createdByUid") != uid) continue
+                        if (dao.isDeletedScan(uid, company, doc.id) != 0) continue
                         val restored = runCatching { parse(doc, uid, company) }.getOrNull() ?: continue
                         // Check ALL local scans, including pending ones, before using
                         // the restored-ID unique index. Never replace local detail/photos.

@@ -32,6 +32,8 @@ INSERT INTO scanned_medicines VALUES
  (4,4,'Own'),(5,4,'Other'),(6,5,'Other'),
  (7,6,'Own'),(8,7,'Own'),(9,8,'Own');
 ''')
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_of INTEGER')
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_approved INTEGER NOT NULL DEFAULT 0')
 args = dict(currentUid='alice', since=0, ownLike='%Own%', ownCompany='Own', limit=10, offset=0,
             district=None, territory=None, specialty=None, mrId=None, source=None, searchQuery='', specialtyFilter='', sortMode='DEFEND')
 leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
@@ -96,6 +98,17 @@ by_name = {r[0]: r for r in leaders}
 assert by_name['Low conversion'][5] == 2 and by_name['Low conversion'][8] == 1
 assert by_name['High conversion'][5] == 2 and by_name['High conversion'][8] == 2
 assert all(r[8] is None for r in db.execute(query('doctorLeaderRows'), dict(args, ownCompany='')).fetchall())
+
+
+# A flagged scan stays in audit history, but not leaderboard totals or drill-down.
+db.execute('UPDATE prescriptions SET duplicate_of=1 WHERE id=4')
+unapproved = {r[0]:r for r in db.execute(query('doctorLeaderRows'), args)}
+assert unapproved['Low conversion'][5] == 1
+assert db.execute(query('doctorLeaderMedicines'), drill).fetchall() == [('Brand B','Other',1), ('Unidentified medicine','Owned Other',1)]
+assert db.execute(query('observeAuditFeedCount'), params).fetchone()[0] == 8
+db.execute('UPDATE prescriptions SET duplicate_approved=1 WHERE id=4')
+approved = {r[0]:r for r in db.execute(query('doctorLeaderRows'), args)}
+assert approved['Low conversion'][5] == 2
 
 entities = (root / 'data/local/Entities.kt').read_text()
 vm = (root / 'ui/screens/analytics/AnalyticsViewModel.kt').read_text()

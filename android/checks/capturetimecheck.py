@@ -23,6 +23,8 @@ rows = [
 ]
 db.executemany('INSERT INTO prescriptions VALUES (?,?,?,?,?,?,?,?)', rows)
 db.executemany('INSERT INTO scanned_medicines VALUES (?,?)', [(1,'Brand'),(2,'Brand'),(3,'Brand'),(4,'Brand'),(5,'Other')])
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_of INTEGER')
+db.execute('ALTER TABLE prescriptions ADD COLUMN duplicate_approved INTEGER NOT NULL DEFAULT 0')
 update = sql('updateRestoredCaptureTime')
 def correct(uid, company, scan, captured):
     return db.execute(update, dict(currentUid=uid, company=company, scanId=scan, capturedAt=ms(captured))).rowcount

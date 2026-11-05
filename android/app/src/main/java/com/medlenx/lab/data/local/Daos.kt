@@ -122,6 +122,24 @@ interface PrescriptionDao {
     @Query("UPDATE prescriptions SET sync_status = 'FAILED_REJECTED' WHERE id = :id AND user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND sync_status = 'PENDING'")
     suspend fun markRejected(currentUid: String, id: Long, company: String, scanId: String): Int
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun addDeletedScanTombstone(tombstone: DeletedScanTombstone)
+
+    @Query("SELECT COUNT(*) FROM deleted_scan_tombstones WHERE user_id = :currentUid AND company_id = :company AND scan_id = :scanId")
+    suspend fun isDeletedScan(currentUid: String, company: String, scanId: String): Int
+
+    @Query("UPDATE prescriptions SET duplicate_approved = 1 WHERE user_id = :currentUid AND id = :id AND duplicate_of IS NOT NULL AND duplicate_approved = 0")
+    suspend fun approveDuplicateForTesting(currentUid: String, id: Long): Int
+
+    @Query("DELETE FROM scanned_medicines WHERE prescription_id = :id AND EXISTS (SELECT 1 FROM prescriptions p WHERE p.id = :id AND p.user_id = :currentUid)")
+    suspend fun deleteOwnedMedicines(currentUid: String, id: Long)
+
+    @Query("DELETE FROM doctor_visits WHERE prescription_id = :id AND user_id = :currentUid")
+    suspend fun deleteOwnedVisits(currentUid: String, id: Long)
+
+    @Query("DELETE FROM prescriptions WHERE id = :id AND user_id = :currentUid")
+    suspend fun deleteOwnedPrescription(currentUid: String, id: Long): Int
+
     /** Pending new audits only; historical scans are intentionally not uploaded. */
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND sync_status = 'PENDING' ORDER BY id ASC")
     suspend fun pendingUploads(currentUid: String): List<PrescriptionEntity>
@@ -148,7 +166,7 @@ interface PrescriptionDao {
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid ORDER BY created_at DESC LIMIT :limit")
     fun observeRecent(currentUid: String, limit: Int = 10): Flow<List<PrescriptionEntity>>
 
-    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND created_at >= :start AND created_at < :end")
+    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid AND created_at >= :start AND created_at < :end AND (duplicate_of IS NULL OR duplicate_approved = 1)")
     fun observeCountBetween(currentUid: String, start: Long, end: Long): Flow<Int>
 
     @Query("SELECT * FROM prescriptions WHERE user_id = :currentUid AND id = :id")
@@ -206,7 +224,7 @@ interface PrescriptionDao {
         FROM prescriptions p
         LEFT JOIN doctors d ON p.doctor_id = d.id
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND IFNULL(p.doctor_name, '') != ''
         GROUP BY p.doctor_id
         HAVING rx >= :minRx
         ORDER BY rx DESC
@@ -266,7 +284,7 @@ interface PrescriptionDao {
         SELECT p.id AS id, p.created_at AS createdAt, p.mr_id AS mrId,
                p.doctor_name AS doctorName, p.district AS district,
                p.territory AS territory, p.lat AS lat, p.lng AS lng,
-               p.off_territory AS offTerritory, p.duplicate_of AS duplicateOf,
+               p.off_territory AS offTerritory, CASE WHEN p.duplicate_approved = 1 THEN NULL ELSE p.duplicate_of END AS duplicateOf,
                (SELECT COUNT(*) FROM scanned_medicines sm
                  WHERE sm.prescription_id = p.id) AS items
         FROM prescriptions p
@@ -283,7 +301,7 @@ interface PrescriptionDao {
         SELECT p.created_at AS createdAt, sm.company_name AS companyName
         FROM prescriptions p
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since
         """
     )
     suspend fun trendRows(currentUid: String, since: Long): List<TrendItemRow>
@@ -299,7 +317,7 @@ interface PrescriptionDao {
         SELECT sm.brand_name AS brand, COUNT(*) AS captured
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND p.created_at < :until
         GROUP BY sm.brand_name COLLATE NOCASE
         """
     )
@@ -311,7 +329,7 @@ interface PrescriptionDao {
         SELECT TRIM(sm.brand_name) AS brand, COUNT(DISTINCT p.id) AS captured
         FROM scanned_medicines sm
         INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND p.created_at < :until
           AND TRIM(sm.brand_name) != ''
         GROUP BY TRIM(sm.brand_name) COLLATE NOCASE
         """
@@ -323,7 +341,7 @@ interface PrescriptionDao {
         """
         SELECT TRIM(p.doctor_name) AS name, COUNT(*) AS count
         FROM prescriptions p
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND p.created_at < :until
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND p.created_at < :until
           AND TRIM(IFNULL(p.doctor_name, '')) != ''
         GROUP BY TRIM(p.doctor_name) COLLATE NOCASE
         ORDER BY count DESC, name COLLATE NOCASE ASC
@@ -345,7 +363,7 @@ interface PrescriptionDao {
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownItems
         FROM prescriptions p
         LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.district, '') != ''
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND IFNULL(p.district, '') != ''
         GROUP BY p.district, p.upazila
         ORDER BY items DESC
         """
@@ -780,7 +798,7 @@ interface PrescriptionDao {
     @Query("""
         WITH filtered AS (
             SELECT p.* FROM prescriptions p
-            WHERE p.user_id = :currentUid AND p.created_at >= :since
+            WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since
               AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
           AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
           AND (:district IS NULL OR :district = '' OR p.district = :district)
@@ -829,7 +847,7 @@ interface PrescriptionDao {
         SELECT p.doctor_id AS doctorId, p.id AS prescriptionId,
                IFNULL(sm.company_name, '') AS company, COUNT(sm.id) AS medicineCount
         FROM prescriptions p LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since
           AND (p.doctor_id IN (:doctorIds) OR (:includeUnassigned = 1 AND p.doctor_id IS NULL))
           AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
           AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
@@ -846,7 +864,7 @@ interface PrescriptionDao {
 
     @Query("""
         SELECT COUNT(*) FROM (SELECT p.doctor_id FROM prescriptions p
-        WHERE p.user_id = :currentUid AND p.created_at >= :since
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since
           AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
           AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
           AND (:district IS NULL OR :district = '' OR p.district = :district)
@@ -864,7 +882,7 @@ interface PrescriptionDao {
         SELECT CASE WHEN TRIM(IFNULL(sm.brand_name, '')) = '' THEN 'Unidentified medicine' ELSE TRIM(sm.brand_name) END AS brand,
                IFNULL(sm.company_name, '') AS company, COUNT(*) AS count
         FROM prescriptions p JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.doctor_id IS :doctorId AND p.created_at >= :since
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.doctor_id IS :doctorId AND p.created_at >= :since
           AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
           AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
           AND (:district IS NULL OR :district = '' OR p.district = :district)
@@ -929,7 +947,7 @@ interface PrescriptionDao {
     @Query("""
         SELECT p.doctor_specialty AS specialty, IFNULL(sm.company_name, '') AS company, COUNT(*) AS count
         FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since AND IFNULL(p.doctor_specialty, '') != ''
+        WHERE p.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1) AND p.created_at >= :since AND IFNULL(p.doctor_specialty, '') != ''
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
@@ -1009,8 +1027,8 @@ interface PrescriptionDao {
     @Query("SELECT COUNT(*) FROM scanned_medicines sm INNER JOIN prescriptions p ON sm.prescription_id = p.id WHERE p.user_id = :currentUid")
     suspend fun medicineCount(currentUid: String): Int
 
-    @Query("SELECT COUNT(*) FROM prescriptions WHERE user_id = :currentUid")
-    suspend fun prescriptionCount(currentUid: String): Int
+    @Query("UPDATE prescriptions SET rx_no = :rxNo WHERE id = :id AND user_id = :currentUid")
+    suspend fun setRxNumber(currentUid: String, id: Long, rxNo: String)
 
     /**
      * Every stored perceptual hash, oldest first — the duplicate scan's input.
@@ -1076,7 +1094,7 @@ interface ProfileDao {
         """
         SELECT t.id AS targetId, t.doctor_name AS doctorName, t.specialty AS specialty,
                t.monthly_target AS monthlyTarget,
-               (SELECT COUNT(*) FROM doctor_visits v WHERE v.target_id = t.id AND v.user_id = :currentUid) AS visits
+               (SELECT COUNT(*) FROM doctor_visits v JOIN prescriptions p ON p.id = v.prescription_id AND p.user_id = v.user_id WHERE v.target_id = t.id AND v.user_id = :currentUid AND (p.duplicate_of IS NULL OR p.duplicate_approved = 1)) AS visits
         FROM doctor_targets t
         WHERE t.user_id = :currentUid
         ORDER BY t.doctor_name
