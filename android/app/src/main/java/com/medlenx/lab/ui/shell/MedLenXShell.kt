@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,6 +75,7 @@ import com.medlenx.lab.ui.screens.hub.HubViewModelFactory
 import com.medlenx.lab.ui.screens.rx.PitchTarget
 import com.medlenx.lab.ui.screens.rx.DoctorPitchCard
 import com.medlenx.lab.ui.screens.rx.RxAuditScreen
+import com.medlenx.lab.ui.screens.scan.ScanPhase
 import com.medlenx.lab.ui.screens.scan.ScanScreen
 import com.medlenx.lab.ui.screens.scan.ScanViewModel
 import com.medlenx.lab.ui.screens.scan.ScanViewModelFactory
@@ -122,6 +126,24 @@ fun MedLenXShell(
     val scanVm: ScanViewModel = viewModel(
         factory = ScanViewModelFactory(context.applicationContext as Application),
     )
+
+    // The analytics capture action uses a shell-owned launcher so it survives
+    // navigation and verifies the account again before accepting an image.
+    var analyticsPickerUid by rememberSaveable { mutableStateOf<String?>(null) }
+    val analyticsImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val uid = analyticsPickerUid
+        analyticsPickerUid = null
+        if (uri != null && uid != null && FirebaseAuth.getInstance().currentUser?.uid == uid && scanVm.currentUid == uid) {
+            if (scanVm.state.phase == ScanPhase.Empty) {
+                scanVm.onImagePicked(uri)
+                navController.navigate(Destination.Scan.route) {
+                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            } else Toast.makeText(context, "Finish the current prescription before selecting another.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     /** Same reasoning as [scanVm]: the Hub's filters and month must survive navigation. */
     val hubVm: HubViewModel = viewModel(
@@ -282,6 +304,25 @@ fun MedLenXShell(
                                     officerAvatarUri = settingsVm.avatarUri,
                                     officerAvatarId = settingsVm.avatarId,
                                     onOpenFilters = { filterOpen = true },
+                                    onCapture = {
+                                        val uid = FirebaseAuth.getInstance().currentUser?.uid
+                                        if (uid == null || uid != scanVm.currentUid) {
+                                            Toast.makeText(context, "Sign in before choosing an image.", Toast.LENGTH_LONG).show()
+                                        } else if (scanVm.state.phase != ScanPhase.Empty) {
+                                            Toast.makeText(context, "Finish the current prescription before selecting another.", Toast.LENGTH_LONG).show()
+                                            navController.navigate(Destination.Scan.route) {
+                                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        } else {
+                                            analyticsPickerUid = uid
+                                            runCatching { analyticsImagePicker.launch("image/" + "*") }.onFailure {
+                                                analyticsPickerUid = null
+                                                Toast.makeText(context, "Could not open the image picker.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    },
                                     // Already accepted by the screen and forwarded to
                                     // RecentPrescriptions, but never supplied here, so
                                     // the rows fell through to the empty default.

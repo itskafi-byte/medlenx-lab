@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.analytics
 import android.text.format.DateUtils
 import kotlinx.coroutines.launch
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
@@ -55,6 +57,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -120,14 +123,13 @@ fun AnalyticsScreen(
     onOpenFilters: () -> Unit = {},
     onExportPdf: () -> Unit = {},
     onExportCsv: () -> Unit = {},
+    onCapture: () -> Unit = {},
     onSelectPrescription: (RecentRxRow) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
     val scrollScope = rememberCoroutineScope()
     var feedPosition by remember { mutableIntStateOf(0) }
     var scrollTop by remember { mutableIntStateOf(0) }
-    Column(modifier = modifier.fillMaxSize()) {
-        LeaderSearchBar(vm)
     Column(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
         //
@@ -135,14 +137,13 @@ fun AnalyticsScreen(
         // bar via inner.calculateTopPadding(). Padding here as well offset the hero
         // a second time, which is where the gap above "Prescription Capture" came
         // from -- not from a window inset and not from AppBarHeight.
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .weight(1f)
             .onGloballyPositioned { scrollTop = it.positionInRoot().y.toInt() }
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        HeroBanner()
+        HeroBanner(onCapture)
         FilterBar(
             activeCount = vm.filters.activeCount,
             onOpenFilters = onOpenFilters,
@@ -216,7 +217,25 @@ fun AnalyticsScreen(
         }
 
         MlxCard {
-            SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
+            var searchOpen by remember { mutableStateOf(vm.leaderSearch.isNotBlank()) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                AnimatedContent(targetState = searchOpen, modifier = Modifier.weight(1f), label = "doctor search") { searching ->
+                    if (searching) {
+                        OutlinedTextField(value = vm.leaderSearch, onValueChange = vm::updateLeaderSearch,
+                            modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Search doctors") })
+                    } else {
+                        SectionHeader(title = "C. Top Doctor Prescribers — Leaderboard", icon = Icons.Filled.Person)
+                    }
+                }
+                IconButton(onClick = {
+                    if (searchOpen) vm.updateLeaderSearch("")
+                    searchOpen = !searchOpen
+                }) {
+                    Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search,
+                        contentDescription = if (searchOpen) "Close and clear doctor search" else "Search doctors")
+                }
+            }
+            LeaderSpecialtyFilter(vm)
             val doctorList = vm.leaders.toLeaderRows(vm.leaderOffset)
             ScrollableTabRow(selectedTabIndex = vm.leaderPeriod.ordinal, edgePadding = 0.dp) {
                 LeaderPeriod.entries.forEach { period ->
@@ -231,6 +250,14 @@ fun AnalyticsScreen(
                 }
             }
             Text("Trend arrows are illustrative, not historical data.", style = MlxType.MicroPill, color = Mlx.Text500)
+            vm.leaderError?.let { Text(it, style = MlxType.BodySmall, color = MaterialTheme.colorScheme.error) }
+            if (!vm.leaderLoading && vm.leaderError == null && vm.leaderTotal == 0) {
+                when {
+                    vm.leaderSpecialty.isNotBlank() -> Text("0 results for ${vm.leaderSpecialty}. Clear filter to broaden results.", style = MlxType.BodySmall, color = Mlx.Text500)
+                    vm.leaderSearch.isNotBlank() -> Text("0 results for ${vm.leaderSearch}. Clear search to broaden results.", style = MlxType.BodySmall, color = Mlx.Text500)
+                    else -> Text("No doctors found for this period and filters.", style = MlxType.BodySmall, color = Mlx.Text500)
+                }
+            }
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 doctorList.forEach { doctor ->
                     DoctorLeaderRowView(doctor,
@@ -303,7 +330,6 @@ fun AnalyticsScreen(
                 onOpenCompany = vm::openCompanyDrilldown,
             )
         }
-    }
     }
 }
 
@@ -623,7 +649,7 @@ private fun RowScope.Spacer1Cell() {
  * The banner is a shortcut into the Scan tab; on the web it is the same drop zone.
  */
 @Composable
-private fun HeroBanner() {
+private fun HeroBanner(onCapture: () -> Unit) {
     DarkHero {
         Text(
             text = "Prescription Capture",
@@ -632,7 +658,7 @@ private fun HeroBanner() {
             modifier = Modifier.padding(bottom = 6.dp),
         )
         Text(
-            text = "Drop prescription image here or click to upload. Supports camera, rotation, contrast.",
+            text = "Choose a prescription image to review its medicines.",
             style = MlxType.Body,
             color = Color.White.copy(alpha = 0.8f),
             modifier = Modifier.padding(bottom = 12.dp),
@@ -641,6 +667,7 @@ private fun HeroBanner() {
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White.copy(alpha = 0.08f), MlxShape.Medium)
+                .clickable(onClick = onCapture)
                 .border(
                     1.dp,
                     Color.White.copy(alpha = 0.3f),
@@ -658,12 +685,12 @@ private fun HeroBanner() {
                     .size(20.dp),
             )
             Text(
-                text = "Drop prescription or click",
+                text = "Choose a prescription image",
                 style = MlxType.Body.copy(fontWeight = FontWeight.Medium),
                 color = Color.White,
             )
             Text(
-                text = "Full-width banner - primary action",
+                text = "Open image picker",
                 style = MlxType.Meta,
                 color = Color.White.copy(alpha = 0.7f),
             )
@@ -790,15 +817,16 @@ private fun MedicineBreakdownColumn(title: String, rows: List<DoctorBrandCount>,
 }
 
 @Composable
-private fun LeaderSearchBar(vm: AnalyticsViewModel) {
+private fun LeaderSpecialtyFilter(vm: AnalyticsViewModel) {
     var menuOpen by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = vm.leaderSearch, onValueChange = vm::updateLeaderSearch,
-            modifier = Modifier.weight(1f), singleLine = true, label = { Text("Search doctors") })
+    val active = vm.leaderSpecialty.isNotBlank()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Box {
-            TextButton(onClick = { menuOpen = true }, modifier = Modifier.widthIn(max = 150.dp)) {
-                Text(vm.leaderSpecialty.ifBlank { "All Specialties" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            TextButton(onClick = { menuOpen = true }, modifier = Modifier.widthIn(max = 200.dp)
+                .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, MlxShape.Medium)
+                .then(if (active) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, MlxShape.Medium) else Modifier)) {
+                Text(vm.leaderSpecialty.ifBlank { "All Specialties" }, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(text = { Text("All Specialties") }, onClick = { vm.updateLeaderSpecialty(""); menuOpen = false })
@@ -807,6 +835,7 @@ private fun LeaderSearchBar(vm: AnalyticsViewModel) {
                 }
             }
         }
+        if (active) TextButton(onClick = { vm.updateLeaderSpecialty("") }) { Text("Clear") }
     }
 }
 

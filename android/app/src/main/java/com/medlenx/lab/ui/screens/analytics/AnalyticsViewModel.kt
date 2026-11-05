@@ -147,6 +147,10 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     /** Total matching doctors, so the pagination caption is real rather than "1–3 of 42". */
+    var leaderLoading by mutableStateOf(false)
+        private set
+    var leaderError by mutableStateOf<String?>(null)
+        private set
     var leaderTotal by mutableIntStateOf(0)
         private set
     var leaderOffset by mutableIntStateOf(0)
@@ -626,6 +630,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun loadLeaderPage() {
         leaderJob?.cancel()
+        leaderLoading = true
+        leaderError = null
         leaderDetailJob?.cancel()
         expandedLeader = null
         leaderMedicines = emptyList()
@@ -659,8 +665,9 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
                 leaderOffset = offset
                 leaderTotal = total
                 leaders = DoctorIntelligence.enrich(page, intelligence, ownCompany)
+                leaderLoading = false
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message ?: "Could not load the leaderboard" }
+            catch (e: Exception) { leaderLoading = false; leaderError = e.message ?: "Could not load the leaderboard" }
         }
     }
 
