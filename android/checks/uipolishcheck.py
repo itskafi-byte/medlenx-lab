@@ -7,8 +7,12 @@ vm = (root/'ui/screens/analytics/AnalyticsViewModel.kt').read_text()
 chart = (root/'ui/screens/analytics/AnalyticsCharts.kt').read_text()
 card = (root/'ui/components/AuditFeedCard.kt').read_text()
 avatar = (root/'ui/components/OfficerAvatar.kt').read_text()
-assert 'Surface(onClick = { onDoctorClick(row.name) }' in ui and 'vm.selectDoctor(doctor)' in ui
+assert 'Surface(onClick = onDoctorClick' in ui and 'vm.selectDoctor(doctor)' in ui
 assert 'selectedDoctor' in vm and 'doctor?.doctorId' in vm
+assert 'LeaderSearchBar(vm)' in ui and 'AnimatedVisibility(visible = expanded)' in ui
+assert 'vm.toggleLeader(doctor)' in ui and 'View scan history' in ui
+assert 'updateLeaderSearch' in vm and 'updateLeaderSpecialty' in vm and 'updateLeaderSort' in vm
+assert 'Volume (Defend)' in vm and 'Opportunity (Attack)' in vm
 assert all(label in ui + vm for label in ('This Week', 'This Month', 'All Time', 'illustrative', 'Avg Share:', 'Top Competitor:'))
 assert 'row.rxCount >= 20' in ui and 'row.rxCount >= 10' in ui
 assert 'RxHabitIndicator(row.avgMedicinesPerRx, row.ourAvgMedicines)' in ui

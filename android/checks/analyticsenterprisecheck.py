@@ -33,11 +33,20 @@ INSERT INTO scanned_medicines VALUES
  (7,6,'Own'),(8,7,'Own'),(9,8,'Own');
 ''')
 args = dict(currentUid='alice', since=0, ownLike='%Own%', ownCompany='Own', limit=10, offset=0,
-            district=None, territory=None, specialty=None, mrId=None, source=None)
+            district=None, territory=None, specialty=None, mrId=None, source=None, searchQuery='', specialtyFilter='', sortMode='DEFEND')
 leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
-assert [r[0] for r in leaders] == ['High volume', 'High conversion', 'Low conversion', 'No meds'], leaders
-assert leaders[0][5] == 3 and leaders[1][5] == leaders[2][5] == 2
-assert db.execute(query('doctorLeaderRows'), dict(args, limit=1, offset=1)).fetchone()[0] == 'High conversion'
+assert [r[0] for r in leaders] == ['High conversion', 'Low conversion', 'High volume', 'No meds'], leaders
+assert leaders[2][5] == 3 and leaders[0][5] == leaders[1][5] == 2
+assert db.execute(query('doctorLeaderRows'), dict(args, limit=1, offset=1)).fetchone()[0] == 'Low conversion'
+attack = db.execute(query('doctorLeaderRows'), dict(args, sortMode='ATTACK')).fetchall()
+assert [r[0] for r in attack] == ['High volume', 'Low conversion', 'High conversion', 'No meds'], attack
+assert attack[0][10] == 1.0 and attack[1][10] == .75
+assert db.execute(query('doctorLeaderRows'), dict(args, sortMode='ATTACK', limit=1, offset=1)).fetchone()[0] == 'Low conversion'
+assert [r[0] for r in db.execute(query('doctorLeaderRows'), dict(args, searchQuery='low', specialtyFilter='cardiology'))] == ['Low conversion']
+assert db.execute(query('doctorLeaderTotal'), dict(args, searchQuery='low', specialtyFilter='cardiology')).fetchone()[0] == 1
+assert db.execute(query('doctorLeaderTotal'), dict(args, searchQuery='low', specialtyFilter='General')).fetchone()[0] == 0
+assert [r[0] for r in db.execute(query('doctorLeaderRows'), dict(args, since=14, sortMode='ATTACK'))] == ['Low conversion', 'High conversion', 'No meds']
+assert [r[0] for r in db.execute(query('doctorLeaderRows'), dict(args, currentUid='bob'))] == ['Other user']
 # SQL counts per-Rx ingredients without leaking another account or flattening the average.
 params_intel = dict(args, doctorIds=2, includeUnassigned=0)
 intelligence = db.execute(query('doctorLeaderIntelligence'), params_intel).fetchall()
@@ -56,6 +65,15 @@ assert sum((total-own)/total for own,total in counts) / len(counts) == .75
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, currentUid='bob')).fetchall() == []
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, since=14)).fetchall() == [(2,5,'Other',1)]
 assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, doctorIds=4)).fetchall() == [(4,9,'',0)]
+db.execute("ALTER TABLE scanned_medicines ADD COLUMN brand_name TEXT NOT NULL DEFAULT ''")
+db.execute("UPDATE scanned_medicines SET brand_name = CASE WHEN company_name = 'Own' THEN 'Brand A' ELSE 'Brand B' END")
+drill = dict(args, doctorId=2)
+assert db.execute(query('doctorLeaderMedicines'), drill).fetchall() == [('Brand B','Other',2), ('Brand A','Own',1)]
+assert db.execute(query('doctorLeaderMedicines'), dict(drill, since=14)).fetchall() == [('Brand B','Other',1)]
+assert db.execute(query('doctorLeaderMedicines'), dict(drill, currentUid='bob')).fetchall() == []
+assert db.execute(query('doctorLeaderMedicines'), dict(drill, specialtyFilter='General')).fetchall() == []
+assert db.execute(query('doctorLeaderMedicines'), dict(drill, searchQuery='high')).fetchall() == []
+assert db.execute(query('doctorLeaderIntelligence'), dict(params_intel, specialtyFilter='General')).fetchall() == []
 feed = query('observeAuditFeed')
 params = dict(currentUid='alice', chamber='ALL', limit=3, offset=0, doctorSelected=0, doctorId=None)
 first_page = db.execute(feed, params).fetchall()
@@ -72,7 +90,7 @@ assert sorted(mix) == [('Cardiology', 'Other',5), ('Cardiology','Own',3)], mix
 assert db.execute(query('specialtyCompanyCounts'), dict(args, currentUid='bob')).fetchall() == [('Cardiology','Own',1)]
 assert db.execute(query('specialtyCompanyCounts'), dict(args, since=16)).fetchall() == [('Cardiology','Own',1)]
 # Brand matches count distinct prescriptions, not medicine rows or substring company matches.
-db.executemany('INSERT INTO scanned_medicines VALUES (?,?,?)', [(10,4,'own'), (11,5,'Owned Other')])
+db.executemany('INSERT INTO scanned_medicines(id,prescription_id,company_name) VALUES (?,?,?)', [(10,4,'own'), (11,5,'Owned Other')])
 leaders = db.execute(query('doctorLeaderRows'), args).fetchall()
 by_name = {r[0]: r for r in leaders}
 assert by_name['Low conversion'][5] == 2 and by_name['Low conversion'][8] == 1

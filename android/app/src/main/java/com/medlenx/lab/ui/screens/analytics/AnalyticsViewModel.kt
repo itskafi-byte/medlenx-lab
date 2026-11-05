@@ -19,6 +19,7 @@ import com.medlenx.lab.data.export.ExportDocuments
 import com.medlenx.lab.data.local.FilterOptions
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.local.AuditFeedEvent
+import com.medlenx.lab.data.local.DoctorBrandCount
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.repo.AnalyticsMetrics
 import com.medlenx.lab.data.repo.CompanySlice
@@ -84,14 +85,63 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         private set
     var currentCompanyName by mutableStateOf("")
         private set
+    var leaderSearch by mutableStateOf("")
+        private set
+    var leaderSpecialty by mutableStateOf("")
+        private set
+    var leaderSort by mutableStateOf(LeaderSort.DEFEND)
+        private set
+    var expandedLeader by mutableStateOf<DoctorLeaderRow?>(null)
+        private set
+    var leaderMedicines by mutableStateOf<List<DoctorBrandCount>>(emptyList())
+        private set
+    var leaderMedicinesLoading by mutableStateOf(false)
+        private set
+    var leaderMedicinesError by mutableStateOf<String?>(null)
+        private set
+    private var leaderDetailJob: Job? = null
+    private fun resetLeader() {
+        leaderDetailJob?.cancel()
+        expandedLeader = null
+        leaderMedicines = emptyList()
+        leaderMedicinesError = null
+        leaderMedicinesLoading = false
+        leaderOffset = 0
+        loadLeaderPage()
+    }
+    fun updateLeaderSearch(value: String) { leaderSearch = value; resetLeader() }
+    fun updateLeaderSpecialty(value: String) { leaderSpecialty = value; resetLeader() }
+    fun updateLeaderSort(value: LeaderSort) { if (leaderSort != value) { leaderSort = value; resetLeader() } }
+    fun toggleLeader(row: DoctorLeaderRow) {
+        if (expandedLeader?.doctorId == row.doctorId && expandedLeader != null) {
+            leaderDetailJob?.cancel(); expandedLeader = null; leaderMedicinesLoading = false; return
+        }
+        leaderDetailJob?.cancel()
+        expandedLeader = row
+        leaderMedicines = emptyList()
+        leaderMedicinesError = null
+        leaderMedicinesLoading = true
+        val f = filters
+        val period = leaderPeriod
+        val search = leaderSearch.trim()
+        val specialty = leaderSpecialty
+        leaderDetailJob = viewModelScope.launch {
+            try {
+                leaderMedicines = prescriptionDao.doctorLeaderMedicines(currentUid, row.doctorId, period.startMillis(),
+                    f.district, f.territory, f.specialty, f.mrId, f.source, search, specialty)
+                leaderMedicinesLoading = false
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { leaderMedicinesError = e.message ?: "Could not load medicines"; leaderMedicinesLoading = false }
+        }
+    }
+
     var leaderPeriod by mutableStateOf(LeaderPeriod.THIS_MONTH)
         private set
     private var leaderJob: Job? = null
     fun updateLeaderPeriod(period: LeaderPeriod) {
         if (period == leaderPeriod) return
         leaderPeriod = period
-        leaderOffset = 0
-        loadLeaderPage()
+        resetLeader()
     }
     var leaders by mutableStateOf<List<DoctorLeader>>(emptyList())
         private set
@@ -324,6 +374,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
     fun pageLeaders(forward: Boolean) {
         val next = if (forward) leaderOffset + pageSize else leaderOffset - pageSize
         if (next < 0 || next >= leaderTotal) return
+        leaderDetailJob?.cancel()
+        expandedLeader = null
         leaderOffset = next
         loadLeaderPage()
     }
@@ -332,6 +384,8 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
         filters = next
         leaderOffset = 0
         leaderJob?.cancel()
+        leaderDetailJob?.cancel()
+        expandedLeader = null
         load()
     }
 
@@ -572,28 +626,36 @@ class AnalyticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun loadLeaderPage() {
         leaderJob?.cancel()
+        leaderDetailJob?.cancel()
+        expandedLeader = null
+        leaderMedicines = emptyList()
+        leaderMedicinesLoading = false
+        leaderMedicinesError = null
         leaders = emptyList()
         leaderTotal = 0
         val period = leaderPeriod
         val f = filters
         val requestedOffset = leaderOffset
+        val search = leaderSearch.trim()
+        val specialty = leaderSpecialty
+        val sort = leaderSort
         leaderJob = viewModelScope.launch {
             try {
                 val since = period.startMillis()
                 val profileCompany = app.graph.profileDao.current(currentUid)?.company.orEmpty()
                 val ownCompany = app.graph.database.manufacturerAliasDao().canonicalFor(profileCompany) ?: profileCompany
                 val ownToken = ownCompany.split(" ").first()
-                val total = prescriptionDao.doctorLeaderTotal(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source)
+                val total = prescriptionDao.doctorLeaderTotal(currentUid, since, f.district, f.territory, f.specialty, f.mrId, f.source, search, specialty)
                 val offset = if (requestedOffset >= total) 0 else requestedOffset
                 val page = AnalyticsMetrics.doctorLeaders(
                     rows = prescriptionDao.doctorLeaderRows(currentUid, since,
                         if (ownToken.isBlank()) "" else "%$ownToken%", ownCompany, pageSize, offset,
-                        f.district, f.territory, f.specialty, f.mrId, f.source),
+                        f.district, f.territory, f.specialty, f.mrId, f.source, search, specialty, sort.name),
                     total = total, limit = pageSize, offset = offset,
                 ).doctors
                 val intelligence = if (page.isEmpty()) emptyList() else prescriptionDao.doctorLeaderIntelligence(
                     currentUid, since, page.mapNotNull { it.doctorId }, page.any { it.doctorId == null },
-                    f.district, f.territory, f.specialty, f.mrId, f.source)
+                    f.district, f.territory, f.specialty, f.mrId, f.source, search, specialty)
                 leaderOffset = offset
                 leaderTotal = total
                 leaders = DoctorIntelligence.enrich(page, intelligence, ownCompany)
@@ -640,4 +702,8 @@ enum class LeaderPeriod(val title: String) {
         }
         return start.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
+}
+
+enum class LeaderSort(val title: String) {
+    DEFEND("Volume (Defend)"), ATTACK("Opportunity (Attack)")
 }

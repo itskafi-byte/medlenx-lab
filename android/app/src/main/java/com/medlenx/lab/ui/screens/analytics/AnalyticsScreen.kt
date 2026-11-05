@@ -3,6 +3,7 @@ package com.medlenx.lab.ui.screens.analytics
 import android.text.format.DateUtils
 import kotlinx.coroutines.launch
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +48,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -54,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -73,6 +80,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.medlenx.lab.data.local.DrillCountRow
+import com.medlenx.lab.data.local.DoctorBrandCount
 import com.medlenx.lab.data.local.FilterState
 import com.medlenx.lab.data.repo.PyMath
 import com.medlenx.lab.ui.components.OfficerAvatar
@@ -117,6 +125,9 @@ fun AnalyticsScreen(
     val scrollState = rememberScrollState()
     val scrollScope = rememberCoroutineScope()
     var feedPosition by remember { mutableIntStateOf(0) }
+    var scrollTop by remember { mutableIntStateOf(0) }
+    Column(modifier = modifier.fillMaxSize()) {
+        LeaderSearchBar(vm)
     Column(
         // This screen owns its scrolling (the NavHost must never be wrapped in one).
         //
@@ -124,8 +135,10 @@ fun AnalyticsScreen(
         // bar via inner.calculateTopPadding(). Padding here as well offset the hero
         // a second time, which is where the gap above "Prescription Capture" came
         // from -- not from a window inset and not from AppBarHeight.
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
+            .weight(1f)
+            .onGloballyPositioned { scrollTop = it.positionInRoot().y.toInt() }
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -211,13 +224,24 @@ fun AnalyticsScreen(
                         text = { Text(period.title) })
                 }
             }
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LeaderSort.entries.forEach { sort ->
+                    MlxFilterChip(label = sort.title, selected = vm.leaderSort == sort,
+                        onClick = { vm.updateLeaderSort(sort) })
+                }
+            }
             Text("Trend arrows are illustrative, not historical data.", style = MlxType.MicroPill, color = Mlx.Text500)
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 doctorList.forEach { doctor ->
-                    DoctorLeaderRowView(doctor, onDoctorClick = {
-                        vm.selectDoctor(doctor)
-                        scrollScope.launch { scrollState.animateScrollTo(feedPosition) }
-                    })
+                    DoctorLeaderRowView(doctor,
+                        expanded = vm.expandedLeader != null && vm.expandedLeader?.doctorId == doctor.doctorId,
+                        medicines = vm.leaderMedicines, loading = vm.leaderMedicinesLoading,
+                        detailError = vm.leaderMedicinesError, ownCompany = vm.currentCompanyName,
+                        onDoctorClick = { vm.toggleLeader(doctor) },
+                        onViewHistory = {
+                            vm.selectDoctor(doctor)
+                            scrollScope.launch { scrollState.animateScrollTo(feedPosition) }
+                        })
                 }
             }
             Row(
@@ -258,7 +282,7 @@ fun AnalyticsScreen(
         }
 
         LiveRecentScans(
-            modifier = Modifier.onGloballyPositioned { feedPosition = (it.positionInRoot().y + scrollState.value).toInt() },
+            modifier = Modifier.onGloballyPositioned { feedPosition = (it.positionInRoot().y - scrollTop + scrollState.value).toInt() },
             vm = vm,
             chamberFilter = vm.chamberFilter,
             onChamberFilter = vm::updateChamberFilter,
@@ -279,6 +303,7 @@ fun AnalyticsScreen(
                 onOpenCompany = vm::openCompanyDrilldown,
             )
         }
+    }
     }
 }
 
@@ -698,9 +723,10 @@ private fun FilterBar(activeCount: Int, onOpenFilters: () -> Unit, onExport: () 
 
 /** Trend arrows are explicitly illustrative, not a computed rank change. */
 @Composable
-private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) -> Unit) {
+private fun DoctorLeaderRowView(row: DoctorLeaderRow, expanded: Boolean, medicines: List<DoctorBrandCount>,
+    loading: Boolean, detailError: String?, ownCompany: String, onDoctorClick: () -> Unit, onViewHistory: () -> Unit) {
     val mockUp = row.rank % 2 == 1
-    Surface(onClick = { onDoctorClick(row.name) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+    Surface(onClick = onDoctorClick, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         shape = MlxShape.Medium, color = Mlx.Surface) {
         Column(modifier = Modifier.fillMaxWidth().border(1.dp, Mlx.Brand200, MlxShape.Medium)) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
@@ -732,6 +758,54 @@ private fun DoctorLeaderRowView(row: DoctorLeaderRow, onDoctorClick: (String) ->
                 }
             }
             MarketShareStackedBar(row.ourSharePct, row.topCompetitorSharePct, row.otherSharePct)
+            AnimatedVisibility(visible = expanded) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (loading) Text("Loading medicines…", style = MlxType.BodySmall)
+                    else if (detailError != null) Text(detailError, color = MaterialTheme.colorScheme.error, style = MlxType.BodySmall)
+                    else {
+                        val own = medicines.filter { ownCompany.isNotBlank() && it.company.trim().equals(ownCompany.trim(), ignoreCase = true) }
+                        val other = medicines.filterNot { ownCompany.isNotBlank() && it.company.trim().equals(ownCompany.trim(), ignoreCase = true) }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            MedicineBreakdownColumn("Our Brands", own, Modifier.weight(1f))
+                            MedicineBreakdownColumn("Competitor Brands", other, Modifier.weight(1f))
+                        }
+                    }
+                    TextButton(onClick = onViewHistory) { Text("View scan history") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MedicineBreakdownColumn(title: String, rows: List<DoctorBrandCount>, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MlxType.BodySmall.copy(fontWeight = FontWeight.Bold))
+        if (rows.isEmpty()) Text("None", style = MlxType.MicroPill, color = Mlx.Text500)
+        rows.forEach { row ->
+            Text("${row.brand}: ${row.count}", style = MlxType.Meta)
+            if (row.company.isNotBlank()) Text(row.company, style = MlxType.MicroPill, color = Mlx.Text500)
+        }
+    }
+}
+
+@Composable
+private fun LeaderSearchBar(vm: AnalyticsViewModel) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(value = vm.leaderSearch, onValueChange = vm::updateLeaderSearch,
+            modifier = Modifier.weight(1f), singleLine = true, label = { Text("Search doctors") })
+        Box {
+            TextButton(onClick = { menuOpen = true }, modifier = Modifier.widthIn(max = 150.dp)) {
+                Text(vm.leaderSpecialty.ifBlank { "All Specialties" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text("All Specialties") }, onClick = { vm.updateLeaderSpecialty(""); menuOpen = false })
+                vm.filterOptions.specialties.forEach { specialty ->
+                    DropdownMenuItem(text = { Text(specialty) }, onClick = { vm.updateLeaderSpecialty(specialty); menuOpen = false })
+                }
+            }
         }
     }
 }

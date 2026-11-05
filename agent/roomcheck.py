@@ -618,7 +618,10 @@ def main() -> int:
     variant_users: dict[str, list[str]] = {name: [] for name in canonicals}
     for q in queries:
         used_tables, cols, aliases, alias_to_table, qualified, _bare = analyse(q["sql"])
-        unknown_tables = used_tables - set(tables)
+        # CTE names are derived query relations, not missing Room entities.
+        cte_names = {m.group(1).lower() for m in re.finditer(
+            r"(?:\bWITH|,)\s*([A-Za-z_]\w*)\s+AS\s*\(", q["sql"], re.I)}
+        unknown_tables = used_tables - set(tables) - cte_names
         for t in sorted(unknown_tables):
             problems.append(f"{q['fn']} (Daos.kt:{q['line']}) unknown table '{t}'")
 

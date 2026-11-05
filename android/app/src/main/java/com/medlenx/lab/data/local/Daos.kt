@@ -776,47 +776,53 @@ interface PrescriptionDao {
         source: String?,
     ): List<CompanyShareRow>
 
-    /** Widget C: doctor conversion leaderboard, one page. */
-    @Query(
-        """
-        SELECT p.doctor_name AS doctorName, IFNULL(p.chamber, '') AS chamber,
-               IFNULL(p.doctor_specialty, '') AS specialty,
-               IFNULL(p.district, '') AS district, IFNULL(p.territory, '') AS territory,
-               COUNT(DISTINCT p.id) AS prescriptions,
+    /** Strategy ordering is computed across the filtered population before pagination. */
+    @Query("""
+        WITH filtered AS (
+            SELECT p.* FROM prescriptions p
+            WHERE p.user_id = :currentUid AND p.created_at >= :since
+              AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
+          AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+              AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+              AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+              AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+              AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
+        ), rx_totals AS (
+            SELECT f.id AS rxId, f.doctor_id AS doctorId, COUNT(sm.id) AS itemCount
+            FROM filtered f LEFT JOIN scanned_medicines sm ON sm.prescription_id = f.id GROUP BY f.id
+        ), competitor_counts AS (
+            SELECT f.doctor_id AS doctorId, TRIM(sm.company_name) AS company, COUNT(*) AS itemCount
+            FROM filtered f JOIN scanned_medicines sm ON sm.prescription_id = f.id
+            WHERE TRIM(:ownCompany) != '' AND TRIM(IFNULL(sm.company_name, '')) != ''
+              AND TRIM(sm.company_name) != TRIM(:ownCompany) COLLATE NOCASE
+              AND LOWER(TRIM(sm.company_name)) NOT IN ('unknown', 'n/a', 'none', 'live search failed')
+            GROUP BY f.doctor_id, TRIM(sm.company_name) COLLATE NOCASE
+        )
+        SELECT f.doctor_name AS doctorName, IFNULL(f.chamber, '') AS chamber,
+               IFNULL(f.doctor_specialty, '') AS specialty,
+               IFNULL(f.district, '') AS district, IFNULL(f.territory, '') AS territory,
+               COUNT(DISTINCT f.id) AS prescriptions,
                SUM(CASE WHEN sm.id IS NOT NULL THEN 1 ELSE 0 END) AS totalMeds,
                IFNULL(SUM(CASE WHEN sm.company_name LIKE :ownLike THEN 1 ELSE 0 END), 0) AS ownMeds,
                CASE WHEN TRIM(:ownCompany) = '' THEN NULL ELSE
-                   COUNT(DISTINCT CASE WHEN TRIM(IFNULL(sm.company_name, '')) = TRIM(:ownCompany) COLLATE NOCASE THEN p.id END)
-               END AS brandMatchRx, p.doctor_id AS doctorId
-        FROM prescriptions p
-        LEFT JOIN doctors d ON p.doctor_id = d.id
-        LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
-        WHERE p.user_id = :currentUid AND p.created_at >= :since
-          AND (:district IS NULL OR :district = '' OR p.district = :district)
-          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
-          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
-          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
-          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
-        GROUP BY p.doctor_id
-        ORDER BY prescriptions DESC,
-                 CASE WHEN prescriptions > 0 THEN 1.0 * IFNULL(brandMatchRx, 0) / prescriptions
-                    ELSE 0.0 END DESC,
-                 IFNULL(p.doctor_name, '') COLLATE NOCASE ASC, p.doctor_id ASC
+                   COUNT(DISTINCT CASE WHEN TRIM(IFNULL(sm.company_name, '')) = TRIM(:ownCompany) COLLATE NOCASE THEN f.id END)
+               END AS brandMatchRx, f.doctor_id AS doctorId,
+               (SELECT AVG(1.0 * (SELECT COUNT(*) FROM scanned_medicines c
+                    WHERE c.prescription_id = rt.rxId AND TRIM(IFNULL(c.company_name, '')) =
+                        (SELECT cc.company FROM competitor_counts cc WHERE cc.doctorId IS f.doctor_id
+                         ORDER BY cc.itemCount DESC, cc.company COLLATE NOCASE ASC LIMIT 1) COLLATE NOCASE) / rt.itemCount)
+                FROM rx_totals rt WHERE rt.doctorId IS f.doctor_id AND rt.itemCount > 0) AS attackShare
+        FROM filtered f LEFT JOIN scanned_medicines sm ON sm.prescription_id = f.id
+        GROUP BY f.doctor_id
+        ORDER BY CASE WHEN :sortMode = 'ATTACK' THEN IFNULL(attackShare, 0.0) END DESC,
+                 CASE WHEN :sortMode = 'DEFEND' THEN IFNULL(brandMatchRx, 0) END DESC,
+                 prescriptions DESC, IFNULL(f.doctor_name, '') COLLATE NOCASE ASC, f.doctor_id ASC
         LIMIT :limit OFFSET :offset
-        """
-    )
-    suspend fun doctorLeaderRows(currentUid: String,
-        since: Long,
-        ownLike: String,
-        ownCompany: String,
-        limit: Int,
-        offset: Int,
-        district: String?,
-        territory: String?,
-        specialty: String?,
-        mrId: String?,
-        source: String?,
-    ): List<DoctorLeaderRow2>
+    """)
+    suspend fun doctorLeaderRows(currentUid: String, since: Long, ownLike: String, ownCompany: String,
+        limit: Int, offset: Int, district: String?, territory: String?, specialty: String?, mrId: String?,
+        source: String?, searchQuery: String, specialtyFilter: String, sortMode: String): List<DoctorLeaderRow2>
 
     /** Medicine counts per prescription and company for the displayed doctor page. */
     @Query("""
@@ -825,6 +831,8 @@ interface PrescriptionDao {
         FROM prescriptions p LEFT JOIN scanned_medicines sm ON sm.prescription_id = p.id
         WHERE p.user_id = :currentUid AND p.created_at >= :since
           AND (p.doctor_id IN (:doctorIds) OR (:includeUnassigned = 1 AND p.doctor_id IS NULL))
+          AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
+          AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
           AND (:district IS NULL OR :district = '' OR p.district = :district)
           AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
           AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
@@ -834,25 +842,42 @@ interface PrescriptionDao {
     """)
     suspend fun doctorLeaderIntelligence(currentUid: String, since: Long, doctorIds: List<Long>,
         includeUnassigned: Boolean, district: String?, territory: String?, specialty: String?,
-        mrId: String?, source: String?): List<DoctorPrescriptionCompanyCount>
+        mrId: String?, source: String?, searchQuery: String, specialtyFilter: String): List<DoctorPrescriptionCompanyCount>
 
-    /** Widget C: total matching doctors, for the pagination caption. */
-    @Query(
-        // Grouped by doctor_id to match the page it counts; the web's total does
-        // the same (database.py:1116). Counting by name would disagree with the
-        // rows whenever two doctors share one.
-        "SELECT COUNT(*) FROM (SELECT p.doctor_id FROM prescriptions p " +
-            "LEFT JOIN doctors d ON p.doctor_id = d.id " +
-            "WHERE p.created_at >= :since" + RX_FILTER_SQL + " GROUP BY p.doctor_id)"
-    )
-    suspend fun doctorLeaderTotal(currentUid: String,
-        since: Long,
-        district: String?,
-        territory: String?,
-        specialty: String?,
-        mrId: String?,
-        source: String?,
-    ): Int
+    @Query("""
+        SELECT COUNT(*) FROM (SELECT p.doctor_id FROM prescriptions p
+        WHERE p.user_id = :currentUid AND p.created_at >= :since
+          AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
+          AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
+        GROUP BY p.doctor_id)
+    """)
+    suspend fun doctorLeaderTotal(currentUid: String, since: Long, district: String?, territory: String?,
+        specialty: String?, mrId: String?, source: String?, searchQuery: String, specialtyFilter: String): Int
+
+    /** Medicine drill-down uses the same account, period and filters as the selected row. */
+    @Query("""
+        SELECT CASE WHEN TRIM(IFNULL(sm.brand_name, '')) = '' THEN 'Unidentified medicine' ELSE TRIM(sm.brand_name) END AS brand,
+               IFNULL(sm.company_name, '') AS company, COUNT(*) AS count
+        FROM prescriptions p JOIN scanned_medicines sm ON sm.prescription_id = p.id
+        WHERE p.user_id = :currentUid AND p.doctor_id IS :doctorId AND p.created_at >= :since
+          AND (:specialtyFilter = '' OR p.doctor_specialty = :specialtyFilter COLLATE NOCASE)
+          AND (:searchQuery = '' OR IFNULL(p.doctor_name, '') LIKE '%' || :searchQuery || '%')
+          AND (:district IS NULL OR :district = '' OR p.district = :district)
+          AND (:territory IS NULL OR :territory = '' OR p.territory = :territory)
+          AND (:specialty IS NULL OR :specialty = '' OR p.doctor_specialty = :specialty)
+          AND (:mrId IS NULL OR :mrId = '' OR p.mr_id = :mrId)
+          AND (:source IS NULL OR :source = '' OR p.prescription_source = :source)
+        GROUP BY TRIM(sm.brand_name) COLLATE NOCASE, TRIM(IFNULL(sm.company_name, '')) COLLATE NOCASE
+        ORDER BY count DESC, brand COLLATE NOCASE ASC, company COLLATE NOCASE ASC
+    """)
+    suspend fun doctorLeaderMedicines(currentUid: String, doctorId: Long?, since: Long, district: String?,
+        territory: String?, specialty: String?, mrId: String?, source: String?, searchQuery: String,
+        specialtyFilter: String): List<DoctorBrandCount>
 
     /**
      * The Live Recent Scans feed: newest scanned item first, with its Rx context.

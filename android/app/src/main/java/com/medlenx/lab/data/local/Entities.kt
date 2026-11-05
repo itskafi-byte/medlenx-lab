@@ -401,7 +401,10 @@ data class DoctorLeaderRow2(
     val ownMeds: Int,
     val brandMatchRx: Int?,
     val doctorId: Long?,
+    val attackShare: Double?,
 )
+
+data class DoctorBrandCount(val brand: String, val company: String, val count: Int)
 
 data class DoctorPrescriptionCompanyCount(
     val doctorId: Long?,
