@@ -86,6 +86,7 @@ data class EnrichedMedicine(
     val confidence: Double,
 
     // ---- catalogue resolution -------------------------------------------
+    val medexProductId: String? = null,
     val company: String?,
     val companyVerified: Boolean = false,
     val companyAmbiguous: Boolean = false,

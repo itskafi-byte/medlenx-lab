@@ -2,9 +2,7 @@ package com.medlenx.lab.ui.screens.scan
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import com.google.firebase.auth.FirebaseAuth
-import com.medlenx.lab.data.local.UserCaptureFiles
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import com.medlenx.lab.data.repo.MedicineMatcher
 import com.medlenx.lab.ui.screens.hub.HubViewModel
 import com.medlenx.lab.ui.components.ButtonTone
@@ -57,7 +54,6 @@ import com.medlenx.lab.ui.theme.MlxD
 import com.medlenx.lab.ui.theme.MlxShape
 import com.medlenx.lab.ui.theme.MlxType
 import kotlinx.coroutines.delay
-import java.io.File
 
 /**
  * Prescription Workspace.
@@ -83,27 +79,9 @@ fun ScanScreen(
     // The shell already reserves the status and app-bar height.
     val topInset = 0.dp
 
-    // Camera capture writes into the FileProvider path declared in the manifest.
-    //
-    // rememberSaveable, not remember. Handing off to the camera is the most common
-    // trigger for process death there is: the camera app is memory-hungry and Android
-    // routinely kills the caller to feed it. Plain remember does not survive that, so
-    // the callback below came back with success == true and a null URI, dropped the
-    // photo through `?.let`, and left the officer on an empty scan screen having just
-    // taken a picture -- which reads exactly like a camera crash. Uri is Parcelable,
-    // so it saves without a custom saver.
-    var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var pendingCameraUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var cameraOpen by remember { mutableStateOf(false) }
+    var cameraUid by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingGalleryUid by rememberSaveable { mutableStateOf<String?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture(),
-    ) { success ->
-        if (success && pendingCameraUid != null && pendingCameraUid == FirebaseAuth.getInstance().currentUser?.uid) {
-            pendingCameraUri?.let(vm::onImagePicked)
-        }
-        pendingCameraUid = null
-        pendingCameraUri = null
-    }
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
@@ -113,53 +91,26 @@ fun ScanScreen(
         pendingGalleryUid = null
     }
 
-    /**
-     * Guarded camera launch.
-     *
-     * Everything that can throw here used to throw straight into composition:
-     * `FileProvider.getUriForFile` raises IllegalArgumentException when no configured
-     * root matches the file, which took the whole screen down on tapping Open Camera
-     * rather than reporting anything. A failure now surfaces as a message and the
-     * officer stays on the scan screen.
-     */
-    val launchCamera = {
-        runCatching {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
-                ?: error("Sign in before capturing a prescription")
-            val dir = UserCaptureFiles.temporary(context, uid).apply { check(mkdirs() || isDirectory) }
-            val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file,
-            )
-            pendingCameraUri = uri
-            pendingCameraUid = uid
-            cameraLauncher.launch(uri)
-        }.onFailure { e ->
-            android.widget.Toast.makeText(
-                context,
-                "Camera unavailable: ${e.message ?: "unknown error"}",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
-        }
-    }
-
-    // Delegating the shot to the system camera app normally needs no CAMERA grant, but
-    // several OEM camera apps refuse the capture unless the caller holds it, and it is
-    // declared in the manifest already. Asking is cheap; being refused mid-flow is not.
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
-            launchCamera()
+        if (granted && cameraUid != null && FirebaseAuth.getInstance().currentUser?.uid == cameraUid) {
+            cameraOpen = true
         } else {
-            android.widget.Toast.makeText(
-                context,
-                "Camera permission is needed to capture a prescription.",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
+            cameraUid = null
+            android.widget.Toast.makeText(context, "Camera permission is needed to capture a prescription.", android.widget.Toast.LENGTH_LONG).show()
         }
+    }
+    if (cameraOpen) {
+        CameraViewfinder(
+            onClose = { cameraOpen = false; cameraUid = null },
+            onCaptured = { bytes ->
+                val uid = cameraUid
+                cameraOpen = false
+                cameraUid = null
+                if (uid != null && FirebaseAuth.getInstance().currentUser?.uid == uid) vm.onCameraCaptured(bytes, uid)
+            },
+        )
     }
 
     // GPS pin needs the runtime location permission; ask on demand, then pin.
@@ -202,12 +153,12 @@ fun ScanScreen(
                 )
             },
             onCamera = {
-                if (ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.CAMERA,
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    launchCamera()
+                cameraUid = FirebaseAuth.getInstance().currentUser?.uid
+                if (cameraUid == null || cameraUid != vm.currentUid) {
+                    cameraUid = null
+                    android.widget.Toast.makeText(context, "Sign in before capturing a prescription.", android.widget.Toast.LENGTH_LONG).show()
+                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    cameraOpen = true
                 } else {
                     cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 }

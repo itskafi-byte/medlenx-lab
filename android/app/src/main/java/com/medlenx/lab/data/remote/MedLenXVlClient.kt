@@ -57,11 +57,12 @@ class MedLenXVlClient(
     suspend fun scanPrescription(
         imageBytes: ByteArray,
         mimeType: String = "image/jpeg",
+        alreadyPrepared: Boolean = false,
     ): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
 
         // Shrink before encoding: a raw 12MP capture is a multi-megabyte base64 body.
-        val (uploadBytes, uploadMime) = prepareUpload(imageBytes, mimeType)
+        val (uploadBytes, uploadMime) = if (alreadyPrepared) imageBytes to "image/jpeg" else prepareUpload(imageBytes, mimeType)
 
         val first = call(uploadBytes, uploadMime, primaryModel)
         if (first !is VlOutcome.Failure || !first.retryable) return@withContext first
@@ -110,7 +111,7 @@ class MedLenXVlClient(
             })
             // Both free models support reasoning. Avoid requiring a model-specific effort level.
             put("reasoning", buildJsonObject { put("enabled", true) })
-            put("response_format", buildJsonObject { put("type", "json_object") })
+            put("response_format", VlResponseSchema.responseFormat)
             put("provider", buildJsonObject { put("require_parameters", true) })
         }.toString()
 
@@ -161,8 +162,10 @@ class MedLenXVlClient(
             return VlOutcome.Failure("MedLenX VL did not return JSON")
         }
         return runCatching {
+            val content = cleaned.substring(start, end + 1)
+            require(VlResponseSchema.accepts(json.parseToJsonElement(content))) { "Response did not match the scan schema" }
             VlOutcome.Success(
-                result = json.decodeFromString(VlScanResult.serializer(), cleaned.substring(start, end + 1)),
+                result = json.decodeFromString(VlScanResult.serializer(), content),
                 rawContent = text,
             )
         }.getOrElse { VlOutcome.Failure("Could not parse MedLenX VL output: ${it.message}") }
@@ -238,7 +241,8 @@ Return ONLY JSON:
       "dosage_normalized": "1+0+1",
       "frequency": "Before meal",
       "company": "",
-      "confidence": 0.92
+      "confidence": 0.92,
+      "bbox": [0.1, 0.2, 0.6, 0.1]
     }
   ],
   "patient_info": {"masked": true, "note": "Patient PII masked per BMDC compliance"},
@@ -249,6 +253,8 @@ IMPORTANT: never invent a pharmaceutical company. Leave "company" empty unless i
 is actually printed on the prescription. An empty company is correct and useful;
 a guessed company is a data error.
 
+Return every field in the schema. Use empty strings or empty arrays when unknown;
+patient_info and meta may be null. Never guess uncertain details.
 Output JSON only, no markdown.
 """
 

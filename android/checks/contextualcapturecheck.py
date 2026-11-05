@@ -22,6 +22,7 @@ assert 'FilterBar(' in screen and '.verticalScroll(scrollState)' in screen
 assert 'analyticsImagePicker' not in shell and 'analyticsPickerUid' not in shell
 assert 'top = if (dest == Destination.Analytics) 16.dp else 20.dp' in shell
 scan = (root/'ui/screens/scan/ScanScreen.kt').read_text()
-assert 'ActivityResultContracts.TakePicture()' in scan and 'ActivityResultContracts.PickVisualMedia()' in scan
+assert 'CameraViewfinder(' in scan and 'ActivityResultContracts.TakePicture()' not in scan
+assert 'ActivityResultContracts.PickVisualMedia()' in scan
 assert 'uri?.let(vm::onImagePicked)' in scan
 print('contextualcapturecheck: search, specialty, capture-free dashboard and Scan picker PASS (static only)')

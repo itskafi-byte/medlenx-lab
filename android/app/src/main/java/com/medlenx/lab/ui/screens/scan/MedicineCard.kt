@@ -85,6 +85,7 @@ data class MedicineCardData(
     val bbox: List<Float> = emptyList(),
     /** MedEx pack photo URL resolved for this SKU, when the catalogue matched it. */
     val packImage: String? = null,
+    val medexProductId: String? = null,
     /**
      * Every catalogue variant of the matched brand except the one chosen, so the
      * officer can correct the strength, the dosage form or the manufacturer without

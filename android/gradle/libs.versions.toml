@@ -20,6 +20,7 @@ ksp = "2.3.4"
 coreKtx = "1.15.0"
 lifecycle = "2.10.0"
 activityCompose = "1.9.3"
+camera = "1.4.2"
 composeBom = "2025.09.01"
 navigationCompose = "2.8.5"
 room = "2.8.3"
@@ -36,6 +37,9 @@ androidxJunit = "1.2.1"
 espresso = "3.6.1"
 
 [libraries]
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camera" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camera" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camera" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }

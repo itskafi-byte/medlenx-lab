@@ -26,8 +26,8 @@ object ImagePrep {
     private const val JPEG_QUALITY = 85
 
     /** Re-encoded upload bytes, or null when the input could not be decoded. */
-    fun toUploadJpeg(bytes: ByteArray): ByteArray? = runCatching {
-        val orientation = readOrientation(bytes)
+    fun toUploadJpeg(bytes: ByteArray, rotationDegrees: Int? = null): ByteArray? = runCatching {
+        val orientation = rotationDegrees ?: readOrientation(bytes)
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)

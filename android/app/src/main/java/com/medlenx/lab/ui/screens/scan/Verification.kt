@@ -915,6 +915,7 @@ fun com.medlenx.lab.data.model.EnrichedMedicine.toCardData(): MedicineCardData {
         // The enricher already resolved the MedEx pack photo; without this line it
         // was dropped at the card boundary and never reached the UI.
         packImage = imageUrl,
+        medexProductId = medexProductId,
         // Same trap, same fix: `MedicineEnricher` computes every variant of the
         // matched brand so a wrong strength or manufacturer can be corrected by hand,
         // and the card boundary dropped the list before any picker could show it.

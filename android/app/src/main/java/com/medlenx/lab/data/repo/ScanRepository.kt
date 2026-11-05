@@ -57,9 +57,9 @@ class ScanRepository(
     private val catalogue: AssetCatalogue,
 ) {
 
-    suspend fun scan(imageBytes: ByteArray, mimeType: String = "image/jpeg"): ScanProgress {
+    suspend fun scan(imageBytes: ByteArray, mimeType: String = "image/jpeg", alreadyPrepared: Boolean = false): ScanProgress {
         if (!vlClient.hasKey) return ScanProgress.NeedsApiKey
-        return when (val outcome = vlClient.scanPrescription(imageBytes, mimeType)) {
+        return when (val outcome = vlClient.scanPrescription(imageBytes, mimeType, alreadyPrepared)) {
             is VlOutcome.Success -> ScanProgress.Done(outcome.result, outcome.rawContent)
             is VlOutcome.Failure -> ScanProgress.Failed(outcome.message)
             VlOutcome.NoKey -> ScanProgress.NeedsApiKey
@@ -195,6 +195,7 @@ class ScanRepository(
                 ScannedMedicineEntity(
                     prescriptionId = id,
                     lineNumber = index + 1,
+                    medexProductId = audit?.medexProductId,
                     brandName = med.brandName,
                     generic = med.genericName,
                     strength = med.strength,

@@ -442,6 +442,9 @@ class MedexIndex(entries: Iterable<MedexProduct> = emptyList()) {
      */
     val all: List<MedexProduct> get() = byBrand.values.flatten()
 
+    /** Resolve a reviewed selection without replacing it with an equally scored variant. */
+    fun productById(id: String): MedexProduct? = rows.firstOrNull { it.product.id == id }?.product
+
     /** All catalogue variants whose normalised brand equals this one. */
     fun exact(brand: String): List<MedexProduct> =
         byBrand[MedicineMatcher.normalizeBrand(brand)].orEmpty()

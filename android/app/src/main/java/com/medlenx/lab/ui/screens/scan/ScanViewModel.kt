@@ -89,6 +89,7 @@ data class ScanUiState(
     val brandSuggestions: List<MedexProduct> = emptyList(),
     val receipt: SavedReceipt? = null,
     val savedPrescriptionId: Long? = null,
+    val uploadPrepared: Boolean = false,
 
     /** True when the current capture is parked in the offline queue awaiting a replay. */
     val parked: Boolean = false,
@@ -357,9 +358,30 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 imageFile = file,
                 error = null,
                 result = null,
+                uploadPrepared = false,
                 progress = 0f,
                 progressText = "",
             )
+        }
+    }
+
+    /** Persist the already-oriented CameraX JPEG for review and offline replay. */
+    fun onCameraCaptured(bytes: ByteArray, expectedUid: String) {
+        if (bytes.isEmpty() || expectedUid != currentUid || FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = UserCaptureFiles.stored(getApplication(), expectedUid).apply { check(mkdirs() || isDirectory) }
+                    File(dir, "rx_${java.util.UUID.randomUUID()}.jpg").apply { writeBytes(bytes) }
+                }.getOrNull()
+            }
+            if (FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return@launch
+            if (file == null) {
+                state = state.copy(phase = ScanPhase.Failed, error = "Could not save the camera image")
+            } else {
+                state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
+                    error = null, result = null, uploadPrepared = true, progress = 0f, progressText = "")
+            }
         }
     }
 
@@ -391,7 +413,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 state = state.copy(progressText = "Waiting for AI response…")
-                scanRepository.scan(bytes)
+                scanRepository.scan(bytes, alreadyPrepared = state.uploadPrepared)
             }
             when (outcome) {
                 is ScanProgress.Done -> try {
@@ -616,7 +638,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         updateCard(index) {
             if (it.brand == brand) it else it.copy(
                 brand = brand, ingredient = "", company = "", strength = "", type = "",
-                companyVerification = CompanyVerification.None, packImage = null,
+                companyVerification = CompanyVerification.None, packImage = null, medexProductId = null,
                 alternatives = emptyList(), catalogueNote = null, matchType = null, substitution = null,
             )
         }
@@ -640,6 +662,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun pickSuggestion(index: Int, product: MedexProduct) {
         updateCard(index) {
             it.copy(
+                medexProductId = product.id.takeIf { id -> id.isNotBlank() },
                 brand = product.brandName,
                 ingredient = product.generic.ifBlank { product.ingredient },
                 company = product.company,
@@ -664,14 +687,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * entry, matching what `MedicineEnricher` puts in
      * [MedicineCardData.alternatives].
      *
-     * The officer's pick is authoritative. In the web that is enforced by writing
-     * `company_source='user'` and `company_verified=true` onto the medicine and
-     * re-rendering (`index.html:3312`); nothing downstream is allowed to second-guess it
-     * again. There is no such flag here, and none is needed, because the save path
-     * re-resolves the medicine from the catalogue by brand + strength + dosage form
-     * (`MedicineMatcher.pickVariant`). Carrying the pick into `mergeEdits` therefore
-     * makes the re-resolution land on the chosen variant by construction, rather than
-     * out-voting it with a flag.
+     * The selected catalogue ID is carried through the review card and re-enrichment,
+     * so two variants with identical strength and form cannot override the user's pick.
      *
      * The `alternatives` list itself is deliberately left alone. The web's array is
      * whatever the last enrichment computed, so the variant just chosen stays listed
@@ -680,6 +697,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     fun applyAlternative(index: Int, product: MedexProduct) {
         updateCard(index) {
             it.copy(
+                medexProductId = product.id.takeIf { id -> id.isNotBlank() },
                 // The brand is not touched, because the web's handler does not touch it
                 // either (`index.html:3312`): every entry in this list is a variant *of
                 // the brand already on the card*, so rewriting the name could only
@@ -760,6 +778,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             if (state.cards.getOrNull(index)?.brand?.trim() != brand) return@launch
             updateCard(index) {
                 it.copy(
+                    medexProductId = pick.id.takeIf { id -> id.isNotBlank() },
                     brand = pick.brandName,
                     ingredient = pick.generic.ifBlank { pick.ingredient },
                     company = pick.company,
@@ -994,6 +1013,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     val product = resolved.first
                     it.copy(
+                        medexProductId = product.id.takeIf { id -> id.isNotBlank() },
                         ingredient = product.generic.ifBlank { product.ingredient },
                         company = product.company,
                         companyVerification = if (product.company.isBlank()) CompanyVerification.None else CompanyVerification.Verified,
@@ -1053,16 +1073,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val corrected = mergeEdits(result, cards)
                 // Re-enrich the corrected read so the audit columns and the Rx Audit screen
                 // describe the same medicines the officer approved.
-                // Non-fatal on purpose: enrichment already succeeded once for this read in
-                // enterVerification, so a throw here must not cost the officer the save.
-                val audit = runCatching {
-                    MedicineEnricher.enrich(
+                // Do not persist a selected ID alongside stale enrichment if re-matching fails.
+                val audit = MedicineEnricher.enrich(
                         medicines = corrected.medicines,
                         index = scanRepository.medexIndex(),
                         regulatory = app.graph.regulatoryRepository.data(),
                         ownCompany = MedicineMatcher.resolveOwnCompany(profile?.company).name,
+                        preferredIds = cards.map { it.medexProductId },
                     )
-                }.getOrDefault(state.enriched)
                 state = state.copy(enriched = audit)
                 // Null when the image cannot be decoded. The web skips the guard for
                 // a missing hash rather than guessing, and so does this.

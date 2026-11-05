@@ -130,6 +130,7 @@ data class ScannedMedicineEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "prescription_id") val prescriptionId: Long,
     @ColumnInfo(name = "line_number") val lineNumber: Int,
+    @ColumnInfo(name = "medex_product_id") val medexProductId: String? = null,
     @ColumnInfo(name = "brand_name") val brandName: String,
     val generic: String,
     val strength: String,

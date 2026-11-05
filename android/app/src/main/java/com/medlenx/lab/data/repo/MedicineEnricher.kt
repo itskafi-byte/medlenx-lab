@@ -38,8 +38,9 @@ object MedicineEnricher {
         index: MedexIndex,
         regulatory: RegulatoryData,
         ownCompany: String = "",
+        preferredIds: List<String?> = emptyList(),
     ): List<EnrichedMedicine> =
-        medicines.mapIndexed { i, m -> enrichOne(i + 1, m, index, regulatory, ownCompany) }
+        medicines.mapIndexed { i, m -> enrichOne(i + 1, m, index, regulatory, ownCompany, preferredIds.getOrNull(i)) }
 
     private fun enrichOne(
         lineNumber: Int,
@@ -47,11 +48,14 @@ object MedicineEnricher {
         index: MedexIndex,
         regulatory: RegulatoryData,
         ownCompany: String,
+        preferredId: String?,
     ): EnrichedMedicine {
         val form = m.type.ifBlank { m.form }
         val match = index.match(m.brandName, m.strength, form)
         val variants = match.variants
-        val pick = index.pickVariant(variants, m.strength, form)
+        val pick = if (preferredId != null) {
+            checkNotNull(index.productById(preferredId)) { "Selected catalogue product is no longer available" }
+        } else index.pickVariant(variants, m.strength, form)
 
         val resolution = MedicineMatcher.resolveCompany(pick?.company, m.company)
         val catalogueCompany = pick?.company?.trim().orEmpty()
@@ -116,6 +120,7 @@ object MedicineEnricher {
             frequency = m.frequency,
             confidence = m.confidence,
 
+            medexProductId = pick?.id?.takeIf { it.isNotBlank() },
             company = resolution.company.ifBlank { null },
             companyVerified = resolution.verified,
             companyAmbiguous = index.companyIsAmbiguous(variants),

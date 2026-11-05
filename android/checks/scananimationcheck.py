@@ -9,7 +9,7 @@ animation = (root / 'ScanAnimation.kt').read_text()
 request = vm[vm.index('    fun analyze()'):vm.index('    private suspend fun parkForReplay')]
 verify = vm[vm.index('    private suspend fun enterVerification'):vm.index('    // ---- verification navigation')]
 assert 'progressIndeterminate = true' in request
-assert request.index('scanRepository.scan(bytes)') < request.index('enterVerification(outcome.result)')
+assert request.index('scanRepository.scan(bytes, alreadyPrepared = state.uploadPrepared)') < request.index('enterVerification(outcome.result)')
 assert 'is ScanProgress.Failed' in request and 'phase = ScanPhase.Failed' in request
 assert 'catch (e: CancellationException)' in request
 assert 'scanJob?.cancel()' in vm[vm.index('    fun clear()'):]
