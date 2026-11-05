@@ -33,10 +33,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DocumentScanner
-import androidx.compose.material.icons.outlined.Medication
-import androidx.compose.material.icons.outlined.DonutLarge
-import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.rounded.ReceiptLong
+import androidx.compose.material.icons.rounded.Medication
+import androidx.compose.material.icons.rounded.PieChart
+import androidx.compose.material.icons.rounded.AssignmentInd
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Close
@@ -166,10 +166,18 @@ fun AnalyticsScreen(
                             label = kpi.label,
                             value = kpi.value,
                             icon = when (kpi.label) {
-                                "Total Captured" -> Icons.Outlined.DocumentScanner
-                                "Identified Medicines" -> Icons.Outlined.Medication
-                                "Target Share" -> Icons.Outlined.DonutLarge
-                                else -> Icons.Outlined.PersonSearch
+                                "Total Captured" -> Icons.Rounded.ReceiptLong
+                                "Identified Medicines" -> Icons.Rounded.Medication
+                                "Target Share" -> Icons.Rounded.PieChart
+                                "Active Doctor Coverage" -> Icons.Rounded.AssignmentInd
+                                else -> Icons.Rounded.ReceiptLong
+                            },
+                            iconColor = when (kpi.label) {
+                                "Total Captured" -> MaterialTheme.colorScheme.primary
+                                "Identified Medicines" -> Color(0xFF8B5CF6)
+                                "Target Share" -> Color(0xFFF59E0B)
+                                "Active Doctor Coverage" -> Color(0xFF10B981)
+                                else -> MaterialTheme.colorScheme.primary
                             },
                             delta = kpi.delta,
                             deltaPositive = kpi.deltaUp,

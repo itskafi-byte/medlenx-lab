@@ -1,13 +1,13 @@
 package com.medlenx.lab.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.Analytics
+import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Science
-import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -18,10 +18,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 sealed class Destination(val route: String, val label: String, val icon: ImageVector) {
 
-    data object Scan : Destination("scan", "Scan", Icons.Filled.ViewColumn)
-    data object Analytics : Destination("analytics", "Analytics", Icons.Filled.AutoGraph)
-    data object Hub : Destination("hub", "Hub", Icons.Filled.Science)
-    data object Team : Destination("team", "Team", Icons.Filled.AccountTree)
+    data object Scan : Destination("scan", "Scan", Icons.Rounded.DocumentScanner)
+    data object Analytics : Destination("analytics", "Analytics", Icons.Rounded.Analytics)
+    data object Hub : Destination("hub", "Hub", Icons.Rounded.Hub)
+    data object Team : Destination("team", "Team", Icons.Rounded.Groups)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 
     /** Not on the bottom bar; opened from Settings (web sidebar item #6). */

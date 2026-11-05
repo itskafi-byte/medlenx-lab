@@ -108,6 +108,7 @@ fun KpiCard(
     value: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    iconColor: Color = MaterialTheme.colorScheme.primary,
     delta: String? = null,
     deltaPositive: Boolean = true,
     caption: String? = null,
@@ -117,28 +118,23 @@ fun KpiCard(
     MlxCard(modifier = modifier, padding = 20.dp) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(label, style = MlxType.Meta, color = Mlx.Text500)
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(value, style = MlxType.KpiValue)
-                    if (delta != null) {
-                        Text(
-                            text = delta,
-                            style = MlxType.Delta,
-                            color = if (deltaPositive) Mlx.Ok500 else Mlx.Danger,
-                        )
-                    }
-                }
-                if (caption != null) Text(caption, style = MlxType.Meta, color = Mlx.Text500)
-            }
-            if (icon != null) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(32.dp))
+            Text(label, style = MlxType.Meta, color = Mlx.Text500, modifier = Modifier.weight(1f))
+            if (icon != null) FrostedIcon(icon = icon, baseColor = iconColor)
+        }
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(value, style = MlxType.KpiValue)
+            if (delta != null) {
+                Text(
+                    text = delta,
+                    style = MlxType.Delta,
+                    color = if (deltaPositive) Mlx.Ok500 else Mlx.Danger,
+                )
             }
         }
+        if (caption != null) Text(caption, style = MlxType.Meta, color = Mlx.Text500)
         if (microPills.isNotEmpty()) {
             FlowRowCompat(Modifier.padding(top = 12.dp), 8.dp, 8.dp) {
                 microPills.forEach { StatusPill(it, PillTone.Slate) }

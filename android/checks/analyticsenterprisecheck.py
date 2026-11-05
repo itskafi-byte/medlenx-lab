@@ -119,7 +119,7 @@ mapping = (root / 'ui/screens/analytics/AnalyticsMapping.kt').read_text()
 assert '@Relation(parentColumn = "id", entityColumn = "prescription_id")' in entities
 assert 'observeAuditFeed(currentUid' in vm and 'observeAuditFeedCount(currentUid' in vm and 'snapshotFlow' in vm
 assert 'MarketShareStackedBar(row.ourSharePct, row.topCompetitorSharePct, row.otherSharePct)' in ui and 'vm.selectDoctor(doctor)' in ui
-assert all(icon in ui for icon in ('Icons.Outlined.DocumentScanner','Icons.Outlined.Medication','Icons.Outlined.DonutLarge','Icons.Outlined.PersonSearch'))
+assert all(icon in ui for icon in ('Icons.Rounded.ReceiptLong','Icons.Rounded.Medication','Icons.Rounded.PieChart','Icons.Rounded.AssignmentInd'))
 assert 'MedicineMatcher.sameCompany(it.company, ownCompany)' in vm and 'Other / unknown' in chart
 assert 'FlowRow(' in card and 'Text("Saved"' in card and 'AuditFeedCard(' in ui
 assert 'p.userId == currentUid' in mapping and 'OfficerAvatar(imageUri = rx.officerAvatarUri' in ui
