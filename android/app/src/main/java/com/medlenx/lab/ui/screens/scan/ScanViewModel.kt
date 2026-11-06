@@ -430,7 +430,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 val boxes = locator.locate(bitmap)
                 if (state.capturedBitmap !== bitmap || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return@launch
                 state = state.copy(locating = false, detectedLines = boxes, selectedLines = boxes.indices.toSet(),
-                    locatorError = if (boxes.isEmpty()) "No lines detected. Retake the photo or try another image." else null)
+                    locatorError = if (boxes.isEmpty()) "No lines detected. Draw a box around a medicine line." else null)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if (state.capturedBitmap === bitmap) state = state.copy(locating = false, locatorError = "Could not detect lines. Try again.")
@@ -443,6 +443,16 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(selectedLines = if (index in state.selectedLines) state.selectedLines - index else state.selectedLines + index)
     }
 
+    fun addManualLine(rect: Rect) {
+        val bitmap = state.capturedBitmap ?: return
+        if (state.phase != ScanPhase.Ready || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
+        val clipped = Rect(rect)
+        if (!clipped.intersect(0, 0, bitmap.width, bitmap.height) || clipped.isEmpty) return
+        val index = state.detectedLines.size
+        state = state.copy(detectedLines = state.detectedLines + clipped,
+            selectedLines = state.selectedLines + index, locatorError = null)
+    }
+
     fun retryLocator() { state.capturedBitmap?.let(::locateLines) }
 
     /** Send the full image and confirmed medicine-line crops to Gemini. */
@@ -450,7 +460,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val file = state.imageFile ?: return
         val bitmap = state.capturedBitmap ?: return
         val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }.map { Rect(it) }
-        if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || boxes.isEmpty() || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
+        if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || boxes.isEmpty() || boxes.size > 100 || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
 
         scanJob = viewModelScope.launch {
             val outcome: ScanProgress = if (!deviceState.online) {

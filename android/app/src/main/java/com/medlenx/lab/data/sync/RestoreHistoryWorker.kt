@@ -59,6 +59,10 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
                             // the original capture timestamp is actually available.
                             val captured = (doc.get("captureTimestamp") as? com.google.firebase.Timestamp)?.toDate()?.time
                             if (captured != null) dao.updateRestoredCaptureTime(uid, company, doc.id, captured)
+                            restored.first.prescriptionDate?.let { dao.updateRestoredPrescriptionDate(uid, company, doc.id, it) }
+                            restored.second.forEach { med ->
+                                med.medexProductId?.let { dao.updateRestoredProductId(uid, company, doc.id, med.lineNumber, med.brandName, it) }
+                            }
                             continue
                         }
                         val id = dao.insertRestored(restored.first)
@@ -94,6 +98,7 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
             ?: doc.getTimestamp("timestamp")?.toDate()?.time ?: return null
         val raw = doc.get("medicines") as? List<*> ?: return null
         if (raw.size > 100) return null
+        val ids = ScanCloudFields.ids(doc, raw)
         val medicines = raw.mapIndexed { index, value ->
             val med = value as? Map<*, *> ?: return null
             val brand = med["brand"] as? String ?: return null
@@ -101,7 +106,7 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
             val confidence = (med["confidence"] as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: return null
             val manufacturer = med["company"] as? String ?: ""
             ScannedMedicineEntity(
-                prescriptionId = 0, lineNumber = index + 1, brandName = brand, generic = generic,
+                prescriptionId = 0, lineNumber = index + 1, medexProductId = ids[index], brandName = brand, generic = generic,
                 strength = "", dosageForm = "", dosage = "", raw = "", companyName = manufacturer.takeIf { it.isNotBlank() },
                 companyVerified = false, isOwn = false, confidenceScore = confidence, imageUrl = null,
                 matchType = "cloud-restored", isAntibiotic = false, broadSpectrum = false,
@@ -111,6 +116,7 @@ class RestoreHistoryWorker(context: Context, params: WorkerParameters) : Corouti
         val rx = PrescriptionEntity(
             userId = uid, scanId = scanId, restoreScanId = scanId, companyId = company,
             syncStatus = "UPLOADED", rxNo = scanId.take(8), imagePath = "", imageHash = null,
+            prescriptionDate = ScanCloudFields.restoredDate(doc),
             doctorName = doctor, doctorBmdcNo = "", doctorId = null, doctorSpecialty = specialty,
             chamber = "", district = "", upazila = "", territory = territory, prescriptionSource = "",
             totalMedicines = medicines.size, mrId = "", duplicateOf = null, offTerritory = false,

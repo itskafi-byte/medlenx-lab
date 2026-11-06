@@ -93,6 +93,18 @@ interface PrescriptionDao {
     @Query("UPDATE prescriptions SET created_at = :capturedAt WHERE user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND restore_scan_id = :scanId AND sync_status = 'UPLOADED' AND created_at != :capturedAt")
     suspend fun updateRestoredCaptureTime(currentUid: String, company: String, scanId: String, capturedAt: Long): Int
 
+    @Query("UPDATE prescriptions SET prescription_date = :date WHERE user_id = :currentUid AND company_id = :company AND scan_id = :scanId AND restore_scan_id = :scanId AND sync_status = 'UPLOADED' AND (prescription_date IS NULL OR prescription_date = '')")
+    suspend fun updateRestoredPrescriptionDate(currentUid: String, company: String, scanId: String, date: String): Int
+
+    @Query("UPDATE scanned_medicines SET medex_product_id = :productId WHERE line_number = :lineNumber AND brand_name = :brand AND medex_product_id IS NULL AND prescription_id IN (SELECT p.id FROM prescriptions p WHERE p.user_id = :currentUid AND p.company_id = :company AND p.scan_id = :scanId AND p.restore_scan_id = :scanId AND p.sync_status = 'UPLOADED')")
+    suspend fun updateRestoredProductId(currentUid: String, company: String, scanId: String, lineNumber: Int, brand: String, productId: String): Int
+
+    @Query("SELECT p.* FROM prescriptions p WHERE p.user_id = :currentUid AND p.company_id = :company AND p.sync_status = 'UPLOADED' AND p.restore_scan_id IS NULL AND p.metadata_synced = 0 AND p.id > :afterId AND p.scan_id != '' AND (p.prescription_date IS NOT NULL OR EXISTS (SELECT 1 FROM scanned_medicines sm WHERE sm.prescription_id = p.id AND sm.medex_product_id IS NOT NULL)) ORDER BY p.id LIMIT 100")
+    suspend fun metadataBackfillCandidates(currentUid: String, company: String, afterId: Long): List<PrescriptionEntity>
+
+    @Query("UPDATE prescriptions SET metadata_synced = 1 WHERE user_id = :currentUid AND company_id = :company AND id = :id AND scan_id = :scanId AND sync_status = 'UPLOADED'")
+    suspend fun markMetadataSynced(currentUid: String, company: String, id: Long, scanId: String): Int
+
     /** Used only while quarantining a legacy root-level image on this device. */
     @Query("UPDATE prescriptions SET image_path = :newPath WHERE image_path = :oldPath")
     suspend fun relocateLegacyImage(oldPath: String, newPath: String)

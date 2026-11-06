@@ -168,19 +168,25 @@ same-named environment variable and compiled into `BuildConfig`. Obtain a Gemini
 API key and configure it locally; do not paste it into chat or version control.
 
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
-proxy before public distribution. The legacy Google AI Android SDK requested by
-this project is deprecated by Google and may stop receiving fixes.
+proxy before public distribution. The Google Gen AI Kotlin SDK is used directly from the app; its maintainers recommend Firebase AI Logic with App Check for public mobile apps.
 
 The full prescription photograph and the selected line crops are sent to Gemini
 2.5 Flash in one request. Patient identifiers are not requested or stored, but
 may still be visible in the transmitted photograph. Obtain appropriate permission
 and review Google's data policies. The bundled Latin-script ML Kit recognizer can
 miss handwriting or Bengali text; inspect the selected regions and verify all
-results. An image with no detected lines cannot currently be submitted.
+results. Use “Draw missing line” to add boxes that ML Kit missed.
 
 Queued scans are reopened for line confirmation when online, rather than submitted
-without selection. The selected prescription date and MedEx product ID are local
-Room fields and are not currently propagated by cloud history restoration.
+without selection. Prescription dates and MedEx IDs are included in new cloud
+uploads. ISO dates also get a UTC-midnight timestamp; the original date text is
+retained even when it cannot be parsed. An owner-only background backfill adds
+missing metadata for previously uploaded scans that still have local details.
+It leaves conflicting or unavailable records untouched. Photos remain local.
+
+Deploy the updated `android/firebase/firestore.rules` **before** installing this
+version; older rules reject new scan fields and backfill writes. Old uploads whose
+local details have already been lost cannot be reconstructed from the cloud.
 
 ## Versions
 

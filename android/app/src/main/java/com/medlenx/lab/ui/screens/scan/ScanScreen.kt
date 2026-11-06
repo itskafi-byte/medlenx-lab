@@ -269,8 +269,9 @@ fun ScanScreen(
             )
             if (state.phase == ScanPhase.Ready && state.capturedBitmap != null) {
                 Text("Select medicine lines; tap to exclude headers and notes. Detection can miss handwriting. The full photo and selected lines will be sent to Gemini.", style = MlxType.Meta)
-                LineSelector(state.capturedBitmap, state.detectedLines, state.selectedLines, vm::toggleDetectedLine)
+                LineSelector(state.capturedBitmap, state.detectedLines, state.selectedLines, vm::toggleDetectedLine, vm::addManualLine, !state.locating)
                 if (state.locating) Text("Finding text lines on this device…", style = MlxType.Meta)
+                if (state.selectedLines.size > 100) Text("Select no more than 100 lines.", style = MlxType.Meta, color = Mlx.Danger)
                 state.error?.let { Text(it, style = MlxType.Meta, color = Mlx.Danger) }
                 state.locatorError?.let { message ->
                     Text(message, style = MlxType.Meta)
@@ -414,7 +415,7 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
                 else -> "Confirm & Extract"
             },
             onClick = onAnalyze,
-            enabled = state.phase == ScanPhase.Ready && !state.locating && state.selectedLines.isNotEmpty(),
+            enabled = state.phase == ScanPhase.Ready && !state.locating && state.selectedLines.isNotEmpty() && state.selectedLines.size <= 100,
             modifier = Modifier.weight(1f),
         )
     }

@@ -93,6 +93,7 @@ data class PrescriptionEntity(
     @ColumnInfo(name = "image_path") val imagePath: String,
     @ColumnInfo(name = "image_hash") val imageHash: String?,
     @ColumnInfo(name = "prescription_date") val prescriptionDate: String? = null,
+    @ColumnInfo(name = "metadata_synced", defaultValue = "0") val metadataSynced: Boolean = false,
     @ColumnInfo(name = "doctor_name") val doctorName: String,
     @ColumnInfo(name = "doctor_bmdc_no") val doctorBmdcNo: String,
     /**

@@ -67,11 +67,12 @@ service cloud.firestore {
     }
     match /companies/{companyId}/team_scans/{scanId} {
       allow read: if isMember(companyId);
-      // No client edits or deletes: historical attribution cannot be overwritten.
+      // New scans are owner-created; attribution and existing metadata remain immutable.
       allow create: if isMember(companyId)
         && request.resource.data.keys().hasOnly([
           'scanId', 'doctorName', 'doctorSpecialty', 'territory', 'medicines',
-          'scannedBy', 'createdByUid', 'timestamp', 'captureTimestamp'
+          'scannedBy', 'createdByUid', 'timestamp', 'captureTimestamp',
+          'prescription_date', 'prescription_date_raw'
         ])
         && request.resource.data.keys().hasAll([
           'scanId', 'doctorName', 'doctorSpecialty', 'territory', 'medicines',
@@ -90,8 +91,20 @@ service cloud.firestore {
         && request.resource.data.medicines is list
         && request.resource.data.medicines.size() <= 100
         && (!('captureTimestamp' in request.resource.data) || request.resource.data.captureTimestamp is timestamp)
+        && (!('prescription_date' in request.resource.data) || request.resource.data.prescription_date == null || request.resource.data.prescription_date is timestamp)
+        && (!('prescription_date_raw' in request.resource.data) || request.resource.data.prescription_date_raw == null ||
+            (request.resource.data.prescription_date_raw is string && request.resource.data.prescription_date_raw.size() <= 1000))
         && request.resource.data.timestamp == request.time;
-      allow update, delete: if false;
+      // Owner-only, add-once backfill. All other scan fields stay immutable.
+      allow update: if isMember(companyId) && resource.data.createdByUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prescription_date', 'prescription_date_raw', 'medex_product_ids'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['prescription_date']) ||
+            ((!('prescription_date' in resource.data) || resource.data.prescription_date == null) && request.resource.data.prescription_date is timestamp))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['prescription_date_raw']) ||
+            ((!('prescription_date_raw' in resource.data) || resource.data.prescription_date_raw == null) && request.resource.data.prescription_date_raw is string && request.resource.data.prescription_date_raw.size() <= 1000))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['medex_product_ids']) ||
+            ((!('medex_product_ids' in resource.data) || resource.data.medex_product_ids == null) && request.resource.data.medex_product_ids is string && request.resource.data.medex_product_ids.size() <= 32000));
+      allow delete: if false;
     }
     match /{document=**} {
       allow read, write: if false;

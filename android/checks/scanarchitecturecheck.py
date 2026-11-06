@@ -5,16 +5,16 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('modelName = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
-               'image(bitmap)', 'image(crop)', 'medicines.size == boxes.size', 'patient_info', 'prescription_date',
-               'FinishReason.STOP', 'score in 0.0..1.0', 'Schema.arr("medicines"'):
+for needle in ('model = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
+               'imagePart(bitmap)', 'imagePart(crop)', 'medicines.size == boxes.size', 'patient_info', 'prescription_date',
+               'FinishReason.STOP', 'score in 0.0..1.0', 'Schema(type = Type.ARRAY, items = medicine)'):
     assert needle in client, needle
 assert 'OPENROUTER' not in client
 locator = read('data/remote/DocumentLocator.kt')
 for needle in ('TextRecognition.getClient', 'InputImage.fromBitmap(bitmap, 0)', '.flatMap { it.lines }', 'line.boundingBox'):
     assert needle in locator, needle
 selector = read('ui/screens/scan/LineSelector.kt')
-for needle in ('Canvas(', 'detectTapGestures', 'ContentScale.Fit', 'bitmap.width * scale', 'onToggle'):
+for needle in ('Canvas(', 'detectTapGestures', 'ContentScale.Fit', 'bitmap.width, height / bitmap.height', 'onToggle'):
     assert needle in selector, needle
 migrations = read('data/local/Migrations.kt')
 stmt = re.search(r'val MIGRATION_13_14.*?db.execSQL\("([^\"]+)"\)', migrations, re.S).group(1)
@@ -25,7 +25,7 @@ db.execute(stmt)
 assert db.execute('SELECT brand_name, medex_product_id FROM scanned_medicines').fetchone() == ('Original OCR', None)
 db.execute("INSERT INTO scanned_medicines(brand_name, medex_product_id) VALUES('Edited','medex-42')")
 assert db.execute('SELECT medex_product_id FROM scanned_medicines WHERE id=2').fetchone()[0] == 'medex-42'
-assert 'version = 15' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
+assert 'version = 16' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
 assert 'medexProductId = pick?.id' in read('data/repo/MedicineEnricher.kt')
 assert 'checkNotNull(index.productById(preferredId))' in read('data/repo/MedicineEnricher.kt')
 vm = read('ui/screens/scan/ScanViewModel.kt')

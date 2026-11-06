@@ -67,17 +67,16 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 try {
                     val doc = firestore.collection("companies").document(rx.companyId)
                         .collection("team_scans").document(rx.scanId)
-                    val medicines = dao.medicinesFor(uid, rx.id).map { med ->
-                        mapOf("brand" to med.brandName, "generic" to med.generic,
-                            "confidence" to med.confidenceScore, "company" to med.companyName.orEmpty())
-                    }
+                    val localMedicines = dao.medicinesFor(uid, rx.id)
+                    val medicines = localMedicines.map(ScanCloudFields::medicineMap)
                     val existing = doc.get(Source.SERVER).await()
                     if (existing.exists()) {
                         // An ACK may have been lost. Reconcile instead of updating.
                         if (existing.getString("createdByUid") != uid || existing.getString("scanId") != rx.scanId ||
                             existing.getString("doctorName") != rx.doctorName ||
                             existing.getString("doctorSpecialty") != rx.doctorSpecialty ||
-                            existing.getString("territory") != rx.territory || existing.get("medicines") != medicines ||
+                            existing.getString("territory") != rx.territory || !ScanCloudFields.sameMedicines(existing.get("medicines"), localMedicines) ||
+                            !ScanCloudFields.compatibleMetadata(existing, rx.prescriptionDate, localMedicines) ||
                             (existing.contains("captureTimestamp") &&
                                 (existing.get("captureTimestamp") as? Timestamp)?.toDate()?.time != rx.createdAt)) {
                             return Result.failure()
@@ -90,6 +89,8 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             "doctorSpecialty" to rx.doctorSpecialty,
                             "territory" to rx.territory,
                             "medicines" to medicines,
+                            "prescription_date" to ScanCloudFields.timestamp(rx.prescriptionDate),
+                            "prescription_date_raw" to rx.prescriptionDate,
                             "scannedBy" to name,
                             "createdByUid" to uid,
                             "captureTimestamp" to Timestamp(Date(rx.createdAt)),
@@ -98,12 +99,51 @@ class UploadScanWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     }
                     if (auth.currentUser?.uid != uid) return Result.success()
                     dao.markUploaded(uid, rx.id, rx.companyId, rx.scanId)
+                    if (!existing.exists()) dao.markMetadataSynced(uid, rx.companyId, rx.id, rx.scanId)
                 } catch (e: FirebaseFirestoreException) {
                     if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
                     if (auth.currentUser?.uid != uid) return Result.success()
                     dao.markRejected(uid, rx.id, rx.companyId, rx.scanId)
                     rejected = true
                 }
+            }
+            // Backfill previously uploaded scans that still have original local detail.
+            // Transactions add missing metadata only; attribution and medicine rows stay immutable.
+            var afterId = 0L
+            while (true) {
+                if (auth.currentUser?.uid != uid) return Result.success()
+                val rows = dao.metadataBackfillCandidates(uid, company, afterId)
+                if (rows.isEmpty()) break
+                for (rx in rows) {
+                    if (auth.currentUser?.uid != uid) return Result.success()
+                    afterId = rx.id
+                    val localMedicines = dao.medicinesFor(uid, rx.id)
+                    val ref = firestore.collection("companies").document(company).collection("team_scans").document(rx.scanId)
+                    val complete = firestore.runTransaction { transaction ->
+                        check(auth.currentUser?.uid == uid)
+                        val doc = transaction.get(ref)
+                        if (!doc.exists() || doc.getString("createdByUid") != uid || doc.getString("scanId") != rx.scanId ||
+                            doc.getString("doctorName") != rx.doctorName || doc.getString("doctorSpecialty") != rx.doctorSpecialty ||
+                            doc.getString("territory") != rx.territory || !ScanCloudFields.sameMedicines(doc.get("medicines"), localMedicines, requireCompany = false) ||
+                            !ScanCloudFields.compatibleMetadata(doc, rx.prescriptionDate, localMedicines) ||
+                            (doc.contains("captureTimestamp") && (doc.get("captureTimestamp") as? Timestamp)?.toDate()?.time != rx.createdAt)) {
+                            false
+                        } else {
+                            val updates = mutableMapOf<String, Any>()
+                            val date = rx.prescriptionDate?.takeIf { it.isNotBlank() }
+                            if (date != null && doc.get("prescription_date_raw") == null) updates["prescription_date_raw"] = date
+                            val dateTimestamp = ScanCloudFields.timestamp(date)
+                            if (dateTimestamp != null && doc.get("prescription_date") == null) updates["prescription_date"] = dateTimestamp
+                            if (doc.get("medex_product_ids") == null && localMedicines.any { !it.medexProductId.isNullOrBlank() }) {
+                                updates["medex_product_ids"] = ScanCloudFields.encodeIds(localMedicines)
+                            }
+                            if (updates.isNotEmpty()) transaction.update(ref, updates)
+                            true
+                        }
+                    }.await()
+                    if (complete && auth.currentUser?.uid == uid) dao.markMetadataSynced(uid, company, rx.id, rx.scanId)
+                }
+                if (rows.size < 100) break
             }
             if (rejected) return Result.failure()
             return Result.success()

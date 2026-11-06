@@ -2,11 +2,16 @@ package com.medlenx.lab.data.remote
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.Schema
-import com.google.ai.client.generativeai.type.FinishReason
-import com.google.ai.client.generativeai.type.content
-import com.google.ai.client.generativeai.type.generationConfig
+import com.google.genai.kotlin.Client
+import com.google.genai.kotlin.types.Schema
+import com.google.genai.kotlin.types.Type
+import com.google.genai.kotlin.types.FinishReason
+import com.google.genai.kotlin.types.Content
+import com.google.genai.kotlin.types.Part
+import com.google.genai.kotlin.types.Blob
+import com.google.genai.kotlin.types.GenerateContentConfig
+import com.google.genai.kotlin.types.HttpOptions
+import java.io.ByteArrayOutputStream
 import com.medlenx.lab.BuildConfig
 import com.medlenx.lab.data.model.VlDoctor
 import com.medlenx.lab.data.model.VlMedicine
@@ -48,21 +53,28 @@ class MedLenXVlClient(
                 require(box.left >= 0 && box.top >= 0 && box.right <= bitmap.width && box.bottom <= bitmap.height && !box.isEmpty)
                 crops += Bitmap.createBitmap(bitmap, box.left, box.top, box.right - box.left, box.bottom - box.top)
             }
-            val model = GenerativeModel(modelName = "gemini-2.5-flash", apiKey = apiKey,
-                generationConfig = generationConfig {
-                    responseMimeType = "application/json"
-                    responseSchema = resultSchema()
-                })
-            val response = model.generateContent(content {
-                text(PROMPT)
-                text("Full prescription image, for doctor and date metadata only:")
-                image(bitmap)
-                crops.forEachIndexed { index, crop ->
-                    text("Selected medicine line ${index + 1}:")
-                    image(crop)
+            fun imagePart(source: Bitmap): Part {
+                val bytes = ByteArrayOutputStream().use { out ->
+                    check(source.compress(Bitmap.CompressFormat.JPEG, 95, out))
+                    out.toByteArray()
                 }
-            })
-            if (response.candidates.firstOrNull()?.finishReason != FinishReason.STOP)
+                return Part(inlineData = Blob(data = bytes, mimeType = "image/jpeg"))
+            }
+            val parts = mutableListOf(
+                Part(text = PROMPT),
+                Part(text = "Full prescription image, for doctor and date metadata only:"),
+                imagePart(bitmap),
+            )
+            crops.forEachIndexed { index, crop ->
+                parts += Part(text = "Selected medicine line ${index + 1}:")
+                parts += imagePart(crop)
+            }
+            val response = Client(apiKey = apiKey, httpOptions = HttpOptions(timeout = 240_000)).use { client ->
+                client.models.generateContent(model = "gemini-2.5-flash",
+                    content = Content(role = "user", parts = parts),
+                    config = GenerateContentConfig(responseMimeType = "application/json", responseSchema = resultSchema()))
+            }
+            if (response.finishReason != FinishReason.STOP)
                 return@withContext VlOutcome.Failure("Gemini did not complete the scan. Please retry.")
             val text = response.text ?: return@withContext VlOutcome.Failure("Gemini returned no result. Please retry.")
             val root = json.parseToJsonElement(text).jsonObject
@@ -101,13 +113,15 @@ class MedLenXVlClient(
 
     companion object {
         private const val PROMPT = """You are an expert medical transcriptionist. The first image is the full original prescription. Extract doctor details and prescription date from that image only. Do not extract patient identifiers: patient_info must be masked and contain no identifying details. The remaining images are selected cropped lines from that prescription, in order. Read handwritten medicine names from the crops only, not from the full image. Return exactly one medicine object per crop, in the same order, with brand_name and confidence between 0 and 1. If illegible use an empty brand and confidence 0. Return all schema fields, empty strings where unknown. Never infer a manufacturer. Output JSON only."""
-        private fun resultSchema(): Schema<out Any> {
+        private fun resultSchema(): Schema {
+            fun obj(properties: Map<String, Schema>) = Schema(type = Type.OBJECT, properties = properties, required = properties.keys.toList())
+            fun text() = Schema(type = Type.STRING)
             val keys = listOf("name", "bmdc_no", "qualifications", "hospital", "department", "specialty", "chamber", "district", "upazila", "territory")
-            val doctor = Schema.obj("doctor", "Doctor metadata from the full image", *keys.map { Schema.str(it, it) }.toTypedArray())
-            val patient = Schema.obj("patient_info", "Masked patient details", Schema.bool("masked", "Always true"), Schema.str("note", "No patient identifiers"))
-            val medicine = Schema.obj("medicine", "One selected line", Schema.str("brand_name", "Transcribed name"), Schema.double("confidence", "Confidence from 0 to 1"))
-            return Schema.obj("prescription", "Prescription result", doctor, patient,
-                Schema.str("prescription_date", "Date as written or empty"), Schema.arr("medicines", "One per crop in order", medicine))
+            val doctor = obj(keys.associateWith { text() })
+            val patient = obj(mapOf("masked" to Schema(type = Type.BOOLEAN), "note" to text()))
+            val medicine = obj(mapOf("brand_name" to text(), "confidence" to Schema(type = Type.NUMBER)))
+            return obj(mapOf("doctor" to doctor, "patient_info" to patient, "prescription_date" to text(),
+                "medicines" to Schema(type = Type.ARRAY, items = medicine)))
         }
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(240, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
