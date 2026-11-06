@@ -76,6 +76,7 @@ enum class PrescriptionSource(val label: String) {
  * whether it renders clean or in the amber "please check this" state.
  */
 data class DoctorVerification(
+    val prescriptionDate: String = "",
     val name: String = "",
     val nameConfidence: Int = 0,
     val bmdcNo: String = "",
@@ -369,6 +370,13 @@ fun VerifyDoctorSection(
 
             SectionHeader(title = "Doctor Information — BMDC Verification")
 
+            ConfidenceField(
+                label = "Prescription date (as written)",
+                value = doctor.prescriptionDate,
+                confidence = 0,
+                onValueChange = { onDoctorChange(doctor.copy(prescriptionDate = it)) },
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
             ConfidenceField(
                 label = "Doctor Name",
                 value = doctor.name,

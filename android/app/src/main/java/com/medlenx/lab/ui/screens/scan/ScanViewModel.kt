@@ -3,6 +3,12 @@ package com.medlenx.lab.ui.screens.scan
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.Rect
+import android.media.ExifInterface
+import com.medlenx.lab.data.remote.DocumentLocator
 import android.net.Uri
 import androidx.room.withTransaction
 import androidx.compose.runtime.getValue
@@ -89,7 +95,12 @@ data class ScanUiState(
     val brandSuggestions: List<MedexProduct> = emptyList(),
     val receipt: SavedReceipt? = null,
     val savedPrescriptionId: Long? = null,
-    val uploadPrepared: Boolean = false,
+    val capturedBitmap: Bitmap? = null,
+    val detectedLines: List<Rect> = emptyList(),
+    val selectedLines: Set<Int> = emptySet(),
+    val queuedId: Long? = null,
+    val locating: Boolean = false,
+    val locatorError: String? = null,
 
     /** True when the current capture is parked in the offline queue awaiting a replay. */
     val parked: Boolean = false,
@@ -104,15 +115,14 @@ data class ScanUiState(
  */
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val locator = DocumentLocator()
+    private var locateJob: Job? = null
     private val app = application as MedLenXApp
     private val scanRepository = app.graph.scanRepository
     private val locationRepository = app.graph.locationRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
     private val deviceState = app.graph.deviceState
     val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-
-    /** Parked captures are replayed from disk, so the mime travels with the row. */
-    private val mimeType = "image/jpeg"
 
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
     var dailyTarget by mutableStateOf(targetPrefs.getInt(DailyTargetSettings.KEY, DailyTargetSettings.DEFAULT))
@@ -345,34 +355,42 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 }.getOrNull()
             }
             if (FirebaseAuth.getInstance().currentUser?.uid != uid) {
-                file?.delete()
                 return@launch
             }
             if (file == null) {
                 state = state.copy(phase = ScanPhase.Failed, error = "Could not read that image")
                 return@launch
             }
+            val bitmap = withContext(Dispatchers.IO) { decodeOriented(file) }
+            if (FirebaseAuth.getInstance().currentUser?.uid != uid || uid != currentUid) return@launch
+            if (bitmap == null) {
+                state = state.copy(phase = ScanPhase.Failed, error = "Could not decode that image")
+                return@launch
+            }
             state = state.copy(
                 phase = ScanPhase.Ready,
-                imageUri = uri.toString(),
+                capturedBitmap = bitmap,
+                imageUri = Uri.fromFile(file).toString(),
                 imageFile = file,
                 error = null,
                 result = null,
-                uploadPrepared = false,
                 progress = 0f,
                 progressText = "",
             )
+            locateLines(bitmap)
         }
     }
 
-    /** Persist the already-oriented CameraX JPEG for review and offline replay. */
-    fun onCameraCaptured(bytes: ByteArray, expectedUid: String) {
-        if (bytes.isEmpty() || expectedUid != currentUid || FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return
+    /** Persist the oriented, full-resolution capture for review and offline replay. */
+    fun onCameraCaptured(bitmap: Bitmap, expectedUid: String) {
+        if (expectedUid != currentUid || FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return
         viewModelScope.launch {
             val file = withContext(Dispatchers.IO) {
                 runCatching {
                     val dir = UserCaptureFiles.stored(getApplication(), expectedUid).apply { check(mkdirs() || isDirectory) }
-                    File(dir, "rx_${java.util.UUID.randomUUID()}.jpg").apply { writeBytes(bytes) }
+                    File(dir, "rx_${java.util.UUID.randomUUID()}.jpg").apply {
+                        outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it)) }
+                    }
                 }.getOrNull()
             }
             if (FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return@launch
@@ -380,15 +398,59 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 state = state.copy(phase = ScanPhase.Failed, error = "Could not save the camera image")
             } else {
                 state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
-                    error = null, result = null, uploadPrepared = true, progress = 0f, progressText = "")
+                    error = null, result = null, capturedBitmap = bitmap, progress = 0f, progressText = "")
+                locateLines(bitmap)
             }
         }
     }
 
-    /** Runs MedLenX VL over the captured image. */
+    private fun decodeOriented(file: File): Bitmap? = runCatching {
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+        val exif = ExifInterface(file.absolutePath)
+        val matrix = Matrix().apply {
+            when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> { postRotate(90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_TRANSVERSE -> { postRotate(270f); postScale(-1f, 1f) }
+            }
+        }
+        if (matrix.isIdentity) bitmap else Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            .also { if (it !== bitmap) bitmap.recycle() }
+    }.getOrNull()
+
+    private fun locateLines(bitmap: Bitmap) {
+        locateJob?.cancel()
+        state = state.copy(locating = true, locatorError = null, detectedLines = emptyList(), selectedLines = emptySet())
+        locateJob = viewModelScope.launch {
+            try {
+                val boxes = locator.locate(bitmap)
+                if (state.capturedBitmap !== bitmap || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return@launch
+                state = state.copy(locating = false, detectedLines = boxes, selectedLines = boxes.indices.toSet(),
+                    locatorError = if (boxes.isEmpty()) "No lines detected. Retake the photo or try another image." else null)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (state.capturedBitmap === bitmap) state = state.copy(locating = false, locatorError = "Could not detect lines. Try again.")
+            }
+        }
+    }
+
+    fun toggleDetectedLine(index: Int) {
+        if (index !in state.detectedLines.indices) return
+        state = state.copy(selectedLines = if (index in state.selectedLines) state.selectedLines - index else state.selectedLines + index)
+    }
+
+    fun retryLocator() { state.capturedBitmap?.let(::locateLines) }
+
+    /** Send the full image and confirmed medicine-line crops to Gemini. */
     fun analyze() {
         val file = state.imageFile ?: return
-        if (state.phase == ScanPhase.Scanning) return
+        val bitmap = state.capturedBitmap ?: return
+        val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }.map { Rect(it) }
+        if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || boxes.isEmpty() || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
 
         scanJob = viewModelScope.launch {
             val outcome: ScanProgress = if (!deviceState.online) {
@@ -405,16 +467,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     error = null,
                     parked = false,
                 )
-                val bytes = withContext(Dispatchers.IO) {
-                    runCatching { file.readBytes() }.getOrNull()
-                }
-                if (bytes == null) {
-                    state = state.copy(phase = ScanPhase.Failed, error = "Image bytes unavailable")
-                    return@launch
-                }
                 state = state.copy(progressText = "Waiting for AI response…")
-                scanRepository.scan(bytes, alreadyPrepared = state.uploadPrepared)
+                scanRepository.scan(bitmap, boxes)
             }
+            if (FirebaseAuth.getInstance().currentUser?.uid != currentUid || state.phase != ScanPhase.Scanning && outcome !is ScanProgress.QueuedOffline) return@launch
             when (outcome) {
                 is ScanProgress.Done -> try {
                     enterVerification(outcome.result)
@@ -425,7 +481,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 is ScanProgress.Failed ->
                     if (!deviceState.online) parkForReplay(file)
-                    else state = state.copy(phase = ScanPhase.Failed, error = outcome.message)
+                    else state = state.copy(phase = ScanPhase.Ready, error = outcome.message)
                 ScanProgress.QueuedOffline -> parkForReplay(file)
                 ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
                 else -> Unit
@@ -438,12 +494,22 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      *
      * Deliberately not [ScanPhase.Failed]: that panel has no way back, and the capture is
      * still perfectly good - only the network is missing. Staying on [ScanPhase.Ready]
-     * keeps the viewer, the GPS strip and the Analyze button, so the officer can simply
-     * retry by hand. [syncQueuedScans] retries automatically.
+     * keeps the viewer, the GPS strip and the confirmation button for retry.
+     * Reconnecting reopens queued scans for review, never sending them automatically.
      */
     private suspend fun parkForReplay(file: File) {
         val parked = try {
-            scanRepository.queueForLater(currentUid, file.absolutePath, mimeType)
+            val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }
+            val payload = "lines-v1:" + org.json.JSONArray().apply { boxes.forEach { box ->
+                put(org.json.JSONArray().put(box.left).put(box.top).put(box.right).put(box.bottom))
+            } }.toString()
+            val queuedId = state.queuedId
+            if (queuedId == null) {
+                val id = scanRepository.queueForLater(currentUid, file.absolutePath, payload)
+                state = state.copy(queuedId = id)
+            } else {
+                scanRepository.updateQueuedSelection(currentUid, queuedId, payload)
+            }
             true
         } catch (e: CancellationException) {
             throw e
@@ -460,15 +526,13 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Replays the oldest parked capture, honouring the header's "they will sync when you
-     * reconnect".
+     * Opens the oldest parked capture for line confirmation after reconnecting.
      *
      * Only ever runs from [ScanPhase.Empty] - genuinely idle, with no capture in hand.
      * `Ready` is deliberately excluded even when nothing is parked: at that point the
      * officer has picked an image and is about to analyse it, and a connectivity blip
      * must not swap the viewer to a different prescription underneath them. Rows that
-     * cannot be read stay queued and are retried on the next connectivity change, up to
-     * the repository's attempt cap.
+     * cannot be read remain queued rather than being discarded.
      */
     fun syncQueuedScans() {
         if (!deviceState.online) return
@@ -478,29 +542,21 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Re-runs MedLenX VL over a parked capture. True once the row can be dropped. */
+    /** Reopen parked images for explicit confirmation, including pre-locator legacy rows. */
     private suspend fun replayQueued(row: QueuedScanEntity): Boolean {
         val file = File(row.imagePath)
-        val bytes = withContext(Dispatchers.IO) {
-            runCatching { file.takeIf { it.exists() }?.readBytes() }.getOrNull()
-        } ?: return false
-        return when (val progress = scanRepository.scan(bytes)) {
-            is ScanProgress.Done -> {
-                state = state.copy(
-                    phase = ScanPhase.Ready,
-                    imageUri = Uri.fromFile(file).toString(),
-                    imageFile = file,
-                    parked = false,
-                    error = null,
-                    result = null,
-                    progress = 0f,
-                    progressText = "",
-                )
-                enterVerification(progress.result)
-                true
-            }
-            else -> false
-        }
+        val bitmap = withContext(Dispatchers.IO) { decodeOriented(file) } ?: return false
+        if (state.phase != ScanPhase.Empty || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return false
+        state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
+            capturedBitmap = bitmap, queuedId = row.id, parked = true, error = null)
+        val restored = runCatching {
+            if (!row.payload.startsWith("lines-v1:")) return@runCatching emptyList<Rect>()
+            val array = org.json.JSONArray(row.payload.removePrefix("lines-v1:"))
+            (0 until array.length()).map { i -> array.getJSONArray(i).let { Rect(it.getInt(0), it.getInt(1), it.getInt(2), it.getInt(3)) } }
+                .filter { it.left >= 0 && it.top >= 0 && it.right <= bitmap.width && it.bottom <= bitmap.height && !it.isEmpty }
+        }.getOrDefault(emptyList())
+        if (restored.isEmpty()) locateLines(bitmap) else state = state.copy(detectedLines = restored, selectedLines = restored.indices.toSet())
+        return false // keep queue row until a verified save succeeds
     }
 
     /**
@@ -558,14 +614,15 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             progressText = "Read complete",
             result = result,
             doctor = DoctorVerification(
+                prescriptionDate = result.prescriptionDate,
                 name = d.name,
-                nameConfidence = 96,
+                nameConfidence = 0,
                 bmdcNo = d.bmdcNo,
-                bmdcConfidence = 92,
+                bmdcConfidence = 0,
                 qualifications = d.qualifications,
-                qualificationsConfidence = 88,
+                qualificationsConfidence = 0,
                 hospitalChamber = d.hospital.ifBlank { d.chamber },
-                hospitalConfidence = 85,
+                hospitalConfidence = 0,
                 specialty = d.specialty,
                 district = d.district.ifBlank { state.geo.district },
                 upazila = d.upazila.ifBlank { state.geo.upazila },
@@ -1095,6 +1152,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         rxNo = "", // assigned from the auto-incremented ID in the save transaction
                         imagePath = imageFile?.absolutePath.orEmpty(),
                         imageHash = hash,
+                        prescriptionDate = doctor.prescriptionDate.trim().takeIf { it.isNotEmpty() },
                         doctorName = doctor.name,
                         doctorBmdcNo = doctor.bmdcNo,
                         doctorSpecialty = doctor.specialty,
@@ -1120,10 +1178,20 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     expectedUid = currentUid,
                     enriched = audit,
                 )
+                // Keep the queue until the verified transaction succeeds. If removal
+                // fails, retain the row rather than misreporting the committed save.
+                val queuedId = state.queuedId
+                val removedQueue = if (queuedId == null) true else if (FirebaseAuth.getInstance().currentUser?.uid == currentUid) {
+                    try { scanRepository.removeQueued(currentUid, queuedId); true }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { false }
+                } else false
                 val rxNo = "RX-$savedPrescriptionId"
                 duplicateOfRxIds = match?.let { listOf(it.rxNo) } ?: emptyList()
                 state = state.copy(
                     phase = ScanPhase.Saved,
+                    queuedId = if (removedQueue) null else queuedId,
+                    parked = !removedQueue,
                     savedPrescriptionId = savedPrescriptionId,
                     receipt = SavedReceipt(
                         rxNumber = rxNo,
@@ -1246,21 +1314,25 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        locateJob?.cancel()
+        locator.close()
         targetPrefs.unregisterOnSharedPreferenceChangeListener(targetListener)
         super.onCleared()
     }
 
     fun clear() {
         scanJob?.cancel()
+        locateJob?.cancel()
         scanJob = null
         substitutionJobs.values.forEach { it.cancel() }
         substitutionJobs.clear()
+        val wasReviewingQueue = state.queuedId != null
         state = ScanUiState()
         duplicateOfRxIds = emptyList()
         // Nothing re-emits on `snapshotFlow { online }` unless the network actually
         // changes, so finishing a scan is the other moment to offer up the next
         // parked capture. One at a time: it still has to pass verification.
-        syncQueuedScans()
+        if (!wasReviewingQueue) syncQueuedScans()
     }
 
 }

@@ -104,11 +104,11 @@ fun ScanScreen(
     if (cameraOpen) {
         CameraViewfinder(
             onClose = { cameraOpen = false; cameraUid = null },
-            onCaptured = { bytes ->
+            onCaptured = { bitmap ->
                 val uid = cameraUid
                 cameraOpen = false
                 cameraUid = null
-                if (uid != null && FirebaseAuth.getInstance().currentUser?.uid == uid) vm.onCameraCaptured(bytes, uid)
+                if (uid != null && FirebaseAuth.getInstance().currentUser?.uid == uid) vm.onCameraCaptured(bitmap, uid)
             },
         )
     }
@@ -267,11 +267,19 @@ fun ScanScreen(
                 online = vm.online,
                 parked = state.parked,
             )
-            ViewerCard(
-                state = state,
-                transform = transform,
-                onClear = vm::clear,
-                )
+            if (state.phase == ScanPhase.Ready && state.capturedBitmap != null) {
+                Text("Select medicine lines; tap to exclude headers and notes. Detection can miss handwriting. The full photo and selected lines will be sent to Gemini.", style = MlxType.Meta)
+                LineSelector(state.capturedBitmap, state.detectedLines, state.selectedLines, vm::toggleDetectedLine)
+                if (state.locating) Text("Finding text lines on this device…", style = MlxType.Meta)
+                state.error?.let { Text(it, style = MlxType.Meta, color = Mlx.Danger) }
+                state.locatorError?.let { message ->
+                    Text(message, style = MlxType.Meta)
+                    MlxButton(text = "Retry detection", onClick = vm::retryLocator)
+                }
+                MlxButton(text = "Retake or choose another image", onClick = vm::clear)
+            } else {
+                ViewerCard(state = state, transform = transform, onClear = vm::clear)
+            }
             GeoStrip(
                 state = state.geo,
                 onUpazilaChange = { vm.onGeoChange(upazila = it) },
@@ -374,7 +382,7 @@ private fun ViewerCard(
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
-                        text = "MedLenX VL Scanning",
+                        text = "Gemini scanning",
                         tone = PillTone.Dark,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -402,11 +410,11 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
         MlxButton(
             text = when (state.phase) {
                 ScanPhase.Scanning -> "Scanning…"
-                ScanPhase.Done -> "Re-scan with MedLenX VL"
-                else -> "Analyze with MedLenX VL"
+                ScanPhase.Done -> "Re-scan with Gemini"
+                else -> "Confirm & Extract"
             },
             onClick = onAnalyze,
-            enabled = state.phase != ScanPhase.Scanning,
+            enabled = state.phase == ScanPhase.Ready && !state.locating && state.selectedLines.isNotEmpty(),
             modifier = Modifier.weight(1f),
         )
     }
@@ -456,8 +464,8 @@ private fun VerificationArea(state: ScanUiState) {
         }
 
         ScanPhase.NeedsKey -> MlxEmptyState(
-            message = "No OpenRouter key configured. Add OPENROUTER_API_KEY to " +
-                "android/local.properties and rebuild to enable MedLenX VL.",
+            message = "No Gemini key configured. Add GEMINI_API_KEY to " +
+                "android/local.properties and rebuild to enable Gemini.",
             icon = Icons.Filled.FileUpload,
         )
 

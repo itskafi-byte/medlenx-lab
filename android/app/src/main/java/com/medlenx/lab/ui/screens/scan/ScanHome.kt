@@ -134,6 +134,7 @@ fun ScanHome(
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     CaptureHero(onCamera, onGallery)
+                    if (vm.online && vm.queuedScans > 0) Button(onClick = vm::syncQueuedScans) { Text("Review queued scans (${vm.queuedScans})") }
                     DailyTargetCard(vm)
                     MonthlyBrandTargets(vm.monthlyBrandKpis)
                     TopDoctorsSummary(vm.weeklyTopDoctors)
@@ -150,6 +151,7 @@ fun ScanHome(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 CaptureHero(onCamera, onGallery)
+                if (vm.online && vm.queuedScans > 0) Button(onClick = vm::syncQueuedScans) { Text("Review queued scans (${vm.queuedScans})") }
                 DailyTargetCard(vm)
                 MonthlyBrandTargets(vm.monthlyBrandKpis)
                 TopDoctorsSummary(vm.weeklyTopDoctors)

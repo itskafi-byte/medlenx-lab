@@ -1,6 +1,9 @@
 package com.medlenx.lab.ui.screens.scan
 
 import android.graphics.ImageFormat
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.view.Surface
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -43,13 +46,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.medlenx.lab.data.remote.ImagePrep
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** CameraX owns only its two use cases; closing the dialog releases them. */
 @Composable
-fun CameraViewfinder(onClose: () -> Unit, onCaptured: (ByteArray) -> Unit) {
+fun CameraViewfinder(onClose: () -> Unit, onCaptured: (Bitmap) -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val main = remember(context) { ContextCompat.getMainExecutor(context) }
@@ -118,13 +120,18 @@ fun CameraViewfinder(onClose: () -> Unit, onCaptured: (ByteArray) -> Unit) {
                                         val buffer = image.planes[0].buffer
                                         val bytes = ByteArray(buffer.remaining())
                                         buffer.get(bytes)
-                                        ImagePrep.toUploadJpeg(bytes, image.imageInfo.rotationDegrees)
+                                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bitmap ->
+                                            val rotation = image.imageInfo.rotationDegrees
+                                            if (rotation == 0) bitmap else Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height,
+                                                Matrix().apply { postRotate(rotation.toFloat()) }, true).also { if (it !== bitmap) bitmap.recycle() }
+                                        }
                                     }
-                                } catch (_: Exception) { null } finally { image.close() }
+                                } catch (_: OutOfMemoryError) { null }
+                                catch (_: Exception) { null } finally { image.close() }
                                 main.execute {
                                     if (active.get()) {
                                         busy = false
-                                        if (prepared == null || prepared.isEmpty()) error = "Could not process the photo. Please try again."
+                                        if (prepared == null) error = "Could not process the photo. Please try again."
                                         else onCaptured(prepared)
                                     }
                                 }

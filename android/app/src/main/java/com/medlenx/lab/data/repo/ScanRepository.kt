@@ -2,6 +2,8 @@ package com.medlenx.lab.data.repo
 
 import com.google.firebase.auth.FirebaseAuth
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Rect
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
 import androidx.room.withTransaction
@@ -34,7 +36,7 @@ sealed class ScanProgress {
     data class Failed(val message: String) : ScanProgress()
     data object QueuedOffline : ScanProgress()
 
-    /** No OpenRouter key configured — the app runs in demo mode like the web build. */
+    /** Gemini API key is not configured. */
     data object NeedsApiKey : ScanProgress()
 }
 
@@ -57,13 +59,22 @@ class ScanRepository(
     private val catalogue: AssetCatalogue,
 ) {
 
-    suspend fun scan(imageBytes: ByteArray, mimeType: String = "image/jpeg", alreadyPrepared: Boolean = false): ScanProgress {
+    suspend fun scan(bitmap: Bitmap, selectedLines: List<Rect>): ScanProgress {
         if (!vlClient.hasKey) return ScanProgress.NeedsApiKey
-        return when (val outcome = vlClient.scanPrescription(imageBytes, mimeType, alreadyPrepared)) {
+        return when (val outcome = vlClient.scanPrescription(bitmap, selectedLines)) {
             is VlOutcome.Success -> ScanProgress.Done(outcome.result, outcome.rawContent)
             is VlOutcome.Failure -> ScanProgress.Failed(outcome.message)
             VlOutcome.NoKey -> ScanProgress.NeedsApiKey
         }
+    }
+
+    suspend fun removeQueued(currentUid: String, id: Long) {
+        check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+        queueDao.remove(currentUid, id)
+    }
+    suspend fun updateQueuedSelection(currentUid: String, id: Long, payload: String) {
+        check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
+        queueDao.updatePayload(currentUid, id, payload)
     }
 
     /** Parks a capture for replay when connectivity returns. */
@@ -227,13 +238,8 @@ class ScanRepository(
     }
 
     /**
-     * Replays parked captures, oldest first, and stops at the first one that reads.
-     *
-     * A resumed read still has to pass through the officer's verification panels before it
-     * can be saved, so only one can be handed back at a time - the rest stay parked and the
-     * header badge keeps counting them. A row that fails stays queued with `attempts`
-     * incremented; past [MAX_QUEUE_ATTEMPTS] it is dropped, so one corrupt capture cannot
-     * pin the badge open forever.
+     * Offers the oldest parked capture for review. A row is retained if it cannot
+     * be opened; it is never discarded automatically after a retry limit.
      *
      * @return how many rows were drained - 0 or 1.
      */
@@ -245,16 +251,12 @@ class ScanRepository(
         val pending = queueDao.observeAll(currentUid).first()
         for (row in pending) {
             if (FirebaseAuth.getInstance().currentUser?.uid != currentUid) break
-            if (row.attempts >= MAX_QUEUE_ATTEMPTS) {
-                queueDao.remove(currentUid, row.id)
-                continue
-            }
-            queueDao.markAttempt(currentUid, row.id)
             if (handler(row)) {
                 queueDao.remove(currentUid, row.id)
                 drained++
-                break
             }
+            // A row may have been opened for confirmation; never skip or discard it.
+            break
         }
         return drained
     }
@@ -304,8 +306,4 @@ class ScanRepository(
         }.also { if (it.all.isNotEmpty()) cachedIndex = it }
     }
 
-    private companion object {
-        /** Retries before a parked capture is abandoned. */
-        const val MAX_QUEUE_ATTEMPTS = 3
-    }
 }

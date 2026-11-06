@@ -1,276 +1,116 @@
 package com.medlenx.lab.data.remote
 
-import android.util.Base64
+import android.graphics.Bitmap
+import android.graphics.Rect
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.Schema
+import com.google.ai.client.generativeai.type.FinishReason
+import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.type.generationConfig
 import com.medlenx.lab.BuildConfig
+import com.medlenx.lab.data.model.VlDoctor
+import com.medlenx.lab.data.model.VlMedicine
+import com.medlenx.lab.data.model.VlPatientInfo
 import com.medlenx.lab.data.model.VlScanResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-import okhttp3.MediaType.Companion.toMediaType
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.booleanOrNull
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/** Outcome of a single MedLenX VL call. */
 sealed class VlOutcome {
     data class Success(val result: VlScanResult, val rawContent: String) : VlOutcome()
     data class Failure(val message: String, val retryable: Boolean = false) : VlOutcome()
-
-    /** No API key configured — mirrors the web app's demo mode. */
     data object NoKey : VlOutcome()
 }
 
-/**
- * MedLenX VL client.
- *
- * OpenRouter client for personal testing only. The key embedded in
- * BuildConfig can be extracted from the APK; use a backend before distribution.
- */
+/** Direct Gemini access embeds an extractable API key in the APK. */
 class MedLenXVlClient(
     private val httpClient: OkHttpClient,
     private val json: Json,
-    private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
-    private val baseUrl: String = BuildConfig.OPENROUTER_BASE_URL,
-    private val primaryModel: String = BuildConfig.VL_MODEL_PRIMARY,
+    private val apiKey: String = BuildConfig.GEMINI_API_KEY,
 ) {
+    val hasKey get() = apiKey.isNotBlank()
+    val displayName get() = "Gemini 2.5 Flash"
 
-    val hasKey: Boolean get() = apiKey.isNotBlank()
-
-    /** Display name shown in the UI — "MedLenX VL 1.0-Pro". */
-    val displayName: String get() = "${BuildConfig.VL_DISPLAY_NAME} ${BuildConfig.VL_VERSION}"
-
-    /**
-     * Reads a Bangladeshi prescription image.
-     *
-     * @param imageBytes JPEG/PNG/WEBP bytes from the camera or gallery.
-     * @param mimeType MIME type of the image sent through OpenRouter.
-     */
-    suspend fun scanPrescription(
-        imageBytes: ByteArray,
-        mimeType: String = "image/jpeg",
-        alreadyPrepared: Boolean = false,
-    ): VlOutcome = withContext(Dispatchers.IO) {
+    suspend fun scanPrescription(bitmap: Bitmap, boxes: List<Rect>): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
-
-        // Shrink before encoding: a raw 12MP capture is a multi-megabyte base64 body.
-        val (uploadBytes, uploadMime) = if (alreadyPrepared) imageBytes to "image/jpeg" else prepareUpload(imageBytes, mimeType)
-
-        val first = call(uploadBytes, uploadMime, primaryModel)
-        if (first !is VlOutcome.Failure || !first.retryable) return@withContext first
-
-        // Both models are explicitly free. Retry once with the user's chosen
-        // alternative only for availability, quota or transient network failures.
-        val fallback = call(uploadBytes, uploadMime, FREE_FALLBACK_MODEL)
-        if (fallback is VlOutcome.Failure) {
-            VlOutcome.Failure("Primary: ${first.message} Alternative: ${fallback.message}")
-        } else fallback
-    }
-
-    /** Re-encodes for upload, keeping the original bytes if the image cannot be decoded. */
-    private fun prepareUpload(bytes: ByteArray, mimeType: String): Pair<ByteArray, String> {
-        val prepared = ImagePrep.toUploadJpeg(bytes)
-        return if (prepared != null) prepared to "image/jpeg" else bytes to mimeType
-    }
-
-    private suspend fun call(
-        imageBytes: ByteArray,
-        mimeType: String,
-        model: String,
-    ): VlOutcome {
-        val payload = buildJsonObject {
-            put("model", model)
-            put("messages", buildJsonArray {
-                add(buildJsonObject {
-                    put("role", "system")
-                    put("content", SYSTEM_PROMPT)
-                })
-                add(buildJsonObject {
-                    put("role", "user")
-                    put("content", buildJsonArray {
-                        add(buildJsonObject {
-                            put("type", "text")
-                            put("text", USER_PROMPT)
-                        })
-                        add(buildJsonObject {
-                            put("type", "image_url")
-                            put("image_url", buildJsonObject {
-                                put("url", "data:$mimeType;base64," + Base64.encodeToString(imageBytes, Base64.NO_WRAP))
-                            })
-                        })
-                    })
-                })
-            })
-            // Both free models support reasoning. Avoid requiring a model-specific effort level.
-            put("reasoning", buildJsonObject { put("enabled", true) })
-            put("response_format", VlResponseSchema.responseFormat)
-            put("provider", buildJsonObject { put("require_parameters", true) })
-        }.toString()
-
-        val request = Request.Builder()
-            .url(baseUrl)
-            .header("Authorization", "Bearer $apiKey")
-            .post(payload.toRequestBody("application/json".toMediaType()))
-            .build()
-
-        return runCatching {
-            httpClient.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                val problem = OpenRouterErrors.fromResponse(json, body, response.code)
-                if (problem != null) {
-                    return@use VlOutcome.Failure(problem.message, problem.retryable)
-                }
-                val root = json.parseToJsonElement(body).jsonObject
-                val choice = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject
-                    ?: return@use VlOutcome.Failure("OpenRouter returned no scan result; try again.")
-                val reason = choice["finish_reason"]?.jsonPrimitive?.contentOrNull
-                if (reason != "stop") {
-                    return@use VlOutcome.Failure("OpenRouter did not complete the scan (${reason ?: "unknown reason"}). Retry.")
-                }
-                val text = choice["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull.orEmpty()
-                if (text.isBlank()) VlOutcome.Failure("OpenRouter returned an empty scan result.")
-                else parseScanJson(text)
+        if (boxes.isEmpty()) return@withContext VlOutcome.Failure("Select at least one medicine line.")
+        val crops = mutableListOf<Bitmap>()
+        try {
+            for (box in boxes) {
+                require(box.left >= 0 && box.top >= 0 && box.right <= bitmap.width && box.bottom <= bitmap.height && !box.isEmpty)
+                crops += Bitmap.createBitmap(bitmap, box.left, box.top, box.right - box.left, box.bottom - box.top)
             }
-        }.getOrElse { error ->
-            if (error is IOException) VlOutcome.Failure(
-                "OpenRouter connection failed or timed out. Check your connection and try again.",
-                retryable = true,
-            ) else VlOutcome.Failure("OpenRouter returned an unreadable response. Please try again.")
+            val model = GenerativeModel(modelName = "gemini-2.5-flash", apiKey = apiKey,
+                generationConfig = generationConfig {
+                    responseMimeType = "application/json"
+                    responseSchema = resultSchema()
+                })
+            val response = model.generateContent(content {
+                text(PROMPT)
+                text("Full prescription image, for doctor and date metadata only:")
+                image(bitmap)
+                crops.forEachIndexed { index, crop ->
+                    text("Selected medicine line ${index + 1}:")
+                    image(crop)
+                }
+            })
+            if (response.candidates.firstOrNull()?.finishReason != FinishReason.STOP)
+                return@withContext VlOutcome.Failure("Gemini did not complete the scan. Please retry.")
+            val text = response.text ?: return@withContext VlOutcome.Failure("Gemini returned no result. Please retry.")
+            val root = json.parseToJsonElement(text).jsonObject
+            require(root.keys.containsAll(listOf("doctor", "patient_info", "prescription_date", "medicines")))
+            val doc = root.getValue("doctor").jsonObject
+            val doctorKeys = listOf("name", "bmdc_no", "qualifications", "hospital", "department", "specialty", "chamber", "district", "upazila", "territory")
+            require(doc.keys.containsAll(doctorKeys) && doctorKeys.all { doc.getValue(it).jsonPrimitive.isString })
+            val date = root.getValue("prescription_date").jsonPrimitive
+            require(date.isString)
+            val patient = root.getValue("patient_info").jsonObject
+            require(patient.getValue("masked").jsonPrimitive.booleanOrNull == true && patient.getValue("note").jsonPrimitive.isString)
+            val medicines = root.getValue("medicines").jsonArray
+            require(medicines.size == boxes.size)
+            val rows = medicines.map { element ->
+                val row = element.jsonObject
+                val brand = row.getValue("brand_name").jsonPrimitive
+                val confidence = row.getValue("confidence").jsonPrimitive
+                require(brand.isString && !confidence.isString)
+                val score = confidence.doubleOrNull ?: error("Missing confidence")
+                require(score.isFinite() && score in 0.0..1.0)
+                VlMedicine(brandName = brand.content, rawText = brand.content, confidence = score)
+            }
+            VlOutcome.Success(VlScanResult(doctor = json.decodeFromJsonElement(VlDoctor.serializer(), doc),
+                prescriptionDate = date.content, medicines = rows,
+                patientInfo = VlPatientInfo(masked = true, note = "Patient identifiers masked")), text)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: OutOfMemoryError) {
+            VlOutcome.Failure("Not enough memory to prepare this image. Try a smaller photo.")
+        } catch (_: Exception) {
+            VlOutcome.Failure("Gemini could not complete the scan or returned an invalid result. Check your connection and retry.")
+        } finally {
+            crops.forEach { if (it !== bitmap) it.recycle() }
         }
-    }
-
-    /**
-     * The model sometimes wraps its JSON in a markdown fence despite being told not
-     * to, so strip fences and grab the outermost object before decoding.
-     */
-    private fun parseScanJson(text: String): VlOutcome {
-        val cleaned = text
-            .removePrefix("```json").removePrefix("```")
-            .removeSuffix("```")
-            .trim()
-        val start = cleaned.indexOf('{')
-        val end = cleaned.lastIndexOf('}')
-        if (start < 0 || end <= start) {
-            return VlOutcome.Failure("MedLenX VL did not return JSON")
-        }
-        return runCatching {
-            val content = cleaned.substring(start, end + 1)
-            require(VlResponseSchema.accepts(json.parseToJsonElement(content))) { "Response did not match the scan schema" }
-            VlOutcome.Success(
-                result = json.decodeFromString(VlScanResult.serializer(), content),
-                rawContent = text,
-            )
-        }.getOrElse { VlOutcome.Failure("Could not parse MedLenX VL output: ${it.message}") }
     }
 
     companion object {
-        private const val FREE_FALLBACK_MODEL = "google/gemma-4-31b-it:free"
-
-        /** Verbatim from MedLenXVLClient.scan_prescription_pure(). */
-        private const val SYSTEM_PROMPT =
-            "You are MedLenX VL, expert Bangladeshi prescription reader for MR field work.\n" +
-                "You handle Bengali/English mixed prescriptions, extract BMDC numbers, and mask patient PII per compliance.\n" +
-                "Output valid JSON only."
-
-        /** Verbatim from MedLenXVLClient.scan_prescription_pure(). */
-        private const val USER_PROMPT = """
-Analyze this Bangladeshi prescription image - mobile capture may have rotation/contrast issues.
-
-Extract per new design spec:
-
-1. DOCTOR BLOCK (top, printed):
-   - name, qualifications, hospital, department, specialty (Cardiology, Medicine, Orthopedics etc)
-   - bmdc_no / BMDC Registration No (e.g., A-12345, format letter + numbers)
-   - chamber (clinic name), district, upazila, territory
-
-2. MEDICINES (Rx onwards, handwritten cursive, English brand + Bengali dosage):
-   - brand_name: Trade name exact (e.g., Napa, Seclo, Sergel, Ace)
-   - generic_name: Chemical generic (e.g., Paracetamol, Omeprazole)
-   - raw_text: Full line as seen (include Bengali if present like ১+০+১)
-   - form: Tab/Cap/Syr/Inj etc
-   - type: Tablet/Capsule/Syrup/Injection/Cream/Drop/Inhaler/Suppository/Powder etc
-   - strength: 20mg, 500mg, 10ml
-   - dosage: Extract dosage pattern - can be English 1+0+1 or Bengali ১+০+১ or ১ চামচ করে - keep original in dosage_bengali, then normalize to English in dosage_normalized (০-৯ → 0-9)
-   - dosage_bengali: Original Bengali if present
-   - dosage_normalized: Converted to English 1+0+1
-   - frequency: Before meal, After meal, At night etc
-   - company: ONLY if the manufacturer is literally printed/written on the
-     prescription next to that medicine. DO NOT guess or infer the company from
-     the brand name - the server resolves the manufacturer from the official
-     MedEx catalogue. If it is not written on the paper, return "" (empty string).
-   - confidence: 0-1
-   - bbox: normalised [x, y, w, h] (each 0..1) bounding box of this medicine's
-     handwritten line on the image, so the app can highlight it while editing
-
-3. Patient PII: DO NOT extract patient name, age, phone - mask per BMDC compliance, note "masked"
-
-4. Bengali handling: ১=1, ২=2, ৩=3, ৪=4, ৫=5, ৬=6, ৭=7, ৮=8, ৯=9, ০=0, চামচ=spoon
-
-Return ONLY JSON:
-{
-  "doctor": {
-    "name": "Dr. A. K. M. Rahman",
-    "bmdc_no": "A-12345",
-    "qualifications": "MBBS, FCPS...",
-    "hospital": "Dhaka Medical College Hospital",
-    "department": "Medicine",
-    "specialty": "Medicine",
-    "chamber": "Popular Diagnostic, Dhanmondi",
-    "district": "Dhaka",
-    "upazila": "Dhanmondi",
-    "territory": "Dhaka South"
-  },
-  "medicines": [
-    {
-      "brand_name": "Seclo",
-      "generic_name": "Omeprazole",
-      "raw_text": "Cap. Seclo 20mg - ১+০+১ - 1 month",
-      "form": "Cap",
-      "type": "Capsule",
-      "strength": "20mg",
-      "dosage": "1+0+1",
-      "dosage_bengali": "১+০+১",
-      "dosage_normalized": "1+0+1",
-      "frequency": "Before meal",
-      "company": "",
-      "confidence": 0.92,
-      "bbox": [0.1, 0.2, 0.6, 0.1]
-    }
-  ],
-  "patient_info": {"masked": true, "note": "Patient PII masked per BMDC compliance"},
-  "meta": {"total_medicines": 1, "legibility": 0.8, "language_mix": "English+Bengali ১+০+১"}
-}
-
-IMPORTANT: never invent a pharmaceutical company. Leave "company" empty unless it
-is actually printed on the prescription. An empty company is correct and useful;
-a guessed company is a data error.
-
-Return every field in the schema. Use empty strings or empty arrays when unknown;
-patient_info and meta may be null. Never guess uncertain details.
-Output JSON only, no markdown.
-"""
-
-        /** Allow extra time for a high-thinking vision-model round trip. */
-        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(240, TimeUnit.SECONDS)
-            .writeTimeout(120, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-
-        fun defaultJson(): Json = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            encodeDefaults = true
-            explicitNulls = false
+        private const val PROMPT = """You are an expert medical transcriptionist. The first image is the full original prescription. Extract doctor details and prescription date from that image only. Do not extract patient identifiers: patient_info must be masked and contain no identifying details. The remaining images are selected cropped lines from that prescription, in order. Read handwritten medicine names from the crops only, not from the full image. Return exactly one medicine object per crop, in the same order, with brand_name and confidence between 0 and 1. If illegible use an empty brand and confidence 0. Return all schema fields, empty strings where unknown. Never infer a manufacturer. Output JSON only."""
+        private fun resultSchema(): Schema<out Any> {
+            val keys = listOf("name", "bmdc_no", "qualifications", "hospital", "department", "specialty", "chamber", "district", "upazila", "territory")
+            val doctor = Schema.obj("doctor", "Doctor metadata from the full image", *keys.map { Schema.str(it, it) }.toTypedArray())
+            val patient = Schema.obj("patient_info", "Masked patient details", Schema.bool("masked", "Always true"), Schema.str("note", "No patient identifiers"))
+            val medicine = Schema.obj("medicine", "One selected line", Schema.str("brand_name", "Transcribed name"), Schema.double("confidence", "Confidence from 0 to 1"))
+            return Schema.obj("prescription", "Prescription result", doctor, patient,
+                Schema.str("prescription_date", "Date as written or empty"), Schema.arr("medicines", "One per crop in order", medicine))
         }
+        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(240, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
+        fun defaultJson(): Json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true; explicitNulls = false }
     }
 }

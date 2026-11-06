@@ -170,6 +170,12 @@ object Migrations {
     }
 
     /** Preserve all historical medicine rows; older matches have no recorded catalogue ID. */
+    val MIGRATION_14_15 = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE prescriptions ADD COLUMN prescription_date TEXT")
+        }
+    }
+
     val MIGRATION_13_14 = object : Migration(13, 14) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE `scanned_medicines` ADD COLUMN `medex_product_id` TEXT")

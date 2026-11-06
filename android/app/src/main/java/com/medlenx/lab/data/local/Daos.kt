@@ -1065,6 +1065,9 @@ interface QueueDao {
     @Query("DELETE FROM queued_scans WHERE user_id = :currentUid AND id = :id")
     suspend fun remove(currentUid: String, id: Long)
 
+    @Query("UPDATE queued_scans SET payload = :payload WHERE user_id = :currentUid AND id = :id")
+    suspend fun updatePayload(currentUid: String, id: Long, payload: String)
+
     @Query("UPDATE queued_scans SET attempts = attempts + 1 WHERE user_id = :currentUid AND id = :id")
     suspend fun markAttempt(currentUid: String, id: Long)
 }

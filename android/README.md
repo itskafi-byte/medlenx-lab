@@ -134,7 +134,7 @@ whether Studio accepts AGP 9.3.2 as-is. If it does not:
 ```bash
 cd android
 cp local.properties.example local.properties
-# set sdk.dir, and OPENROUTER_API_KEY if you want real scans instead of demo mode
+# set sdk.dir, and GEMINI_API_KEY for scanning
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
@@ -163,30 +163,24 @@ a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.
 
 ## API key handling
 
-`OPENROUTER_API_KEY` is read from `android/local.properties` (git-ignored) or the
-environment, and compiled into `BuildConfig`.
+`GEMINI_API_KEY` is read from `android/local.properties` (git-ignored) or the
+same-named environment variable and compiled into `BuildConfig`. Obtain a Gemini
+API key and configure it locally; do not paste it into chat or version control.
 
-> **Warning.** `BuildConfig` values are extractable from an unpacked APK. Use a
-> rate-limited key, or proxy the call through your own backend before a public release.
+**The key is extractable from the APK.** Restrict and rate-limit it; use a backend
+proxy before public distribution. The legacy Google AI Android SDK requested by
+this project is deprecated by Google and may stop receiving fixes.
 
-Create an OpenRouter key at https://openrouter.ai/settings/keys and add
-`OPENROUTER_API_KEY=your-key` to `android/local.properties` (do not share it).
-Scanning uses `nvidia/nemotron-3.5-super-vl:free`, an image-capable free
-OpenRouter endpoint. Free endpoints can be unavailable, rate limited or subject
-to provider-specific data policies; check OpenRouter availability and privacy
-settings if requests fail. For an unavailable endpoint, quota or a transient
-connection error, the app tries `google/gemma-4-31b-it:free` once. No paid
-fallback is enabled. The alternative sends the image to Google AI Studio through
-OpenRouter; review both providers’ data policies before use.
+The full prescription photograph and the selected line crops are sent to Gemini
+2.5 Flash in one request. Patient identifiers are not requested or stored, but
+may still be visible in the transmitted photograph. Obtain appropriate permission
+and review Google's data policies. The bundled Latin-script ML Kit recognizer can
+miss handwriting or Bengali text; inspect the selected regions and verify all
+results. An image with no detected lines cannot currently be submitted.
 
-The app sends the prescription image (after resizing) to OpenRouter and its model
-provider. Asking the model not to output patient details does not anonymize the
-image. Review their data policies, obtain permission, and follow applicable
-patient privacy requirements before sending it.
-
-Scanning requests reasoning. Handwriting recognition, particularly Bengali
-prescriptions, has not been validated with this model; no AI model guarantees
-accuracy. Verify all medicines before saving. Reasoning can increase latency.
+Queued scans are reopened for line confirmation when online, rather than submitted
+without selection. The selected prescription date and MedEx product ID are local
+Room fields and are not currently propagated by cloud history restoration.
 
 ## Versions
 
@@ -209,8 +203,8 @@ turn on **Authentication → Sign-in method → Email/Password**. Download the a
 `client[0].client_info.mobilesdk_app_id`, and `client[0].api_key[0].current_key`
 into `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, and `FIREBASE_API_KEY` respectively
 in `android/local.properties`. The Firebase API key is a project identifier, not
-the OpenRouter API key. Restrict it appropriately in Google Cloud; never paste the
-OpenRouter key into Firebase settings. Rebuild after changing the values.
+the Gemini API key. Restrict it appropriately in Google Cloud; never paste the
+Gemini key into Firebase settings. Rebuild after changing the values.
 
 This is a **single-user device** configuration: sign-out does not delete or
 isolate existing local scans, settings, and analytics. Another account signing in

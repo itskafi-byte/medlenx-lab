@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class VlScanResult(
     val doctor: VlDoctor = VlDoctor(),
+    @SerialName("prescription_date") val prescriptionDate: String = "",
     val medicines: List<VlMedicine> = emptyList(),
     @SerialName("patient_info") val patientInfo: VlPatientInfo? = null,
     val meta: VlMeta? = null,
