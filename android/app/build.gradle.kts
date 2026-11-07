@@ -107,6 +107,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // JAR indexes are not useful in an APK and the Google auth libraries
+            // both ship one, causing mergeDebugJavaResource to fail.
+            excludes += "/META-INF/INDEX.LIST"
         }
     }
 
