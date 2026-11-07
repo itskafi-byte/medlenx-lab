@@ -110,8 +110,9 @@ android {
             // JAR indexes are not useful in an APK and the Google auth libraries
             // both ship one, causing mergeDebugJavaResource to fail.
             excludes += "/META-INF/INDEX.LIST"
-            // Keep both dependency notices rather than failing on duplicate paths.
-            merges += "/META-INF/DEPENDENCIES"
+            // Apache HTTP JARs contain duplicate dependency indexes. Exclude the
+            // index (not the libraries or their license files) from the APK.
+            excludes += "META-INF/DEPENDENCIES"
         }
     }
 
