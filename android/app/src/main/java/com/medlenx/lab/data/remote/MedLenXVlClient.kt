@@ -60,7 +60,7 @@ class MedLenXVlClient(
                 }
             }
             val generativeModel = GenerativeModel(
-                modelName = "gemini-2.5-flash", apiKey = apiKey,
+                modelName = "gemini-3.8-flash", apiKey = apiKey,
                 generationConfig = generationConfig {
                     responseMimeType = "application/json"
                     responseSchema = resultSchema()
