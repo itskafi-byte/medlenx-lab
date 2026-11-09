@@ -10,6 +10,10 @@ for needle in ('model = "gemini-2.5-flash"', 'responseMimeType = "application/js
                'FinishReason.STOP', 'Schema(type = Type.ARRAY, items = medicine)', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
     assert needle in client, needle
 assert 'OPENROUTER' not in client
+assert 'Blob(data = bytes, mimeType = "image/jpeg")' in client
+assert 'Log.e("GeminiScan", "API Error", e)' in client
+assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
+assert 'Log.e("GeminiScan", "Response parsing error", e)' in client
 parser = read('data/remote/GeminiScanParser.kt')
 assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
 assert 'parseToJsonElement(clean(text))' in parser
@@ -48,6 +52,7 @@ assert 'CameraViewfinder(' in screen and 'ActivityResultContracts.TakePicture()'
 assert 'ActivityResultContracts.PickVisualMedia()' in screen and 'vm.onCameraCaptured(bitmap, uid)' in screen
 assert 'FirebaseAuth.getInstance().currentUser?.uid != expectedUid' in vm
 assert 'scanRepository.scan(bitmap, boxes)' in vm
+assert 'parkForReplay(file, outcome.message)' in vm and 'error = outcome.message' in vm
 
 stmt15 = re.search(r'val MIGRATION_14_15.*?db.execSQL\("([^\"]+)"\)', migrations, re.S).group(1)
 db.execute('CREATE TABLE prescriptions(id INTEGER PRIMARY KEY, doctor_name TEXT)')

@@ -2,6 +2,7 @@ package com.medlenx.lab.data.remote
 
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.util.Log
 import com.google.genai.kotlin.Client
 import com.google.genai.kotlin.types.Schema
 import com.google.genai.kotlin.types.Type
@@ -64,20 +65,23 @@ class MedLenXVlClient(
                     config = GenerateContentConfig(responseMimeType = "application/json", responseSchema = resultSchema()))
             }
             if (response.finishReason != FinishReason.STOP)
-                return@withContext VlOutcome.Failure("Gemini did not complete the scan. Please retry.")
+                return@withContext VlOutcome.Failure("Gemini did not complete the scan: ${response.finishReason ?: "no finish reason"}.")
             val text = response.text ?: return@withContext VlOutcome.Failure("Gemini returned no result. Please retry.")
             val result = try {
                 GeminiScanParser.parse(json, text, expectedLines = boxes.size)
-            } catch (_: Exception) {
-                return@withContext VlOutcome.Failure("Gemini returned an invalid scan result. Please retry.")
+            } catch (e: Exception) {
+                Log.e("GeminiScan", "Response parsing error", e)
+                return@withContext VlOutcome.Failure("Gemini response parsing error: ${e.localizedMessage ?: e.toString()}")
             }
             VlOutcome.Success(result = result, rawContent = text)
         } catch (e: CancellationException) {
             throw e
-        } catch (_: OutOfMemoryError) {
+        } catch (e: OutOfMemoryError) {
+            Log.e("GeminiScan", "Image preparation error", e)
             VlOutcome.Failure("Not enough memory to prepare this image. Try a smaller photo.")
-        } catch (_: Exception) {
-            VlOutcome.Failure("Gemini could not complete the scan or returned an invalid result. Check your connection and retry.")
+        } catch (e: Exception) {
+            Log.e("GeminiScan", "API Error", e)
+            VlOutcome.Failure(e.localizedMessage ?: e.toString())
         }
     }
 

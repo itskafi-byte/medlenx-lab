@@ -490,7 +490,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     state = state.copy(phase = ScanPhase.Failed, error = e.message ?: "Could not prepare the scan for review")
                 }
                 is ScanProgress.Failed ->
-                    if (!deviceState.online) parkForReplay(file)
+                    if (!deviceState.online) parkForReplay(file, outcome.message)
                     else state = state.copy(phase = ScanPhase.Ready, error = outcome.message)
                 ScanProgress.QueuedOffline -> parkForReplay(file)
                 ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
@@ -507,7 +507,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      * keeps the viewer, the GPS strip and the confirmation button for retry.
      * Reconnecting reopens queued scans for review, never sending them automatically.
      */
-    private suspend fun parkForReplay(file: File) {
+    private suspend fun parkForReplay(file: File, failureMessage: String? = null) {
         val parked = try {
             val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }
             val payload = "lines-v1:" + org.json.JSONArray().apply { boxes.forEach { box ->
@@ -531,7 +531,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             parked = parked,
             progress = 0f,
             progressText = "",
-            error = if (parked) null else "Offline, and the capture could not be queued",
+            error = if (parked) failureMessage else "Offline, and the capture could not be queued" +
+                (failureMessage?.let { ": $it" } ?: ""),
         )
     }
 
