@@ -171,7 +171,9 @@ API key and configure it locally; do not paste it into chat or version control.
 proxy before public distribution. The Google Gen AI Kotlin SDK is used directly from the app; its maintainers recommend Firebase AI Logic with App Check for public mobile apps.
 
 The full prescription photograph and the selected line crops are sent to Gemini
-2.5 Flash in one request. Patient identifiers are not requested or stored, but
+2.5 Flash in one request. The full image is resized to at most 1600 pixels on its
+longest edge; the full image and each crop are JPEG-compressed at quality 80 for
+upload. Original local captures and crop coordinates remain unchanged. Patient identifiers are not requested or stored, but
 may still be visible in the transmitted photograph. Obtain appropriate permission
 and review Google's data policies. The bundled Latin-script ML Kit recognizer can
 miss handwriting or Bengali text; inspect the selected regions and verify all

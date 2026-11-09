@@ -11,21 +11,12 @@ import com.google.genai.kotlin.types.Part
 import com.google.genai.kotlin.types.Blob
 import com.google.genai.kotlin.types.GenerateContentConfig
 import com.google.genai.kotlin.types.HttpOptions
-import java.io.ByteArrayOutputStream
 import com.medlenx.lab.BuildConfig
-import com.medlenx.lab.data.model.VlDoctor
-import com.medlenx.lab.data.model.VlMedicine
-import com.medlenx.lab.data.model.VlPatientInfo
 import com.medlenx.lab.data.model.VlScanResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.booleanOrNull
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -47,27 +38,25 @@ class MedLenXVlClient(
     suspend fun scanPrescription(bitmap: Bitmap, boxes: List<Rect>): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
         if (boxes.isEmpty()) return@withContext VlOutcome.Failure("Select at least one medicine line.")
-        val crops = mutableListOf<Bitmap>()
         try {
-            for (box in boxes) {
-                require(box.left >= 0 && box.top >= 0 && box.right <= bitmap.width && box.bottom <= bitmap.height && !box.isEmpty)
-                crops += Bitmap.createBitmap(bitmap, box.left, box.top, box.right - box.left, box.bottom - box.top)
-            }
-            fun imagePart(source: Bitmap): Part {
-                val bytes = ByteArrayOutputStream().use { out ->
-                    check(source.compress(Bitmap.CompressFormat.JPEG, 95, out))
-                    out.toByteArray()
-                }
+            fun imagePart(source: Bitmap, scaleFullImage: Boolean): Part {
+                val bytes = ImagePrep.bitmapUploadJpeg(source, scaleFullImage)
                 return Part(inlineData = Blob(data = bytes, mimeType = "image/jpeg"))
             }
             val parts = mutableListOf(
                 Part(text = PROMPT),
                 Part(text = "Full prescription image, for doctor and date metadata only:"),
-                imagePart(bitmap),
+                imagePart(bitmap, scaleFullImage = true),
             )
-            crops.forEachIndexed { index, crop ->
-                parts += Part(text = "Selected medicine line ${index + 1}:")
-                parts += imagePart(crop)
+            boxes.forEachIndexed { index, box ->
+                require(box.left >= 0 && box.top >= 0 && box.right <= bitmap.width && box.bottom <= bitmap.height && !box.isEmpty)
+                val crop = Bitmap.createBitmap(bitmap, box.left, box.top, box.right - box.left, box.bottom - box.top)
+                try {
+                    parts += Part(text = "Selected medicine line ${index + 1}:")
+                    parts += imagePart(crop, scaleFullImage = false)
+                } finally {
+                    if (crop !== bitmap) crop.recycle()
+                }
             }
             val response = Client(apiKey = apiKey, httpOptions = HttpOptions(timeout = 240_000)).use { client ->
                 client.models.generateContent(model = "gemini-2.5-flash",
@@ -77,37 +66,18 @@ class MedLenXVlClient(
             if (response.finishReason != FinishReason.STOP)
                 return@withContext VlOutcome.Failure("Gemini did not complete the scan. Please retry.")
             val text = response.text ?: return@withContext VlOutcome.Failure("Gemini returned no result. Please retry.")
-            val root = json.parseToJsonElement(text).jsonObject
-            require(root.keys.containsAll(listOf("doctor", "patient_info", "prescription_date", "medicines")))
-            val doc = root.getValue("doctor").jsonObject
-            val doctorKeys = listOf("name", "bmdc_no", "qualifications", "hospital", "department", "specialty", "chamber", "district", "upazila", "territory")
-            require(doc.keys.containsAll(doctorKeys) && doctorKeys.all { doc.getValue(it).jsonPrimitive.isString })
-            val date = root.getValue("prescription_date").jsonPrimitive
-            require(date.isString)
-            val patient = root.getValue("patient_info").jsonObject
-            require(patient.getValue("masked").jsonPrimitive.booleanOrNull == true && patient.getValue("note").jsonPrimitive.isString)
-            val medicines = root.getValue("medicines").jsonArray
-            require(medicines.size == boxes.size)
-            val rows = medicines.map { element ->
-                val row = element.jsonObject
-                val brand = row.getValue("brand_name").jsonPrimitive
-                val confidence = row.getValue("confidence").jsonPrimitive
-                require(brand.isString && !confidence.isString)
-                val score = confidence.doubleOrNull ?: error("Missing confidence")
-                require(score.isFinite() && score in 0.0..1.0)
-                VlMedicine(brandName = brand.content, rawText = brand.content, confidence = score)
+            val result = try {
+                GeminiScanParser.parse(json, text, expectedLines = boxes.size)
+            } catch (_: Exception) {
+                return@withContext VlOutcome.Failure("Gemini returned an invalid scan result. Please retry.")
             }
-            VlOutcome.Success(VlScanResult(doctor = json.decodeFromJsonElement(VlDoctor.serializer(), doc),
-                prescriptionDate = date.content, medicines = rows,
-                patientInfo = VlPatientInfo(masked = true, note = "Patient identifiers masked")), text)
+            VlOutcome.Success(result = result, rawContent = text)
         } catch (e: CancellationException) {
             throw e
         } catch (_: OutOfMemoryError) {
             VlOutcome.Failure("Not enough memory to prepare this image. Try a smaller photo.")
         } catch (_: Exception) {
             VlOutcome.Failure("Gemini could not complete the scan or returned an invalid result. Check your connection and retry.")
-        } finally {
-            crops.forEach { if (it !== bitmap) it.recycle() }
         }
     }
 

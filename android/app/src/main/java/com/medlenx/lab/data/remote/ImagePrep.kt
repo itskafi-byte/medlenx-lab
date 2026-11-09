@@ -25,6 +25,31 @@ object ImagePrep {
     private const val MAX_EDGE = 1600
     private const val JPEG_QUALITY = 85
 
+    /** Dimensions for the full-image upload. Never enlarge or modify the source. */
+    internal fun uploadDimensions(width: Int, height: Int): Pair<Int, Int> {
+        require(width > 0 && height > 0)
+        val longEdge = maxOf(width, height)
+        if (longEdge <= MAX_EDGE) return width to height
+        val scale = MAX_EDGE.toDouble() / longEdge
+        return (width * scale).toInt().coerceAtLeast(1) to (height * scale).toInt().coerceAtLeast(1)
+    }
+
+    /** Encode a bitmap to JPEG for Gemini. Only the full image is resized. */
+    fun bitmapUploadJpeg(source: Bitmap, scaleFullImage: Boolean): ByteArray {
+        val (width, height) = if (scaleFullImage) uploadDimensions(source.width, source.height)
+            else source.width to source.height
+        val upload = if (width == source.width && height == source.height) source
+            else Bitmap.createScaledBitmap(source, width, height, true)
+        try {
+            return ByteArrayOutputStream().use { output ->
+                check(upload.compress(Bitmap.CompressFormat.JPEG, 80, output)) { "JPEG encoding failed" }
+                output.toByteArray()
+            }
+        } finally {
+            if (upload !== source) upload.recycle()
+        }
+    }
+
     /** Re-encoded upload bytes, or null when the input could not be decoded. */
     fun toUploadJpeg(bytes: ByteArray, rotationDegrees: Int? = null): ByteArray? = runCatching {
         val orientation = rotationDegrees ?: readOrientation(bytes)

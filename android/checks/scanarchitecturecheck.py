@@ -6,10 +6,16 @@ root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
 for needle in ('model = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
-               'imagePart(bitmap)', 'imagePart(crop)', 'medicines.size == boxes.size', 'patient_info', 'prescription_date',
-               'FinishReason.STOP', 'score in 0.0..1.0', 'Schema(type = Type.ARRAY, items = medicine)'):
+               'imagePart(bitmap, scaleFullImage = true)', 'imagePart(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
+               'FinishReason.STOP', 'Schema(type = Type.ARRAY, items = medicine)', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
     assert needle in client, needle
 assert 'OPENROUTER' not in client
+parser = read('data/remote/GeminiScanParser.kt')
+assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
+assert 'parseToJsonElement(clean(text))' in parser
+prep = read('data/remote/ImagePrep.kt')
+assert 'private const val MAX_EDGE = 1600' in prep
+assert 'Bitmap.CompressFormat.JPEG, 80' in prep and 'if (upload !== source) upload.recycle()' in prep
 locator = read('data/remote/DocumentLocator.kt')
 for needle in ('TextRecognition.getClient', 'InputImage.fromBitmap(bitmap, 0)', '.flatMap { it.lines }', 'line.boundingBox'):
     assert needle in locator, needle
