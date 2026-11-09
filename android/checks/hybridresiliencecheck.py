@@ -42,8 +42,8 @@ for s in ['fun addManualLine', 'state.detectedLines + clipped', 'state.selectedL
     assert s in vm
 client = read('data/remote/MedLenXVlClient.kt')
 build = (root/'app/build.gradle.kts').read_text()
-assert 'com.google.genai:google-genai-kotlin:1.0.0' in build and 'com.google.ai.client.generativeai:generativeai' not in build
-for s in ['Client(apiKey = apiKey, httpOptions = HttpOptions(timeout = 240_000)).use', 'Part(inlineData = Blob', 'imagePart(bitmap, scaleFullImage = true)', 'imagePart(crop, scaleFullImage = false)', 'responseSchema = resultSchema()', 'FinishReason.STOP']:
+assert 'com.google.genai:google-genai-kotlin' not in build and 'com.google.ai.client.generativeai:generativeai:0.9.0' in build
+for s in ['GenerativeModel(', 'requestOptions = RequestOptions(timeout = 240_000L)', 'compressedBitmap(bitmap, scaleFullImage = true)', 'compressedBitmap(crop, scaleFullImage = false)', 'image(fullImage)', 'image(crop)', 'responseSchema = resultSchema()', 'FinishReason.STOP']:
     assert s in client
 cloud = read('data/sync/ScanCloudFields.kt')
 upload = read('data/sync/UploadScanWorker.kt')

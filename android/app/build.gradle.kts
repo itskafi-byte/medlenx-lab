@@ -194,7 +194,7 @@ tasks.named("preBuild") { dependsOn(checkMedLenXAssets) }
 
 dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.genai:google-genai-kotlin:1.0.0")
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     // Firestore 25.1.1's gRPC core needs matching API/transport artifacts.
     // Enforce the entire BOM: ordinary implementation dependencies do not force
     // Gradle to downgrade a newer transitive grpc-api selected elsewhere.

@@ -5,12 +5,14 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('model = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
-               'imagePart(bitmap, scaleFullImage = true)', 'imagePart(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
-               'FinishReason.STOP', 'Schema(type = Type.ARRAY, items = medicine)', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
+for needle in ('modelName = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
+               'compressedBitmap(bitmap, scaleFullImage = true)', 'compressedBitmap(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
+               'FinishReason.STOP', 'Schema.arr("medicines"', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
     assert needle in client, needle
 assert 'OPENROUTER' not in client
-assert 'Blob(data = bytes, mimeType = "image/jpeg")' in client
+assert 'BitmapFactory.decodeByteArray(bytes, 0, bytes.size)' in client
+assert 'image(fullImage)' in client and 'image(crop)' in client
+assert 'payloadBitmaps.forEach { it.recycle() }' in client
 assert 'Log.e("GeminiScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
 assert 'Log.e("GeminiScan", "Response parsing error", e)' in client

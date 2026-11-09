@@ -168,12 +168,16 @@ same-named environment variable and compiled into `BuildConfig`. Obtain a Gemini
 API key and configure it locally; do not paste it into chat or version control.
 
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
-proxy before public distribution. The Google Gen AI Kotlin SDK is used directly from the app; its maintainers recommend Firebase AI Logic with App Check for public mobile apps.
+proxy before public distribution. This prototype uses the deprecated Google AI
+Android SDK; for a supported public app, migrate to Firebase AI Logic with App
+Check or use a secure backend.
 
 The full prescription photograph and the selected line crops are sent to Gemini
 2.5 Flash in one request. The full image is resized to at most 1600 pixels on its
 longest edge; the full image and each crop are JPEG-compressed at quality 80 for
-upload. Original local captures and crop coordinates remain unchanged. Patient identifiers are not requested or stored, but
+upload. The deprecated SDK re-encodes those decoded bitmaps as JPEG, so there is
+an additional lossy encoding step. Original local captures and crop coordinates
+remain unchanged. Patient identifiers are not requested or stored, but
 may still be visible in the transmitted photograph. Obtain appropriate permission
 and review Google's data policies. The bundled Latin-script ML Kit recognizer can
 miss handwriting or Bengali text; inspect the selected regions and verify all
