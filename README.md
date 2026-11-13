@@ -26,6 +26,10 @@ Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Ro
 
 The bundled medicine catalogue is imported into Room. Search uses a Room-managed FTS4 external-content index over brand, generic, company and type, with Porter tokenization and token-prefix `MATCH`. Migration 16→17 rebuilds the index from existing products; enrichment uses a separate in-memory matcher. Prefix search differs from arbitrary substring search, and performance has not been benchmarked. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations and technical Q&A.
 
+## Technical debt roadmap
+
+The proposed roadmap includes content-addressable IDs with an explicit conflict policy, an encrypted vault with an independently retained and recoverable backup, and an on-device PII redaction layer. None is implemented. Hash-based IDs still need atomic writes and privacy review; encryption on the same device alone cannot survive a wipe; and text detection alone cannot guarantee PII redaction. See the [defense guide](PROJECT_DEFENSE_AND_README.md#6-architectural-weaknesses-and-technical-debt-roadmap) for the design caveats.
+
 ## Validation status
 
 Documentation was prepared from source without compiling, running device tests or calling Gemini. In particular, the current endpoint and Firestore deployment require verification. The FTS migration and Room-generated triggers still require local compilation and device testing. A host-only SQLite check is available with `python3 android/checks/medexftscheck.py`; it does not validate generated Room code. Do not uninstall the app or clear its data to troubleshoot if local-only records must be retained.
