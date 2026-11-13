@@ -5,6 +5,8 @@ import androidx.room.Relation
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.Fts4
+import androidx.room.FtsOptions
 import androidx.room.PrimaryKey
 
 /**
@@ -36,6 +38,17 @@ data class MedexEntity(
     @ColumnInfo(name = "image_url") val imageUrl: String?,
     @ColumnInfo(name = "pack_image") val packImage: String?,
     val url: String?,
+)
+
+/** FTS4 external-content index. Room maintains it with content-sync triggers. */
+@Fts4(contentEntity = MedexEntity::class, tokenizer = FtsOptions.TOKENIZER_PORTER)
+@Entity(tableName = "medex_fts")
+data class MedexFtsEntity(
+    @PrimaryKey @ColumnInfo(name = "rowid") val rowId: Int,
+    @ColumnInfo(name = "brand_name") val brandName: String,
+    val generic: String,
+    val company: String,
+    val type: String,
 )
 
 /**

@@ -13,6 +13,7 @@ import com.medlenx.lab.data.local.DoctorDao
 import com.medlenx.lab.data.local.DoctorEntity
 import com.medlenx.lab.data.local.DoctorIdentity
 import com.medlenx.lab.data.local.MedexDao
+import com.medlenx.lab.data.local.searchMedex
 import com.medlenx.lab.data.local.PrescriptionDao
 import com.medlenx.lab.data.local.PrescriptionEntity
 import com.medlenx.lab.data.local.QueueDao
@@ -269,7 +270,7 @@ class ScanRepository(
 
     fun recentPrescriptions(currentUid: String, limit: Int = 10) = prescriptionDao.observeRecent(currentUid, limit)
 
-    suspend fun searchCatalogue(query: String, limit: Int = 24) = medexDao.search(query, limit)
+    suspend fun searchCatalogue(query: String, limit: Int = 24) = medexDao.searchMedex(query, limit)
 
     /**
      * The MedEx matcher index, built once and cached for the process lifetime.

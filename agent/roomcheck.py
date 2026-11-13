@@ -54,7 +54,7 @@ SQL_STOP = {
     "join", "left", "right", "inner", "outer", "cross", "natural", "using",
     "group", "by", "order", "limit", "offset", "desc", "asc", "count", "sum",
     "avg", "max", "min", "distinct", "case", "when", "then", "else", "end",
-    "like", "glob", "between", "cast", "coalesce", "ifnull", "nullif", "values",
+    "like", "glob", "match", "between", "cast", "coalesce", "ifnull", "nullif", "values",
     "set", "into", "update", "delete", "insert", "exists", "union", "all",
     "having", "round", "abs", "length", "lower", "upper", "trim", "replace",
     "substr", "instr", "group_concat", "total", "strftime", "date", "datetime",

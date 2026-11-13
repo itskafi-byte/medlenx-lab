@@ -43,18 +43,20 @@ interface MedexDao {
     @Query("SELECT COUNT(*) FROM medex_products")
     suspend fun count(): Int
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // Updates existing rows rather than SQLite REPLACE, which can bypass delete
+    // triggers and leave stale terms in the external-content FTS index.
+    @Upsert
     suspend fun insertAll(rows: List<MedexEntity>)
 
     @Query("SELECT * FROM medex_products WHERE brand_name = :brand COLLATE NOCASE")
     suspend fun byBrandExact(brand: String): List<MedexEntity>
 
     @Query(
-        "SELECT * FROM medex_products WHERE brand_name LIKE '%' || :q || '%' " +
-            "OR generic LIKE '%' || :q || '%' OR company LIKE '%' || :q || '%' " +
-            "OR type LIKE '%' || :q || '%' LIMIT :limit",
+        "SELECT medex_products.* FROM medex_products JOIN medex_fts " +
+            "ON medex_products.rowid = medex_fts.rowid " +
+            "WHERE medex_fts MATCH :expression LIMIT :limit",
     )
-    suspend fun search(q: String, limit: Int = 24): List<MedexEntity>
+    suspend fun searchFts(expression: String, limit: Int): List<MedexEntity>
 
     @Query("SELECT * FROM medex_products WHERE company = :company LIMIT :limit")
     suspend fun byCompany(company: String, limit: Int = 24): List<MedexEntity>
@@ -73,6 +75,17 @@ interface MedexDao {
 
     @Query("SELECT DISTINCT type FROM medex_products WHERE type != '' ORDER BY type")
     suspend fun forms(): List<String>
+}
+
+/** Safely translate user text to an AND of quoted FTS token prefixes. */
+internal fun medexMatchExpression(query: String): String =
+    Regex("[\\p{L}\\p{M}\\p{N}]+").findAll(query)
+        .joinToString(" ") { "\"${it.value}*\"" }
+
+suspend fun MedexDao.searchMedex(q: String, limit: Int = 24): List<MedexEntity> {
+    val expression = medexMatchExpression(q)
+    if (expression.isEmpty() || limit <= 0) return emptyList()
+    return searchFts(expression, limit)
 }
 
 @Dao

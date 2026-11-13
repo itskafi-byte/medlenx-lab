@@ -2,6 +2,7 @@ package com.medlenx.lab.data.repo
 
 import com.medlenx.lab.data.local.AssetCatalogue
 import com.medlenx.lab.data.local.MedexDao
+import com.medlenx.lab.data.local.searchMedex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,7 +56,7 @@ class MedicineImageStore(
         // The catalogue import runs on the graph scope at process start; a row that
         // renders before it lands must wait rather than silently miss.
         importMutex.withLock { catalogue.ensureImported() }
-        return medexDao.search(key, 5)
+        return medexDao.searchMedex(key, 5)
             .firstNotNullOfOrNull { row ->
                 row.imageUrl?.takeIf { it.isNotBlank() }
                     ?: row.packImage?.takeIf { it.isNotBlank() }

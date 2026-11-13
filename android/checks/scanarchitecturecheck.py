@@ -5,7 +5,7 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('modelName = "gemini-2.5-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
+for needle in ('modelName = "gemini-3.8-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
                'compressedBitmap(bitmap, scaleFullImage = true)', 'compressedBitmap(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
                'FinishReason.STOP', 'Schema.arr("medicines"', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
     assert needle in client, needle
@@ -37,7 +37,7 @@ db.execute(stmt)
 assert db.execute('SELECT brand_name, medex_product_id FROM scanned_medicines').fetchone() == ('Original OCR', None)
 db.execute("INSERT INTO scanned_medicines(brand_name, medex_product_id) VALUES('Edited','medex-42')")
 assert db.execute('SELECT medex_product_id FROM scanned_medicines WHERE id=2').fetchone()[0] == 'medex-42'
-assert 'version = 16' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
+assert 'version = 17' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
 assert 'medexProductId = pick?.id' in read('data/repo/MedicineEnricher.kt')
 assert 'checkNotNull(index.productById(preferredId))' in read('data/repo/MedicineEnricher.kt')
 vm = read('ui/screens/scan/ScanViewModel.kt')

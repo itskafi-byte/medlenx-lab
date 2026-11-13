@@ -33,6 +33,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 object Migrations {
 
+    /** Create and populate the Room-managed external-content FTS4 index. */
+    val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `medex_fts` USING FTS4(`brand_name` TEXT NOT NULL, `generic` TEXT NOT NULL, `company` TEXT NOT NULL, `type` TEXT NOT NULL, tokenize=porter, content=`medex_products`)")
+            db.execSQL("INSERT INTO `medex_fts`(`medex_fts`) VALUES('rebuild')")
+        }
+    }
+
+
     /**
      * Creates `doctors`, adds `prescriptions.doctor_id`, and backfills.
      *

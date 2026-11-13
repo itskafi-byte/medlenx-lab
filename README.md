@@ -24,8 +24,8 @@ The current source requests `gemini-3.8-flash`; its availability for a given API
 
 Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Room and private image files. Verified local scans are queued for network-constrained WorkManager upload; parked offline captures must be reopened for review. A server-confirmed membership and Firestore rules govern company-scoped sharing. History restore cannot recover local-only images or records never uploaded.
 
-The bundled medicine catalogue is imported into Room. Search uses SQL `LIKE` and an in-memory matcher; the current code does **not** implement SQLite FTS5. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations and technical Q&A.
+The bundled medicine catalogue is imported into Room. Search uses a Room-managed FTS4 external-content index and token-prefix `MATCH`; medicine enrichment also uses a separate in-memory matcher. Prefix search differs from arbitrary substring search, and performance has not been benchmarked. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations and technical Q&A.
 
 ## Validation status
 
-Documentation was prepared from source without compiling, running device tests or calling Gemini. In particular, the current endpoint and Firestore deployment require verification. Existing `android/checks/scanarchitecturecheck.py` still expects the previous Gemini model name. Do not uninstall the app or clear its data to troubleshoot if local-only records must be retained.
+Documentation was prepared from source without compiling, running device tests or calling Gemini. In particular, the current endpoint and Firestore deployment require verification. The FTS migration and Room-generated triggers still require local compilation and device testing. Do not uninstall the app or clear its data to troubleshoot if local-only records must be retained.

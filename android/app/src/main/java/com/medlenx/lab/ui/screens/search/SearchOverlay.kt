@@ -49,6 +49,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.medlenx.lab.data.local.searchMedex
 import com.medlenx.lab.MedLenXApp
 import com.medlenx.lab.data.local.MedexEntity
 import com.medlenx.lab.ui.components.MlxEmptyState
@@ -92,7 +93,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         searching = true
         job = viewModelScope.launch {
             delay(200)
-            results = app.graph.database.medexDao().search(q = q, limit = 24)
+            results = app.graph.database.medexDao().searchMedex(q = q, limit = 24)
             searching = false
             searched = true
         }
