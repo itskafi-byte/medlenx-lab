@@ -42,6 +42,15 @@ object Migrations {
     }
 
 
+    /** Add FTS prefix indexes without touching the underlying catalogue or user data. */
+    val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `medex_fts`")
+            db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `medex_fts` USING FTS4(`brand_name` TEXT NOT NULL, `generic` TEXT NOT NULL, `company` TEXT NOT NULL, `type` TEXT NOT NULL, tokenize=porter, content=`medex_products`, prefix=`2,3,4`)")
+            db.execSQL("INSERT INTO `medex_fts`(`medex_fts`) VALUES('rebuild')")
+        }
+    }
+
     /**
      * Creates `doctors`, adds `prescriptions.doctor_id`, and backfills.
      *

@@ -41,7 +41,7 @@ data class MedexEntity(
 )
 
 /** FTS4 external-content index. Room maintains it with content-sync triggers. */
-@Fts4(contentEntity = MedexEntity::class, tokenizer = FtsOptions.TOKENIZER_PORTER)
+@Fts4(contentEntity = MedexEntity::class, tokenizer = FtsOptions.TOKENIZER_PORTER, prefix = [2, 3, 4])
 @Entity(tableName = "medex_fts")
 data class MedexFtsEntity(
     @PrimaryKey @ColumnInfo(name = "rowid") val rowId: Int,

@@ -21,7 +21,7 @@ import androidx.room.RoomDatabase
         ManufacturerAlias::class,
         DeletedScanTombstone::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = false,
 )
 abstract class MedLenXDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class MedLenXDatabase : RoomDatabase() {
                 "medlenx.db",
             )
                 // Never silently wipe unsynced local data on an unknown schema.
-                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7, Migrations.MIGRATION_7_8, Migrations.MIGRATION_8_9, Migrations.MIGRATION_9_10, Migrations.MIGRATION_10_11, Migrations.migration11To12(context.applicationContext), Migrations.MIGRATION_12_13, Migrations.MIGRATION_13_14, Migrations.MIGRATION_14_15, Migrations.MIGRATION_15_16, Migrations.MIGRATION_16_17)
+                .addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3, Migrations.MIGRATION_3_4, Migrations.MIGRATION_4_5, Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7, Migrations.MIGRATION_7_8, Migrations.MIGRATION_8_9, Migrations.MIGRATION_9_10, Migrations.MIGRATION_10_11, Migrations.migration11To12(context.applicationContext), Migrations.MIGRATION_12_13, Migrations.MIGRATION_13_14, Migrations.MIGRATION_14_15, Migrations.MIGRATION_15_16, Migrations.MIGRATION_16_17, Migrations.MIGRATION_17_18)
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                         ManufacturerAliases.seed(context.applicationContext, db)

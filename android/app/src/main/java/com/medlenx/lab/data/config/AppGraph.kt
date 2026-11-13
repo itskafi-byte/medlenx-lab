@@ -10,6 +10,7 @@ import com.medlenx.lab.data.local.MedLenXDatabase
 import com.medlenx.lab.data.local.ProfileDao
 import com.medlenx.lab.data.remote.MedLenXVlClient
 import com.medlenx.lab.data.repo.DeviceStateRepository
+import com.medlenx.lab.data.repo.NetworkConnectivityObserver
 import com.medlenx.lab.data.repo.LocationRepository
 import com.medlenx.lab.data.repo.NewsRepository
 import com.medlenx.lab.data.repo.RegulatoryRepository
@@ -30,6 +31,7 @@ class AppGraph private constructor(
     val database: MedLenXDatabase,
     val catalogue: AssetCatalogue,
     val vlClient: MedLenXVlClient,
+    val networkObserver: NetworkConnectivityObserver,
     val deviceState: DeviceStateRepository,
     val locationRepository: LocationRepository,
     val scanRepository: ScanRepository,
@@ -68,13 +70,15 @@ class AppGraph private constructor(
                 json = json,
             )
             val catalogue = AssetCatalogue(appContext, json, db.medexDao())
+            val networkObserver = NetworkConnectivityObserver(appContext)
             return AppGraph(
                 json = json,
                 database = db,
                 catalogue = catalogue,
                 vlClient = vlClient,
+                networkObserver = networkObserver,
                 deviceState = DeviceStateRepository(
-                    context = appContext,
+                    networkObserver = networkObserver,
                     queueDao = db.queueDao(),
                     profileDao = db.profileDao(),
                     prescriptionDao = db.prescriptionDao(),

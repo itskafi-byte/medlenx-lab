@@ -22,9 +22,9 @@ The current source requests `gemini-3.8-flash`; its availability for a given API
 
 ## Architecture and storage
 
-Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Room and private image files. Verified local scans are queued for network-constrained WorkManager upload; parked offline captures must be reopened for review. A server-confirmed membership and Firestore rules govern company-scoped sharing. History restore cannot recover local-only images or records never uploaded.
+Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Room and private image files. Before Gemini requests, a validated default-network gate parks offline captures for later review; verified local scans are separately queued for network-constrained WorkManager upload. Network validation cannot guarantee Gemini is reachable. A server-confirmed membership and Firestore rules govern company-scoped sharing. History restore cannot recover local-only images or records never uploaded.
 
-The bundled medicine catalogue is imported into Room. Search uses a Room-managed FTS4 external-content index over brand, generic, company and type, with Porter tokenization and token-prefix `MATCH`. Migration 16→17 rebuilds the index from existing products; enrichment uses a separate in-memory matcher. Prefix search differs from arbitrary substring search, and performance has not been benchmarked. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations and technical Q&A.
+The bundled medicine catalogue is imported into Room. Search uses a Room-managed FTS4 external-content index over brand, generic, company and type, with Porter tokenization and token-prefix `MATCH`. Migration 16→17 builds the index and 17→18 adds 2/3/4-character prefix indexes by rebuilding it; enrichment uses a separate in-memory matcher. Prefix search differs from arbitrary substring search, and performance has not been benchmarked. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations, technical Q&A and step-by-step development guide.
 
 ## Technical debt roadmap
 

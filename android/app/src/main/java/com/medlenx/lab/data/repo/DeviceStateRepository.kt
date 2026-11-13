@@ -1,10 +1,5 @@
 package com.medlenx.lab.data.repo
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -22,12 +17,12 @@ import kotlinx.coroutines.launch
  * Drives the app bar, so it is observable Compose state rather than a plain value.
  */
 class DeviceStateRepository(
-    context: Context,
+    private val networkObserver: NetworkConnectivityObserver,
     private val queueDao: QueueDao,
     private val profileDao: ProfileDao,
     private val prescriptionDao: PrescriptionDao,
 ) {
-    var online by mutableStateOf(true)
+    var online by mutableStateOf(false)
         private set
 
     var queuedScans by mutableIntStateOf(0)
@@ -63,43 +58,13 @@ class DeviceStateRepository(
         }
     }
 
-    private val connectivity =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-
-    /**
-     * Starts listening for connectivity changes. Account-specific collectors are
-     * started separately by [bindUser] after authentication.
-     *
-     * Call once, from an application-lifetime scope. Until this runs, [online] stays at
-     * its initial `true` and [queuedScans] stays 0 - the header chips would be decorative
-     * and nothing would ever notice the network coming back.
-     */
-    fun start() {
-        refreshOnline()
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        connectivity?.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                online = true
-            }
-
-            override fun onLost(network: Network) {
-                online = false
-            }
-        })
+    /** Observe validated connectivity for the application lifetime. */
+    fun start(scope: CoroutineScope) {
+        scope.launch { networkObserver.observe().collect { online = it } }
     }
 
     fun setCompany(name: String?) {
         companyName = name?.takeIf { it.isNotBlank() }
     }
 
-    private fun refreshOnline() {
-        val network = connectivity?.activeNetwork ?: run {
-            online = false
-            return
-        }
-        val caps = connectivity.getNetworkCapabilities(network)
-        online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    }
 }

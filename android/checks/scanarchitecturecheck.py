@@ -37,7 +37,7 @@ db.execute(stmt)
 assert db.execute('SELECT brand_name, medex_product_id FROM scanned_medicines').fetchone() == ('Original OCR', None)
 db.execute("INSERT INTO scanned_medicines(brand_name, medex_product_id) VALUES('Edited','medex-42')")
 assert db.execute('SELECT medex_product_id FROM scanned_medicines WHERE id=2').fetchone()[0] == 'medex-42'
-assert 'version = 17' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
+assert 'version = 18' in read('data/local/MedLenXDatabase.kt') and 'Migrations.MIGRATION_13_14' in read('data/local/MedLenXDatabase.kt')
 assert 'medexProductId = pick?.id' in read('data/repo/MedicineEnricher.kt')
 assert 'checkNotNull(index.productById(preferredId))' in read('data/repo/MedicineEnricher.kt')
 vm = read('ui/screens/scan/ScanViewModel.kt')

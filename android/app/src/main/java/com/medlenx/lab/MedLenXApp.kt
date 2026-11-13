@@ -27,6 +27,6 @@ class MedLenXApp : Application() {
         graph.scope.launch { LegacyImageQuarantine.run(applicationContext, graph.database) }
         // Connectivity starts here; account-specific queue/profile collectors are
         // bound after Firebase authentication resolves the active user.
-        graph.deviceState.start()
+        graph.deviceState.start(graph.scope)
     }
 }

@@ -66,8 +66,8 @@ import kotlinx.coroutines.launch
  * Global medicine search, searching the bundled 25k-row MedEx catalogue on device.
  *
  * The export hardcodes six sample brands; this queries `medex_products` through
- * [com.medlenx.lab.data.local.MedexDao.search]. Queries are debounced so typing a
- * brand name does not fire a LIKE scan per keystroke.
+ * [com.medlenx.lab.data.local.searchMedex]. Queries are debounced so typing a
+ * brand name does not fire an FTS query per keystroke.
  */
 class SearchViewModel(application: Application) : AndroidViewModel(application) {
 

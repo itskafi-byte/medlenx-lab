@@ -77,9 +77,13 @@ interface MedexDao {
     suspend fun forms(): List<String>
 }
 
+// Reuse the tokenizer expression across typeahead calls. FTS4 prefix indexes
+// accelerate 2-, 3- and 4-character prefixes without changing matching semantics.
+private val medexQueryTokens = Regex("[\\p{L}\\p{M}\\p{N}]+")
+
 /** Safely translate user text to an AND of quoted FTS token prefixes. */
 internal fun medexMatchExpression(query: String): String =
-    Regex("[\\p{L}\\p{M}\\p{N}]+").findAll(query)
+    medexQueryTokens.findAll(query)
         .joinToString(" ") { "\"${it.value}*\"" }
 
 suspend fun MedexDao.searchMedex(q: String, limit: Int = 24): List<MedexEntity> {

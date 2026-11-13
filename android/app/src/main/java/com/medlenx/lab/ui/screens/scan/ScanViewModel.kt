@@ -10,6 +10,7 @@ import android.graphics.Rect
 import android.media.ExifInterface
 import com.medlenx.lab.data.remote.DocumentLocator
 import android.net.Uri
+import android.widget.Toast
 import androidx.room.withTransaction
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -122,6 +123,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     private val locationRepository = app.graph.locationRepository
     private val prescriptionDao = app.graph.database.prescriptionDao()
     private val deviceState = app.graph.deviceState
+    private val networkObserver = app.graph.networkObserver
     val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
 
     private val targetPrefs = application.getSharedPreferences(DailyTargetSettings.PREFERENCES + "_" + UserCaptureFiles.key(currentUid), Context.MODE_PRIVATE)
@@ -463,7 +465,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || boxes.isEmpty() || boxes.size > 100 || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
 
         scanJob = viewModelScope.launch {
-            val outcome: ScanProgress = if (!deviceState.online) {
+            val outcome: ScanProgress = if (!networkObserver.isConnected()) {
                 ScanProgress.QueuedOffline
             } else {
                 state = state.copy(
@@ -490,9 +492,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     state = state.copy(phase = ScanPhase.Failed, error = e.message ?: "Could not prepare the scan for review")
                 }
                 is ScanProgress.Failed ->
-                    if (!deviceState.online) parkForReplay(file, outcome.message)
+                    if (!networkObserver.isConnected()) parkForReplay(file, outcome.message)
                     else state = state.copy(phase = ScanPhase.Ready, error = outcome.message)
-                ScanProgress.QueuedOffline -> parkForReplay(file)
+                ScanProgress.QueuedOffline -> {
+                    parkForReplay(file)
+                    if (state.parked && FirebaseAuth.getInstance().currentUser?.uid == currentUid) {
+                        Toast.makeText(getApplication<Application>(), "Device offline. Scan saved to queue.", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 ScanProgress.NeedsApiKey -> state = state.copy(phase = ScanPhase.NeedsKey)
                 else -> Unit
             }
