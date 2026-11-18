@@ -43,7 +43,7 @@ class MedLenXVlClient(
     private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
 ) {
     val hasKey get() = apiKey.isNotBlank()
-    val displayName get() = "Nemotron 3.5 Super VL / Gemma 4"
+    val displayName get() = "Qwen 2.5 VL 72B / Gemma 4"
 
     suspend fun scanPrescription(bitmap: Bitmap, boxes: List<Rect>): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
@@ -117,7 +117,7 @@ class MedLenXVlClient(
 
 /** JSON contract for the OpenAI-compatible multimodal chat endpoint. */
 internal object OpenRouterScanProtocol {
-    const val PRIMARY_MODEL = "nvidia/nemotron-3.5-super-vl:free"
+    const val PRIMARY_MODEL = "qwen/qwen2.5-vl-72b-instruct:free"
     const val FALLBACK_MODEL = "google/gemma-4-26b-a4b-it:free"
     private const val PROMPT = """You are an expert medical transcriptionist. The first image is the full original prescription. Extract doctor details and prescription date from that image only. Do not extract patient identifiers: patient_info must be masked and contain no identifying details. The remaining images are selected cropped lines from that prescription, in order. Read handwritten medicine names from the crops only, not from the full image. Return exactly one medicine object per crop, in the same order, with brand_name and confidence between 0 and 1. If illegible use an empty brand and confidence 0. Return all fields, empty strings where unknown. Never infer a manufacturer. Output only a JSON object with this exact structure: {"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"Patient identifiers masked"},"prescription_date":"","medicines":[{"brand_name":"","confidence":0}]}"""
 

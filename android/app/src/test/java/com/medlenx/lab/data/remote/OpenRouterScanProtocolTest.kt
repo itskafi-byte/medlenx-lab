@@ -15,7 +15,7 @@ import org.junit.Test
 class OpenRouterScanProtocolTest {
     @Test fun multimodalPayloadKeepsFullImageThenOrderedCrops() {
         val body = OpenRouterScanProtocol.requestBody("FULL", listOf("FIRST", "SECOND"))
-        assertEquals("nvidia/nemotron-3.5-super-vl:free", body.getValue("model").jsonPrimitive.content)
+        assertEquals("qwen/qwen2.5-vl-72b-instruct:free", body.getValue("model").jsonPrimitive.content)
         val message = body.getValue("messages").jsonArray.single().jsonObject
         assertEquals("user", message.getValue("role").jsonPrimitive.content)
         val parts = message.getValue("content").jsonArray

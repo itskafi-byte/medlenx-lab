@@ -44,7 +44,7 @@ client = read('data/remote/MedLenXVlClient.kt')
 build = (root/'app/build.gradle.kts').read_text()
 assert 'com.google.genai:google-genai-kotlin' not in build and 'com.google.ai.client.generativeai:generativeai' not in build
 assert 'implementation(libs.okhttp)' in build and 'OPENROUTER_API_KEY' in build
-for s in ['https://openrouter.ai/api/v1/chat/completions', 'nvidia/nemotron-3.5-super-vl:free', 'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)']:
+for s in ['https://openrouter.ai/api/v1/chat/completions', 'qwen/qwen2.5-vl-72b-instruct:free', 'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)']:
     assert s in client
 cloud = read('data/sync/ScanCloudFields.kt')
 upload = read('data/sync/UploadScanWorker.kt')

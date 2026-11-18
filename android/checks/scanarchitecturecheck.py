@@ -5,7 +5,7 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('nvidia/nemotron-3.5-super-vl:free', 'https://openrouter.ai/api/v1/chat/completions',
+for needle in ('qwen/qwen2.5-vl-72b-instruct:free', 'https://openrouter.ai/api/v1/chat/completions',
                'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
                'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)',
                'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, response.body)'):
