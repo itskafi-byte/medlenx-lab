@@ -14,7 +14,8 @@ assert 'BuildConfig.OPENROUTER_API_KEY' in client
 assert 'BitmapFactory.decodeByteArray' not in client
 assert 'Log.e("OpenRouterScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
-assert 'inclusionai/ling-3.2-flash:free' in client
+assert 'thinkingmachines/inkling-2-small:free' in client
+assert 'delay(3000)' in client
 assert 'if (!response.isSuccessful || problem != null)' in client
 assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
 assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client

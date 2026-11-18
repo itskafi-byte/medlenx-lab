@@ -2,6 +2,9 @@ package com.medlenx.lab.data.remote
 
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import com.medlenx.lab.data.model.VlScanResult
 import kotlinx.serialization.json.JsonPrimitive
@@ -14,6 +17,7 @@ import org.junit.Test
 
 class OpenRouterScanProtocolTest {
     @Test fun multimodalPayloadKeepsFullImageThenOrderedCrops() {
+        assertEquals("thinkingmachines/inkling-2-small:free", OpenRouterScanProtocol.FALLBACK_MODEL)
         val body = OpenRouterScanProtocol.requestBody("FULL", listOf("FIRST", "SECOND"))
         assertEquals("google/gemma-4-31b-it:free", body.getValue("model").jsonPrimitive.content)
         val message = body.getValue("messages").jsonArray.single().jsonObject
@@ -78,6 +82,21 @@ class OpenRouterScanProtocolTest {
         } catch (_: CancellationException) {
             assertEquals(1, calls)
         }
+    }
+
+    @Test fun cancellationDuringFallbackDelayNeverStartsFallback() = runBlocking {
+        val payload = OpenRouterScanProtocol.requestBody("FULL", listOf("CROP"))
+        val primaryFailed = CompletableDeferred<Unit>()
+        var calls = 0
+        val job = launch {
+            requestWithFallback(payload, { primaryFailed.complete(Unit) }) {
+                calls++
+                VlOutcome.Failure("primary failed")
+            }
+        }
+        primaryFailed.await()
+        job.cancelAndJoin()
+        assertEquals(1, calls)
     }
 
     @Test fun extractsResponseTextWithoutChangingFencedJson() {
