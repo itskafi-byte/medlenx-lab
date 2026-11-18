@@ -268,7 +268,7 @@ fun ScanScreen(
                 parked = state.parked,
             )
             if (state.phase == ScanPhase.Ready && state.capturedBitmap != null) {
-                Text("Select medicine lines; tap to exclude headers and notes. Detection can miss handwriting. The full photo and selected lines will be sent to Gemini.", style = MlxType.Meta)
+                Text("Select medicine lines; tap to exclude headers and notes. Detection can miss handwriting. The full photo and selected lines will be sent to OpenRouter.", style = MlxType.Meta)
                 LineSelector(state.capturedBitmap, state.detectedLines, state.selectedLines, vm::toggleDetectedLine, vm::addManualLine, !state.locating)
                 if (state.locating) Text("Finding text lines on this device…", style = MlxType.Meta)
                 if (state.selectedLines.size > 100) Text("Select no more than 100 lines.", style = MlxType.Meta, color = Mlx.Danger)
@@ -383,7 +383,7 @@ private fun ViewerCard(
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
-                        text = "Gemini scanning",
+                        text = "OpenRouter scanning",
                         tone = PillTone.Dark,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -411,7 +411,7 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
         MlxButton(
             text = when (state.phase) {
                 ScanPhase.Scanning -> "Scanning…"
-                ScanPhase.Done -> "Re-scan with Gemini"
+                ScanPhase.Done -> "Re-scan with OpenRouter"
                 else -> "Confirm & Extract"
             },
             onClick = onAnalyze,
@@ -465,8 +465,8 @@ private fun VerificationArea(state: ScanUiState) {
         }
 
         ScanPhase.NeedsKey -> MlxEmptyState(
-            message = "No Gemini key configured. Add GEMINI_API_KEY to " +
-                "android/local.properties and rebuild to enable Gemini.",
+            message = "No OpenRouter key configured. Add OPENROUTER_API_KEY to " +
+                "android/local.properties and rebuild to enable OpenRouter.",
             icon = Icons.Filled.FileUpload,
         )
 

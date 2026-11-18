@@ -5,17 +5,16 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('modelName = "gemini-3.8-flash"', 'responseMimeType = "application/json"', 'responseSchema = resultSchema()',
-               'compressedBitmap(bitmap, scaleFullImage = true)', 'compressedBitmap(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
-               'FinishReason.STOP', 'Schema.arr("medicines"', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)'):
+for needle in ('nvidia/nemotron-3.5-super-vl:free', 'https://openrouter.ai/api/v1/chat/completions',
+               'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
+               'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)',
+               'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, body)'):
     assert needle in client, needle
-assert 'OPENROUTER' not in client
-assert 'BitmapFactory.decodeByteArray(bytes, 0, bytes.size)' in client
-assert 'image(fullImage)' in client and 'image(crop)' in client
-assert 'payloadBitmaps.forEach { it.recycle() }' in client
-assert 'Log.e("GeminiScan", "API Error", e)' in client
+assert 'BuildConfig.OPENROUTER_API_KEY' in client
+assert 'BitmapFactory.decodeByteArray' not in client
+assert 'Log.e("OpenRouterScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
-assert 'Log.e("GeminiScan", "Response parsing error", e)' in client
+assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client
 parser = read('data/remote/GeminiScanParser.kt')
 assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
 assert 'parseToJsonElement(clean(text))' in parser

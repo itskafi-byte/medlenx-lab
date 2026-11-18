@@ -11,7 +11,7 @@ plugins {
 }
 
 /**
- * The Gemini key is read from android/local.properties (git-ignored) so it never
+ * The OpenRouter key is read from android/local.properties (git-ignored) so it never
  * lands in version control.
  *
  * SECURITY: BuildConfig fields are compiled into the APK and are trivially extractable
@@ -25,14 +25,14 @@ val localProps = Properties().apply {
 fun secret(key: String): String =
     (localProps.getProperty(key) ?: System.getenv(key) ?: "").trim()
 
-val geminiKey: String = secret("GEMINI_API_KEY")
+val openRouterKey: String = secret("OPENROUTER_API_KEY")
 val firebaseApiKey = secret("FIREBASE_API_KEY")
 val firebaseAppId = secret("FIREBASE_APP_ID")
 val firebaseProjectId = secret("FIREBASE_PROJECT_ID")
 
 /**
  * Mapbox public access token, read from the same local.properties (git-ignored) as
- * the Gemini key so it never reaches version control.
+ * the OpenRouter key so it never reaches version control.
  *
  * LEFT BLANK ON PURPOSE. With no token the heatmap falls back to the offline
  * Canvas dot map and the rest of the app is unaffected, so a bare checkout still
@@ -58,7 +58,7 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
@@ -194,7 +194,6 @@ tasks.named("preBuild") { dependsOn(checkMedLenXAssets) }
 
 dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     // Firestore 25.1.1's gRPC core needs matching API/transport artifacts.
     // Enforce the entire BOM: ordinary implementation dependencies do not force
     // Gradle to downgrade a newer transitive grpc-api selected elsewhere.

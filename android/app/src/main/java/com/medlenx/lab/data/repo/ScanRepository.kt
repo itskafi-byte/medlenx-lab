@@ -37,7 +37,7 @@ sealed class ScanProgress {
     data class Failed(val message: String) : ScanProgress()
     data object QueuedOffline : ScanProgress()
 
-    /** Gemini API key is not configured. */
+    /** OpenRouter API key is not configured. */
     data object NeedsApiKey : ScanProgress()
 }
 

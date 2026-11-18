@@ -134,7 +134,7 @@ whether Studio accepts AGP 9.3.2 as-is. If it does not:
 ```bash
 cd android
 cp local.properties.example local.properties
-# set sdk.dir, and GEMINI_API_KEY for scanning
+# set sdk.dir, and OPENROUTER_API_KEY for scanning
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
@@ -163,23 +163,19 @@ a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.
 
 ## API key handling
 
-`GEMINI_API_KEY` is read from `android/local.properties` (git-ignored) or the
-same-named environment variable and compiled into `BuildConfig`. Obtain a Gemini
+`OPENROUTER_API_KEY` is read from `android/local.properties` (git-ignored) or the
+same-named environment variable and compiled into `BuildConfig`. Obtain an OpenRouter
 API key and configure it locally; do not paste it into chat or version control.
 
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
-proxy before public distribution. This prototype uses the deprecated Google AI
-Android SDK; for a supported public app, migrate to Firebase AI Logic with App
-Check or use a secure backend.
+proxy before public distribution. This prototype uses OkHttp to call OpenRouter directly.
 
-The full prescription photograph and the selected line crops are sent to Gemini
-2.5 Flash in one request. The full image is resized to at most 1600 pixels on its
+The full prescription photograph and the selected line crops are sent to OpenRouter and its configured Nemotron model in one request. The full image is resized to at most 1600 pixels on its
 longest edge; the full image and each crop are JPEG-compressed at quality 80 for
-upload. The deprecated SDK re-encodes those decoded bitmaps as JPEG, so there is
-an additional lossy encoding step. Original local captures and crop coordinates
-remain unchanged. Patient identifiers are not requested or stored, but
-may still be visible in the transmitted photograph. Obtain appropriate permission
-and review Google's data policies. The bundled Latin-script ML Kit recognizer can
+upload. Original local captures and crop coordinates
+remain unchanged. The output requests masked patient information, but identifiers
+may still be visible in locally stored and transmitted photographs. Obtain appropriate permission
+and review OpenRouter and model-provider data policies. The bundled Latin-script ML Kit recognizer can
 miss handwriting or Bengali text; inspect the selected regions and verify all
 results. Use “Draw missing line” to add boxes that ML Kit missed.
 
@@ -215,10 +211,9 @@ turn on **Authentication → Sign-in method → Email/Password**. Download the a
 `client[0].client_info.mobilesdk_app_id`, and `client[0].api_key[0].current_key`
 into `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, and `FIREBASE_API_KEY` respectively
 in `android/local.properties`. The Firebase API key is a project identifier, not
-the Gemini API key. Restrict it appropriately in Google Cloud; never paste the
-Gemini key into Firebase settings. Rebuild after changing the values.
+the OpenRouter API key. Restrict it appropriately and never paste the
+OpenRouter key into Firebase settings. Rebuild after changing the values.
 
-This is a **single-user device** configuration: sign-out does not delete or
-isolate existing local scans, settings, and analytics. Another account signing in
-on the same device can see that data. Firebase sign-in does not sync or back up
-these local records. Do not use this mode on a shared device.
+Scans and settings are scoped by signed-in account; sign-out retains local data.
+Only eligible structured scan results are synced, not prescription photographs.
+Review the current defense guide and Firestore rules for isolation and recovery limitations.

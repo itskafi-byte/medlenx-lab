@@ -457,7 +457,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryLocator() { state.capturedBitmap?.let(::locateLines) }
 
-    /** Send the full image and confirmed medicine-line crops to Gemini. */
+    /** Send the full image and confirmed medicine-line crops to OpenRouter. */
     fun analyze() {
         val file = state.imageFile ?: return
         val bitmap = state.capturedBitmap ?: return

@@ -42,8 +42,9 @@ for s in ['fun addManualLine', 'state.detectedLines + clipped', 'state.selectedL
     assert s in vm
 client = read('data/remote/MedLenXVlClient.kt')
 build = (root/'app/build.gradle.kts').read_text()
-assert 'com.google.genai:google-genai-kotlin' not in build and 'com.google.ai.client.generativeai:generativeai:0.9.0' in build
-for s in ['GenerativeModel(', 'requestOptions = RequestOptions(timeout = 240_000L)', 'compressedBitmap(bitmap, scaleFullImage = true)', 'compressedBitmap(crop, scaleFullImage = false)', 'image(fullImage)', 'image(crop)', 'responseSchema = resultSchema()', 'FinishReason.STOP']:
+assert 'com.google.genai:google-genai-kotlin' not in build and 'com.google.ai.client.generativeai:generativeai' not in build
+assert 'implementation(libs.okhttp)' in build and 'OPENROUTER_API_KEY' in build
+for s in ['https://openrouter.ai/api/v1/chat/completions', 'nvidia/nemotron-3.5-super-vl:free', 'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)']:
     assert s in client
 cloud = read('data/sync/ScanCloudFields.kt')
 upload = read('data/sync/UploadScanWorker.kt')

@@ -34,7 +34,7 @@ object ImagePrep {
         return (width * scale).toInt().coerceAtLeast(1) to (height * scale).toInt().coerceAtLeast(1)
     }
 
-    /** Encode a bitmap to JPEG for Gemini. Only the full image is resized. */
+    /** Encode a bitmap to JPEG for OpenRouter. Only the full image is resized. */
     fun bitmapUploadJpeg(source: Bitmap, scaleFullImage: Boolean): ByteArray {
         val (width, height) = if (scaleFullImage) uploadDimensions(source.width, source.height)
             else source.width to source.height
