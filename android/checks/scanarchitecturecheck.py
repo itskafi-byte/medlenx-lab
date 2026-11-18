@@ -7,13 +7,16 @@ read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
 for needle in ('nvidia/nemotron-3.5-super-vl:free', 'https://openrouter.ai/api/v1/chat/completions',
                'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
-               'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = boxes.size)',
-               'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, body)'):
+               'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)',
+               'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, response.body)'):
     assert needle in client, needle
 assert 'BuildConfig.OPENROUTER_API_KEY' in client
 assert 'BitmapFactory.decodeByteArray' not in client
 assert 'Log.e("OpenRouterScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
+assert 'google/gemma-4-26b-a4b-it:free' in client
+assert 'if (!response.isSuccessful || problem != null)' in client
+assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
 assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client
 parser = read('data/remote/GeminiScanParser.kt')
 assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
