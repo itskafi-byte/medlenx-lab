@@ -5,7 +5,7 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('qwen/qwen2.5-vl-72b-instruct:free', 'https://openrouter.ai/api/v1/chat/completions',
+for needle in ('google/gemma-4-31b-it:free', 'https://openrouter.ai/api/v1/chat/completions',
                'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
                'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)',
                'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, response.body)'):
@@ -14,7 +14,7 @@ assert 'BuildConfig.OPENROUTER_API_KEY' in client
 assert 'BitmapFactory.decodeByteArray' not in client
 assert 'Log.e("OpenRouterScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
-assert 'google/gemma-4-26b-a4b-it:free' in client
+assert 'inclusionai/ling-3.2-flash:free' in client
 assert 'if (!response.isSuccessful || problem != null)' in client
 assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
 assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client
