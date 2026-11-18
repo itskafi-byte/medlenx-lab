@@ -17,7 +17,7 @@ import org.junit.Test
 
 class OpenRouterScanProtocolTest {
     @Test fun multimodalPayloadKeepsFullImageThenOrderedCrops() {
-        assertEquals("thinkingmachines/inkling-2-small:free", OpenRouterScanProtocol.FALLBACK_MODEL)
+        assertEquals("meta-llama/llama-3.2-11b-vision-instruct:free", OpenRouterScanProtocol.FALLBACK_MODEL)
         val body = OpenRouterScanProtocol.requestBody("FULL", listOf("FIRST", "SECOND"))
         assertEquals("google/gemma-4-31b-it:free", body.getValue("model").jsonPrimitive.content)
         val message = body.getValue("messages").jsonArray.single().jsonObject

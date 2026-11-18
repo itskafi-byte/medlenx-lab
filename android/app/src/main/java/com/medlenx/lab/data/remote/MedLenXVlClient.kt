@@ -44,24 +44,15 @@ class MedLenXVlClient(
     private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
 ) {
     val hasKey get() = apiKey.isNotBlank()
-    val displayName get() = "Gemma 4 31B / Inkling 2 Small"
+    val displayName get() = "Gemma 4 31B / Llama 3.2 11B Vision"
 
     suspend fun scanPrescription(bitmap: Bitmap, boxes: List<Rect>): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
         if (boxes.isEmpty()) return@withContext VlOutcome.Failure("Select at least one medicine line.")
         try {
-            fun encode(source: Bitmap, scaleFullImage: Boolean): String = Base64.encodeToString(
-                ImagePrep.bitmapUploadJpeg(source, scaleFullImage), Base64.NO_WRAP,
-            )
-            val fullImage = encode(bitmap, scaleFullImage = true)
+            val fullImage = Base64.encodeToString(ImagePrep.bitmapUploadJpeg(bitmap), Base64.NO_WRAP)
             val lineImages = boxes.map { box ->
-                require(box.left >= 0 && box.top >= 0 && box.right <= bitmap.width && box.bottom <= bitmap.height && !box.isEmpty)
-                val crop = Bitmap.createBitmap(bitmap, box.left, box.top, box.right - box.left, box.bottom - box.top)
-                try {
-                    encode(crop, scaleFullImage = false)
-                } finally {
-                    if (crop !== bitmap) crop.recycle()
-                }
+                Base64.encodeToString(ImagePrep.cropUploadJpeg(bitmap, box), Base64.NO_WRAP)
             }
             val payload = OpenRouterScanProtocol.requestBody(fullImage, lineImages)
             requestWithFallback(payload, onPrimaryFailure = { _ ->
@@ -119,7 +110,7 @@ class MedLenXVlClient(
 /** JSON contract for the OpenAI-compatible multimodal chat endpoint. */
 internal object OpenRouterScanProtocol {
     const val PRIMARY_MODEL = "google/gemma-4-31b-it:free"
-    const val FALLBACK_MODEL = "thinkingmachines/inkling-2-small:free"
+    const val FALLBACK_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free"
     private const val PROMPT = """You are an expert medical transcriptionist. The first image is the full original prescription. Extract doctor details and prescription date from that image only. Do not extract patient identifiers: patient_info must be masked and contain no identifying details. The remaining images are selected cropped lines from that prescription, in order. Read handwritten medicine names from the crops only, not from the full image. Return exactly one medicine object per crop, in the same order, with brand_name and confidence between 0 and 1. If illegible use an empty brand and confidence 0. Return all fields, empty strings where unknown. Never infer a manufacturer. Output only a JSON object with this exact structure: {"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"Patient identifiers masked"},"prescription_date":"","medicines":[{"brand_name":"","confidence":0}]}"""
 
     fun requestBody(fullImage: String, lineImages: List<String>): JsonObject {
@@ -168,7 +159,7 @@ internal suspend fun requestWithFallback(
     val primary = safeAttempt(payload)
     if (primary !is VlOutcome.Failure) return primary
     onPrimaryFailure(primary)
-    delay(3000) // Cancellable pause; a rate limit may still apply afterwards.
+    delay(4000) // Cancellable pause; a rate limit may still apply afterwards.
     val fallbackPayload = JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))
     val fallback = safeAttempt(fallbackPayload)
     return if (fallback is VlOutcome.Failure) {

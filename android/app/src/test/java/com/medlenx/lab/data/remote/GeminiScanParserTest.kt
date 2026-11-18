@@ -27,10 +27,11 @@ class GeminiScanParserTest {
         assertThrows(Exception::class.java) { GeminiScanParser.parse(json, response.replace("\"masked\":true", "\"masked\":false"), 1) }
     }
 
-    @Test fun fullImageSizingPreservesAspectAndDoesNotEnlarge() {
-        assertEquals(1600 to 1200, ImagePrep.uploadDimensions(4000, 3000))
-        assertEquals(1200 to 1600, ImagePrep.uploadDimensions(3000, 4000))
+    @Test fun uploadSizingPreservesAspectAndDoesNotEnlarge() {
+        assertEquals(800 to 600, ImagePrep.uploadDimensions(4000, 3000))
+        assertEquals(600 to 800, ImagePrep.uploadDimensions(3000, 4000))
+        assertEquals(800 to 40, ImagePrep.uploadDimensions(4000, 200))
         assertEquals(100 to 200, ImagePrep.uploadDimensions(100, 200))
-        assertEquals(1 to 1600, ImagePrep.uploadDimensions(1, 5000))
+        assertEquals(1 to 800, ImagePrep.uploadDimensions(1, 5000))
     }
 }

@@ -2,30 +2,21 @@ package com.medlenx.lab.data.remote
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Matrix
 import android.media.ExifInterface
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
-/**
- * Shrinks a camera capture to something a vision model can actually ingest.
- *
- * A modern phone writes 12MP JPEGs of 3-8MB. Sent as-is that becomes a ~4-11MB
- * base64 JSON body: some providers reject it outright, the rest take long enough
- * that the reply hits `max_tokens` and truncates, and decoding the full bitmap
- * first is how an upload OOMs on a low-end device.
- *
- * 1600px on the long edge is comfortably above what a prescription needs
- * (handwriting at that resolution is still legible) and roughly a tenth of the
- * payload. EXIF orientation is baked in, because a rotated capture sent
- * unrotated is a guaranteed misread.
- */
+/** Prepare temporary, bounded JPEG uploads without changing the saved source image. */
 object ImagePrep {
 
-    private const val MAX_EDGE = 1600
-    private const val JPEG_QUALITY = 85
+    private const val MAX_EDGE = 800
+    private const val JPEG_QUALITY = 70
 
-    /** Dimensions for the full-image upload. Never enlarge or modify the source. */
+    /** Dimensions for either a full image or a crop; never enlarge. */
     internal fun uploadDimensions(width: Int, height: Int): Pair<Int, Int> {
         require(width > 0 && height > 0)
         val longEdge = maxOf(width, height)
@@ -34,20 +25,34 @@ object ImagePrep {
         return (width * scale).toInt().coerceAtLeast(1) to (height * scale).toInt().coerceAtLeast(1)
     }
 
-    /** Encode a bitmap to JPEG for OpenRouter. Only the full image is resized. */
-    fun bitmapUploadJpeg(source: Bitmap, scaleFullImage: Boolean): ByteArray {
-        val (width, height) = if (scaleFullImage) uploadDimensions(source.width, source.height)
-            else source.width to source.height
+    /** Resize the full image for upload; do not recycle the caller's bitmap. */
+    fun bitmapUploadJpeg(source: Bitmap): ByteArray {
+        val (width, height) = uploadDimensions(source.width, source.height)
         val upload = if (width == source.width && height == source.height) source
             else Bitmap.createScaledBitmap(source, width, height, true)
         try {
-            return ByteArrayOutputStream().use { output ->
-                check(upload.compress(Bitmap.CompressFormat.JPEG, 80, output)) { "JPEG encoding failed" }
-                output.toByteArray()
-            }
+            return jpegBytes(upload)
         } finally {
             if (upload !== source) upload.recycle()
         }
+    }
+
+    /** Draw a selected region directly into a bounded bitmap, avoiding a full-sized crop. */
+    fun cropUploadJpeg(source: Bitmap, box: Rect): ByteArray {
+        require(box.left >= 0 && box.top >= 0 && box.right <= source.width && box.bottom <= source.height && !box.isEmpty)
+        val (width, height) = uploadDimensions(box.right - box.left, box.bottom - box.top)
+        val upload = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            Canvas(upload).drawBitmap(source, box, Rect(0, 0, width, height), Paint(Paint.FILTER_BITMAP_FLAG))
+            return jpegBytes(upload)
+        } finally {
+            upload.recycle()
+        }
+    }
+
+    private fun jpegBytes(bitmap: Bitmap): ByteArray = ByteArrayOutputStream().use { output ->
+        check(bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)) { "JPEG encoding failed" }
+        output.toByteArray()
     }
 
     /** Re-encoded upload bytes, or null when the input could not be decoded. */
@@ -77,8 +82,8 @@ object ImagePrep {
                 val factor = MAX_EDGE.toFloat() / longEdge
                 Bitmap.createScaledBitmap(
                     bmp,
-                    (bmp.width * factor).toInt(),
-                    (bmp.height * factor).toInt(),
+                    (bmp.width * factor).toInt().coerceAtLeast(1),
+                    (bmp.height * factor).toInt().coerceAtLeast(1),
                     true,
                 ).also { if (it !== bmp) bmp.recycle() }
             }

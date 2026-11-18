@@ -6,7 +6,7 @@ root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
 for needle in ('google/gemma-4-31b-it:free', 'https://openrouter.ai/api/v1/chat/completions',
-               'encode(bitmap, scaleFullImage = true)', 'encode(crop, scaleFullImage = false)', 'patient_info', 'prescription_date',
+               'ImagePrep.bitmapUploadJpeg(bitmap)', 'ImagePrep.cropUploadJpeg(bitmap, box)', 'patient_info', 'prescription_date',
                'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)',
                'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, response.body)'):
     assert needle in client, needle
@@ -14,8 +14,8 @@ assert 'BuildConfig.OPENROUTER_API_KEY' in client
 assert 'BitmapFactory.decodeByteArray' not in client
 assert 'Log.e("OpenRouterScan", "API Error", e)' in client
 assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
-assert 'thinkingmachines/inkling-2-small:free' in client
-assert 'delay(3000)' in client
+assert 'meta-llama/llama-3.2-11b-vision-instruct:free' in client
+assert 'delay(4000)' in client
 assert 'if (!response.isSuccessful || problem != null)' in client
 assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
 assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client
@@ -23,8 +23,9 @@ parser = read('data/remote/GeminiScanParser.kt')
 assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
 assert 'parseToJsonElement(clean(text))' in parser
 prep = read('data/remote/ImagePrep.kt')
-assert 'private const val MAX_EDGE = 1600' in prep
-assert 'Bitmap.CompressFormat.JPEG, 80' in prep and 'if (upload !== source) upload.recycle()' in prep
+assert 'private const val MAX_EDGE = 800' in prep
+assert 'private const val JPEG_QUALITY = 70' in prep and 'if (upload !== source) upload.recycle()' in prep
+assert 'Canvas(upload).drawBitmap(source, box' in prep and 'uploadDimensions(box.right - box.left, box.bottom - box.top)' in prep
 locator = read('data/remote/DocumentLocator.kt')
 for needle in ('TextRecognition.getClient', 'InputImage.fromBitmap(bitmap, 0)', '.flatMap { it.lines }', 'line.boundingBox'):
     assert needle in locator, needle

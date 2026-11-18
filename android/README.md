@@ -170,8 +170,8 @@ API key and configure it locally; do not paste it into chat or version control.
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
 proxy before public distribution. This prototype uses OkHttp to call OpenRouter directly.
 
-The full prescription photograph and the selected line crops are sent to OpenRouter and its configured Gemma model. If the primary request fails, after a cancellable three-second delay the same payload is sent once more to the configured free Inkling fallback. The delay does not guarantee rate-limit recovery. Model availability and image support require live verification. The full image is resized to at most 1600 pixels on its
-longest edge; the full image and each crop are JPEG-compressed at quality 80 for
+The full prescription photograph and the selected line crops are sent to OpenRouter and its configured Gemma model. If the primary request fails, after a cancellable four-second delay the same payload is sent once more to the configured free Llama vision fallback. The delay does not guarantee rate-limit recovery. Model availability and image support require live verification. The full image and each selected crop are resized to at most 800 pixels on their
+longest edge and JPEG-compressed at quality 70 for
 upload. Original local captures and crop coordinates
 remain unchanged. The output requests masked patient information, but identifiers
 may still be visible in locally stored and transmitted photographs. Obtain appropriate permission
