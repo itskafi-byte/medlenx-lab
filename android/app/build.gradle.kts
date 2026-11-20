@@ -11,7 +11,7 @@ plugins {
 }
 
 /**
- * The OpenRouter key is read from android/local.properties (git-ignored) so it never
+ * The MedLenX VL key is read from android/local.properties (git-ignored) so it never
  * lands in version control.
  *
  * SECURITY: BuildConfig fields are compiled into the APK and are trivially extractable
@@ -25,14 +25,17 @@ val localProps = Properties().apply {
 fun secret(key: String): String =
     (localProps.getProperty(key) ?: System.getenv(key) ?: "").trim()
 
-val openRouterKey: String = secret("OPENROUTER_API_KEY")
+val medLenXVlKey: String = listOf(
+    localProps.getProperty("MEDLENX_VL_API_KEY"), System.getenv("MEDLENX_VL_API_KEY"),
+    localProps.getProperty("OPENROUTER_API_KEY"), System.getenv("OPENROUTER_API_KEY"),
+).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
 val firebaseApiKey = secret("FIREBASE_API_KEY")
 val firebaseAppId = secret("FIREBASE_APP_ID")
 val firebaseProjectId = secret("FIREBASE_PROJECT_ID")
 
 /**
  * Mapbox public access token, read from the same local.properties (git-ignored) as
- * the OpenRouter key so it never reaches version control.
+ * the MedLenX VL key so it never reaches version control.
  *
  * LEFT BLANK ON PURPOSE. With no token the heatmap falls back to the offline
  * Canvas dot map and the rest of the app is unaffected, so a bare checkout still
@@ -58,7 +61,7 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
+        buildConfigField("String", "MEDLENX_VL_API_KEY", "\"$medLenXVlKey\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")

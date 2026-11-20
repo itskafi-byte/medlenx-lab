@@ -36,13 +36,17 @@ sealed class VlOutcome {
     data object NoKey : VlOutcome()
 }
 
-/** Direct OpenRouter access embeds an extractable API key in the APK. */
+/** Direct MedLenX VL access embeds an extractable API key in the APK. */
 class MedLenXVlClient(
     private val httpClient: OkHttpClient,
     private val json: Json,
-    private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
+    private val apiKey: String = BuildConfig.MEDLENX_VL_API_KEY,
 ) {
-    private fun redact(value: String): String = if (apiKey.isBlank()) value else value.replace(apiKey, "[REDACTED]")
+    private fun redact(value: String): String {
+        val withoutKey = if (apiKey.isBlank()) value else value.replace(apiKey, "[REDACTED]")
+        val providerName = SERVICE_URL.substringAfter("https://").substringBefore('.')
+        return withoutKey.replace(providerName, "MedLenX VL", ignoreCase = true)
+    }
     val hasKey get() = apiKey.isNotBlank()
     val displayName get() = "Gemma 4 31B / Nemotron 3.5 Super VL"
 
@@ -50,19 +54,19 @@ class MedLenXVlClient(
         if (!hasKey) return@withContext VlOutcome.NoKey
         try {
             val fullImage = Base64.encodeToString(ImagePrep.bitmapUploadJpeg(bitmap), Base64.NO_WRAP)
-            val payload = OpenRouterScanProtocol.requestBody(fullImage)
+            val payload = MedLenXVlScanProtocol.requestBody(fullImage)
             requestWithFallback(payload, onPrimaryFailure = { _ ->
                 // Do not log request images or raw provider response bodies.
-                Log.e("OpenRouterScan", "Primary model failed; trying free fallback")
+                Log.e("MedLenXVlScan", "Primary model failed; trying free fallback")
             }) { modelPayload -> requestModel(modelPayload) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: OutOfMemoryError) {
-            Log.e("OpenRouterScan", "Image preparation error", e)
+            Log.e("MedLenXVlScan", "Image preparation error", e)
             VlOutcome.Failure("Not enough memory to prepare this image. Try a smaller photo.")
         } catch (e: Exception) {
             val message = redact(e.localizedMessage ?: e.toString())
-            Log.e("OpenRouterScan", "Image preparation error: $message")
+            Log.e("MedLenXVlScan", "Image preparation error: $message")
             VlOutcome.Failure(message)
         }
     }
@@ -70,37 +74,38 @@ class MedLenXVlClient(
     internal suspend fun requestModel(payload: JsonObject): VlOutcome {
         try {
             val request = Request.Builder()
-                .url("https://openrouter.ai/api/v1/chat/completions")
+                .url(SERVICE_URL)
                 .header("Authorization", "Bearer $apiKey")
                 .header("HTTP-Referer", "https://medlenx.com")
                 .header("X-Title", "MedLenX Lab")
                 .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
             val response = httpClient.newCall(request).awaitBody()
-            val problem = OpenRouterErrors.fromResponse(json, response.body, response.code)
+            val problem = MedLenXVlErrors.fromResponse(json, response.body, response.code)
             if (!response.isSuccessful || problem != null) {
-                val providerMessage = OpenRouterErrors.providerMessage(json, response.body)
+                val providerMessage = MedLenXVlErrors.providerMessage(json, response.body)
                 val redacted = providerMessage?.let(::redact)
-                Log.e("OpenRouterScan", "HTTP ${response.code}; OpenRouter error.message: ${redacted ?: "(not provided)"}")
-                return VlOutcome.Failure(problem?.message ?: "OpenRouter request failed (HTTP ${response.code})", problem?.retryable ?: false)
+                Log.e("MedLenXVlScan", "HTTP ${response.code}; MedLenX VL error.message: ${redacted ?: "(not provided)"}")
+                return VlOutcome.Failure(problem?.message ?: "MedLenX VL request failed (HTTP ${response.code})", problem?.retryable ?: false)
             }
             return try {
-                val text = OpenRouterScanProtocol.assistantText(json, response.body)
+                val text = MedLenXVlScanProtocol.assistantText(json, response.body)
                 VlOutcome.Success(result = GeminiScanParser.parse(json, text), rawContent = text)
             } catch (e: Exception) {
-                Log.e("OpenRouterScan", "HTTP ${response.code}; invalid scan response")
-                VlOutcome.Failure("OpenRouter returned an invalid scan response (HTTP ${response.code}).")
+                Log.e("MedLenXVlScan", "HTTP ${response.code}; invalid scan response")
+                VlOutcome.Failure("MedLenX VL returned an invalid scan response (HTTP ${response.code}).")
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             val message = redact(e.localizedMessage ?: e.toString())
-            Log.e("OpenRouterScan", "API Error: $message")
+            Log.e("MedLenXVlScan", "API Error: $message")
             return VlOutcome.Failure(message)
         }
     }
 
     companion object {
+        private const val SERVICE_URL = "https://openrouter.ai/api/v1/chat/completions"
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(240, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
         fun defaultJson(): Json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true; explicitNulls = false }
@@ -108,7 +113,7 @@ class MedLenXVlClient(
 }
 
 /** JSON contract for the OpenAI-compatible multimodal chat endpoint. */
-internal object OpenRouterScanProtocol {
+internal object MedLenXVlScanProtocol {
     const val PRIMARY_MODEL = "google/gemma-4-31b-it:free"
     const val FALLBACK_MODEL = "nvidia/nemotron-3.5-super-vl:free"
     private const val PROMPT = """Read this full prescription page. Extract all prescribed medicine lines under Rx in top-to-bottom order; ignore clinic headers, patient labels and doctor letterhead. Never output patient identifiers and never infer a manufacturer. Use empty strings for unknown text and 0 confidence for illegible names. Return only a JSON object with every field shown, and a medicines array of any length: {"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"Patient identifiers masked"},"prescription_date":"","medicines":[{"brand_name":"","form":"","strength":"","frequency":"","duration":"","confidence":0.0}]}. Confidence must be between 0.0 and 1.0. Read only what is visible."""
@@ -132,14 +137,14 @@ internal object OpenRouterScanProtocol {
     }
 
     fun assistantText(json: Json, body: String): String {
-        val root = json.parseToJsonElement(body) as? JsonObject ?: error("OpenRouter returned an invalid response")
+        val root = json.parseToJsonElement(body) as? JsonObject ?: error("MedLenX VL returned an invalid response")
         val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
-            ?: error("OpenRouter returned no choices")
+            ?: error("MedLenX VL returned no choices")
         val finish = (choice["finish_reason"] as? JsonPrimitive)?.contentOrNull
-        check(finish == null || finish == "stop") { "OpenRouter did not complete the scan: $finish" }
-        val message = choice["message"] as? JsonObject ?: error("OpenRouter returned no message")
-        val text = message["content"] as? JsonPrimitive ?: error("OpenRouter returned no text")
-        check(text.isString && text.content.isNotBlank()) { "OpenRouter returned no text" }
+        check(finish == null || finish == "stop") { "MedLenX VL did not complete the scan: $finish" }
+        val message = choice["message"] as? JsonObject ?: error("MedLenX VL returned no message")
+        val text = message["content"] as? JsonPrimitive ?: error("MedLenX VL returned no text")
+        check(text.isString && text.content.isNotBlank()) { "MedLenX VL returned no text" }
         return text.content
     }
 }
@@ -161,7 +166,7 @@ internal suspend fun requestWithFallback(
     if (primary !is VlOutcome.Failure) return primary
     onPrimaryFailure(primary)
     delay(2500) // Cancellable pause; a rate limit may still apply afterwards.
-    val fallbackPayload = JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))
+    val fallbackPayload = JsonObject(payload + ("model" to JsonPrimitive(MedLenXVlScanProtocol.FALLBACK_MODEL)))
     val fallback = safeAttempt(fallbackPayload)
     return if (fallback is VlOutcome.Failure) {
         VlOutcome.Failure("Primary: ${primary.message} Fallback: ${fallback.message}", fallback.retryable)

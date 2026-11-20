@@ -7,12 +7,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class OpenRouterErrorsTest {
+class MedLenXVlErrorsTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test fun providerFailureInsideHttp200IsRetryable() {
         val body = """{"error":{"code":503,"message":"private provider detail"}}"""
-        val problem = OpenRouterErrors.fromResponse(json, body, 200)!!
+        val problem = MedLenXVlErrors.fromResponse(json, body, 200)!!
         assertTrue(problem.retryable)
         assertTrue(problem.message.contains("503"))
         assertFalse(problem.message.contains("private provider detail"))
@@ -20,34 +20,34 @@ class OpenRouterErrorsTest {
 
     @Test fun choiceLevelProviderErrorAlsoRetries() {
         val body = """{"choices":[{"finish_reason":"error","error":{"code":502}}]}"""
-        assertTrue(OpenRouterErrors.fromResponse(json, body, 200)!!.retryable)
+        assertTrue(MedLenXVlErrors.fromResponse(json, body, 200)!!.retryable)
     }
 
     @Test fun authenticationIsNotMarkedRetryable() {
-        val problem = OpenRouterErrors.fromResponse(json, "{}", 401)!!
+        val problem = MedLenXVlErrors.fromResponse(json, "{}", 401)!!
         assertFalse(problem.retryable)
         assertTrue(problem.message.contains("key"))
     }
 
     @Test fun normalResponseAndNullErrorAreNotFailures() {
-        assertNull(OpenRouterErrors.fromResponse(json, """{"error":null,"choices":[]}""", 200))
-        assertNull(OpenRouterErrors.fromResponse(json, """{"choices":[]}""", 200))
+        assertNull(MedLenXVlErrors.fromResponse(json, """{"error":null,"choices":[]}""", 200))
+        assertNull(MedLenXVlErrors.fromResponse(json, """{"choices":[]}""", 200))
     }
 
     @Test fun nestedErrorCodeIsUsedForRateLimits() {
-        val problem = OpenRouterErrors.fromResponse(json, """{"error":{"code":429}}""", 200)!!
+        val problem = MedLenXVlErrors.fromResponse(json, """{"error":{"code":429}}""", 200)!!
         assertTrue(problem.retryable)
         assertTrue(problem.message.contains("rate limit"))
     }
 
     @Test fun readsProviderMessageWithoutReturningWholeBody() {
-        assertEquals("provider detail", OpenRouterErrors.providerMessage(json, """{"error":{"message":"provider detail"}}"""))
-        assertEquals("nested detail", OpenRouterErrors.providerMessage(json, """{"choices":[{"error":{"message":"nested detail"}}]}"""))
-        assertNull(OpenRouterErrors.providerMessage(json, "not json"))
+        assertEquals("provider detail", MedLenXVlErrors.providerMessage(json, """{"error":{"message":"provider detail"}}"""))
+        assertEquals("nested detail", MedLenXVlErrors.providerMessage(json, """{"choices":[{"error":{"message":"nested detail"}}]}"""))
+        assertNull(MedLenXVlErrors.providerMessage(json, "not json"))
     }
 
     @Test fun malformedErrorBodyUsesHttpStatus() {
-        val problem = OpenRouterErrors.fromResponse(json, "not json", 503)!!
+        val problem = MedLenXVlErrors.fromResponse(json, "not json", 503)!!
         assertTrue(problem.retryable)
         assertEquals(true, problem.message.contains("503"))
     }

@@ -15,7 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class OpenRouterFallbackHttpTest {
+class MedLenXVlFallbackHttpTest {
     @Test fun httpFailuresTriggerFallbackWithSamePayloadAndHeaders() = runBlocking {
         val content = """{"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":""},"prescription_date":"","medicines":[{"brand_name":"Napa","form":"","strength":"","frequency":"","duration":"","confidence":0.9}]}"""
         val successBody = """{"choices":[{"finish_reason":"stop","message":{"content":${JsonPrimitive(content)}}}]}"""
@@ -33,14 +33,14 @@ class OpenRouterFallbackHttpTest {
                     .body((if (code == 200) successBody else "{}").toResponseBody("application/json".toMediaType())).build()
             }.build()
             val client = MedLenXVlClient(http, Json, "test-key")
-            val payload = OpenRouterScanProtocol.requestBody("FULL")
+            val payload = MedLenXVlScanProtocol.requestBody("FULL")
             val result = requestWithFallback(payload, {}) { client.requestModel(it) }
             assertTrue(result is VlOutcome.Success)
             assertEquals(2, payloads.size)
             assertEquals(listOf("Bearer test-key", "https://medlenx.com", "MedLenX Lab"), headers[0])
             assertEquals(headers[0], headers[1])
-            assertEquals(OpenRouterScanProtocol.PRIMARY_MODEL, payloads[0].getValue("model").jsonPrimitive.content)
-            assertEquals(OpenRouterScanProtocol.FALLBACK_MODEL, payloads[1].getValue("model").jsonPrimitive.content)
+            assertEquals(MedLenXVlScanProtocol.PRIMARY_MODEL, payloads[0].getValue("model").jsonPrimitive.content)
+            assertEquals(MedLenXVlScanProtocol.FALLBACK_MODEL, payloads[1].getValue("model").jsonPrimitive.content)
             assertEquals(payloads[0].getValue("messages"), payloads[1].getValue("messages"))
         }
     }

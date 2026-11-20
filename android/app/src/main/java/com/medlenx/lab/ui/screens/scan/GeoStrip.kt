@@ -35,6 +35,7 @@ data class GeoStripState(
     val pinSource: GpsSource? = null,
     val offTerritory: Boolean = false,
     val verdictReason: String = "",
+    val resolutionWarning: String = "",
 )
 
 /**
@@ -80,6 +81,10 @@ fun GeoStrip(
                     GpsIconButton(onPinGps)
                 }
             }
+        }
+
+        if (state.resolutionWarning.isNotBlank()) {
+            Text(state.resolutionWarning, style = MlxType.Meta)
         }
 
         when {

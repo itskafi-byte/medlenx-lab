@@ -36,7 +36,7 @@ sealed class ScanProgress {
     data class Failed(val message: String) : ScanProgress()
     data object QueuedOffline : ScanProgress()
 
-    /** OpenRouter API key is not configured. */
+    /** MedLenX VL API key is not configured. */
     data object NeedsApiKey : ScanProgress()
 }
 

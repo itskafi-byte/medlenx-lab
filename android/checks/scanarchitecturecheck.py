@@ -9,11 +9,11 @@ for needle in ('google/gemma-4-31b-it:free', 'nvidia/nemotron-3.5-super-vl:free'
                'https://openrouter.ai/api/v1/chat/completions', 'ImagePrep.bitmapUploadJpeg(bitmap)',
                'patient_info', 'prescription_date', 'data:image/jpeg;base64,$fullImage',
                'GeminiScanParser.parse(json, text)', 'Base64.NO_WRAP', 'delay(2500)',
-               'put("temperature", 0.1)', 'put("max_tokens", 4096)', 'OpenRouterErrors.providerMessage'):
+               'put("temperature", 0.1)', 'put("max_tokens", 4096)', 'MedLenXVlErrors.providerMessage'):
     assert needle in client, needle
-assert 'BuildConfig.OPENROUTER_API_KEY' in client and 'response_format' not in client
+assert 'BuildConfig.MEDLENX_VL_API_KEY' in client and 'response_format' not in client
 assert client.count('put("type", "image_url")') == 1
-assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
+assert 'JsonObject(payload + ("model" to JsonPrimitive(MedLenXVlScanProtocol.FALLBACK_MODEL)))' in client
 parser = read('data/remote/GeminiScanParser.kt')
 assert 'expectedLines' not in parser and 'score in 0.0..1.0' in parser
 assert 'parseToJsonElement(clean(text))' in parser

@@ -2,10 +2,9 @@
 #   sdk.dir is written automatically by Android Studio.
 sdk.dir=/absolute/path/to/Android/sdk
 
-# Your OpenRouter API key - https://openrouter.ai/settings/keys
-# Also accepted as the OPENROUTER_API_KEY environment variable.
+# MedLenX VL API key; also accepted as MEDLENX_VL_API_KEY environment variable.
 # WARNING: compiled into the APK and extractable. Use a rate-limited key.
-OPENROUTER_API_KEY=your-openrouter-api-key
+MEDLENX_VL_API_KEY=your-api-key
 
 # OPTIONAL - Mapbox public access token - https://console.mapbox.com/account/access-tokens/
 # Also accepted as the MAPBOX_ACCESS_TOKEN environment variable.

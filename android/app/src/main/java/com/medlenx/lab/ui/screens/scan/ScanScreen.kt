@@ -113,24 +113,30 @@ fun ScanScreen(
         )
     }
 
-    // GPS pin needs the runtime location permission; ask on demand, then pin.
+    // Ask once on entering; denial never blocks camera or gallery. Manual refresh can ask again.
+    var manualLocationRequest by rememberSaveable { mutableStateOf(false) }
     val locationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { vm.pinGps() }
+    ) { permissions ->
+        if (permissions.values.any { it }) {
+            if (manualLocationRequest) vm.pinGps() else vm.autoGps()
+        }
+        manualLocationRequest = false
+    }
+    fun hasLocationPermission(): Boolean = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        .any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
     val pinGpsWithPermission = {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (granted) {
-            vm.pinGps()
-        } else {
-            locationLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                ),
-            )
+        if (hasLocationPermission()) vm.pinGps() else {
+            manualLocationRequest = true
+            locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+    LaunchedEffect(vm) {
+        if (hasLocationPermission()) vm.autoGps()
+        else if (!vm.locationPermissionAsked) {
+            vm.locationPermissionAsked = true
+            manualLocationRequest = false
+            locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
 
@@ -222,10 +228,12 @@ fun ScanScreen(
                     district = state.geo.district,
                     territory = state.geo.territory,
                     hasFix = state.geo.lat != null,
+                    pinSource = state.geo.pinSource,
                     latitude = state.geo.lat,
                     longitude = state.geo.lng,
                     offTerritory = state.geo.offTerritory,
                     reason = state.geo.verdictReason,
+                    resolutionWarning = state.geo.resolutionWarning,
                 ),
                 onChange = { next ->
                     vm.onGeoChange(
@@ -269,7 +277,7 @@ fun ScanScreen(
             )
             ViewerCard(state = state, transform = transform, onClear = vm::clear)
             if (state.phase == ScanPhase.Ready) {
-                Text("The full prescription image will be sent to OpenRouter. Review all extracted details before saving.", style = MlxType.Meta)
+                Text("The full prescription image will be sent to MedLenX VL. Review all extracted details before saving.", style = MlxType.Meta)
                 state.error?.let { Text(it, style = MlxType.Meta, color = Mlx.Danger) }
             }
             GeoStrip(
@@ -374,7 +382,7 @@ private fun ViewerCard(
                 if (state.phase == ScanPhase.Scanning) {
                     ScanLaserOverlay()
                     StatusPill(
-                        text = "OpenRouter scanning",
+                        text = "MedLenX VL Scanning",
                         tone = PillTone.Dark,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -402,7 +410,7 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
         MlxButton(
             text = when (state.phase) {
                 ScanPhase.Scanning -> "Scanning…"
-                ScanPhase.Done -> "Re-scan with OpenRouter"
+                ScanPhase.Done -> "Re-scan with MedLenX VL"
                 else -> "Confirm & Extract"
             },
             onClick = onAnalyze,
@@ -456,8 +464,8 @@ private fun VerificationArea(state: ScanUiState) {
         }
 
         ScanPhase.NeedsKey -> MlxEmptyState(
-            message = "No OpenRouter key configured. Add OPENROUTER_API_KEY to " +
-                "android/local.properties and rebuild to enable OpenRouter.",
+            message = "No MedLenX VL key configured. Add MEDLENX_VL_API_KEY to " +
+                "android/local.properties and rebuild to enable MedLenX VL.",
             icon = Icons.Filled.FileUpload,
         )
 

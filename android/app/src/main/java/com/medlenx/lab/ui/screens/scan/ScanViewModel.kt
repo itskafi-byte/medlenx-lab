@@ -169,6 +169,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** True while a save round-trip is in flight, so a second tap cannot double-insert. */
     private var scanJob: Job? = null
+    private var geoJob: Job? = null
+    private var geoRevision = 0
+    private var manualGeoRevision = 0
+    private val manuallyEditedGeo = mutableSetOf<String>()
+    var locationPermissionAsked = false
     var saving by mutableStateOf(false)
         private set
 
@@ -255,7 +260,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // Separate launch: `observe()` never completes, so collecting it in the
             // same coroutine would stop the location cascade from ever being reached.
-            app.graph.profileDao.observe(currentUid).collect { officerProfile = it }
+            app.graph.profileDao.observe(currentUid).collect {
+                officerProfile = it
+                if (state.geo.lat != null) autoGps() else reverify(null)
+            }
         }
         viewModelScope.launch {
             // Also separate, and also never completes. This is what makes the header's
@@ -336,6 +344,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Copies the picked image into app storage so the path stays valid after the picker closes. */
     fun onImagePicked(uri: Uri) {
+        geoJob?.cancel()
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
             val file = withContext(Dispatchers.IO) {
@@ -371,12 +380,14 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 progress = 0f,
                 progressText = "",
             )
+            autoGps(file)
         }
     }
 
     /** Persist the oriented, full-resolution capture for review and offline replay. */
     fun onCameraCaptured(bitmap: Bitmap, expectedUid: String) {
         if (expectedUid != currentUid || FirebaseAuth.getInstance().currentUser?.uid != expectedUid || state.phase != ScanPhase.Empty) return
+        geoJob?.cancel()
         viewModelScope.launch {
             val file = withContext(Dispatchers.IO) {
                 runCatching {
@@ -392,6 +403,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
                     error = null, result = null, capturedBitmap = bitmap, progress = 0f, progressText = "")
+                autoGps(file)
             }
         }
     }
@@ -414,7 +426,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             .also { if (it !== bitmap) bitmap.recycle() }
     }.getOrNull()
 
-    /** Send one full prescription image to OpenRouter. */
+    /** Send one full prescription image to MedLenX VL. */
     fun analyze() {
         val file = state.imageFile ?: return
         val bitmap = state.capturedBitmap ?: return
@@ -517,6 +529,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (state.phase != ScanPhase.Empty || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return false
         state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
             capturedBitmap = bitmap, queuedId = row.id, parked = true, error = null)
+        autoGps(file)
         return false // keep queue row until a verified save succeeds
     }
 
@@ -1118,9 +1131,9 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                         doctorBmdcNo = doctor.bmdcNo,
                         doctorSpecialty = doctor.specialty,
                         chamber = doctor.hospitalChamber,
-                        district = doctor.district.ifBlank { geo.district },
-                        upazila = doctor.upazila.ifBlank { geo.upazila },
-                        territory = doctor.territory.ifBlank { geo.territory },
+                        district = geo.district.ifBlank { doctor.district },
+                        upazila = geo.upazila.ifBlank { doctor.upazila },
+                        territory = geo.territory.ifBlank { doctor.territory },
                         prescriptionSource = doctor.source.label,
                         // saveVerified re-derives these two from its own arguments;
                         // passing the real values keeps the entity self-consistent.
@@ -1157,7 +1170,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     receipt = SavedReceipt(
                         rxNumber = rxNo,
                         medicineCount = corrected.medicines.size,
-                        territory = doctor.territory.ifBlank { geo.territory },
+                        territory = geo.territory.ifBlank { doctor.territory },
                         repCode = repId,
                     ),
                 )
@@ -1196,90 +1209,90 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
     fun scanAnother() { clear() }
 
-    /** Captures a GPS fix and immediately geofences it against the assigned territory. */
-    fun pinGps() {
-        viewModelScope.launch {
-            val live = locationRepository.lastKnownFix()
-            // Indoors the last known fix is often stale or the provider is off. The
-            // photo carries its own coordinates, so fall back to those rather than
-            // dropping the GPS evidence from the audit altogether.
-            val fix = live ?: state.imageFile?.let { locationRepository.exifFix(it) }
+    /** Automatic detection prefers photo metadata; manual refresh always requests a fresh fix. */
+    fun autoGps(file: File? = state.imageFile) = requestGps(file, force = false)
+    fun pinGps() = requestGps(state.imageFile, force = true)
+
+    private fun requestGps(file: File?, force: Boolean) {
+        geoJob?.cancel()
+        val revisionAtStart = manualGeoRevision
+        geoJob = viewModelScope.launch {
+            val fix = if (force) locationRepository.currentFix()
+                else file?.let { locationRepository.exifFix(it) }
+                    ?: locationRepository.lastKnownFix() ?: locationRepository.currentFix()
+            if (FirebaseAuth.getInstance().currentUser?.uid != currentUid || state.imageFile != file) return@launch
             if (fix == null) {
-                state = state.copy(
-                    geo = state.geo.copy(
-                        offTerritory = false,
-                        verdictReason = "Location unavailable — enable GPS and try again",
-                    ),
-                )
+                if (force) state = state.copy(geo = state.geo.copy(resolutionWarning = "Fresh location unavailable — check permission and GPS, then try again"))
                 return@launch
             }
-            applyFix(fix)
+            val resolved = locationRepository.resolveAddressFromGps(fix, networkObserver.isConnected(), officerProfile?.territory.orEmpty())
+            if (FirebaseAuth.getInstance().currentUser?.uid != currentUid || state.imageFile != file) return@launch
+            val geo = state.geo
+            val forceAllowed = force && manualGeoRevision == revisionAtStart
+            fun choose(name: String, old: String, candidate: String): String = when {
+                forceAllowed -> candidate
+                name in manuallyEditedGeo -> old
+                else -> candidate
+            }
+            val district = choose("district", geo.district, resolved.district)
+            // Never fill dependent fields from a different district than the user's selection.
+            val compatible = district.isNotBlank() && district == resolved.district
+            val upazila = choose("upazila", geo.upazila, if (compatible) resolved.upazila else "")
+            val territory = choose("territory", geo.territory, if (compatible) resolved.territory else "")
+            if (forceAllowed) manuallyEditedGeo.clear()
+            geoRevision++
+            state = state.copy(geo = geo.copy(lat = fix.lat, lng = fix.lng, pinSource = fix.source,
+                district = district, upazila = upazila, territory = territory, resolutionWarning =
+                    if (resolved.district.isNotBlank() && !compatible) "GPS district differs from the manually selected district; verify location." else resolved.warning))
+            reverify(fix)
         }
     }
 
     /** Re-geofences after the officer edits the location fields. */
     fun onGeoChange(upazila: String? = null, district: String? = null, territory: String? = null) {
         val geo = state.geo
+        val districtChanged = district != null && district != geo.district
+        if (districtChanged) manuallyEditedGeo.addAll(listOf("district", "upazila", "territory"))
+        if (upazila != null && upazila != geo.upazila) manuallyEditedGeo.add("upazila")
+        if (territory != null && territory != geo.territory) manuallyEditedGeo.add("territory")
         val next = geo.copy(
-            upazila = upazila ?: geo.upazila,
             district = district ?: geo.district,
-            territory = territory ?: geo.territory,
+            upazila = if (districtChanged) "" else upazila ?: geo.upazila,
+            territory = if (districtChanged) "" else territory ?: geo.territory,
         )
+        if (next == geo) return
+        manualGeoRevision++
+        geoRevision++
         state = state.copy(geo = next)
-        // Changing the district invalidates its dependents, exactly as on the web.
-        if (district != null && district != geo.district) {
-            state = state.copy(geo = next.copy(upazila = "", territory = ""))
-        }
         viewModelScope.launch { reverify(null) }
-    }
-
-    private suspend fun applyFix(fix: GpsFix) {
-        val verdict = locationRepository.verdict(
-            officerTerritory = state.geo.territory,
-            scanTerritory = state.geo.territory,
-            scanDistrict = state.geo.district,
-            fix = fix,
-        )
-        state = state.copy(
-            geo = state.geo.copy(
-                lat = fix.lat,
-                lng = fix.lng,
-                pinnedDistrict = verdict.gpsDistrict,
-                pinSource = fix.source,
-                offTerritory = verdict.offTerritory,
-                verdictReason = verdict.reason,
-            ),
-        )
     }
 
     private suspend fun reverify(fix: GpsFix?) {
         val geo = state.geo
+        val revision = geoRevision
         if (geo.lat == null && geo.district.isBlank() && geo.territory.isBlank()) return
         val verdict = locationRepository.verdict(
-            officerTerritory = geo.territory,
+            officerTerritory = officerProfile?.territory.orEmpty(),
             scanTerritory = geo.territory,
             scanDistrict = geo.district,
-            // Rebuilding the fix from the stored coordinates must carry the original
-            // provenance, or an EXIF pin would be relabelled as a live device fix.
-            fix = fix ?: geo.lat?.let { lat ->
-                geo.lng?.let { GpsFix(lat, it, geo.pinSource ?: GpsSource.Device) }
-            },
+            fix = fix ?: geo.lat?.let { lat -> geo.lng?.let { GpsFix(lat, it, geo.pinSource ?: GpsSource.Device) } },
         )
-        state = state.copy(
-            geo = geo.copy(
-                offTerritory = verdict.offTerritory,
-                verdictReason = verdict.reason,
-                pinnedDistrict = verdict.gpsDistrict.ifBlank { geo.pinnedDistrict },
-            ),
-        )
+        if (revision != geoRevision || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
+        state = state.copy(geo = state.geo.copy(offTerritory = verdict.offTerritory,
+            verdictReason = verdict.reason, pinnedDistrict = verdict.gpsDistrict))
     }
 
     override fun onCleared() {
+        geoJob?.cancel()
         targetPrefs.unregisterOnSharedPreferenceChangeListener(targetListener)
         super.onCleared()
     }
 
     fun clear() {
+        geoJob?.cancel()
+        geoRevision++
+        manualGeoRevision++
+        manuallyEditedGeo.clear()
         scanJob?.cancel()
         scanJob = null
         substitutionJobs.values.forEach { it.cancel() }

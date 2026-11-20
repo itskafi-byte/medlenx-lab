@@ -134,7 +134,7 @@ whether Studio accepts AGP 9.3.2 as-is. If it does not:
 ```bash
 cd android
 cp local.properties.example local.properties
-# set sdk.dir, and OPENROUTER_API_KEY for scanning
+# set sdk.dir, and MEDLENX_VL_API_KEY for scanning
 ./gradlew assembleDebug      # or: open this folder in Android Studio
 ```
 
@@ -163,14 +163,14 @@ a top-level JSON array, ~16 MB), `bd_locations.json`, `bd_geo.json`, `neml_list.
 
 ## API key handling
 
-`OPENROUTER_API_KEY` is read from `android/local.properties` (git-ignored) or the
-same-named environment variable and compiled into `BuildConfig`. Obtain an OpenRouter
+`MEDLENX_VL_API_KEY` is read from `android/local.properties` (git-ignored) or the
+same-named environment variable and compiled into `BuildConfig`. Obtain a model-service
 API key and configure it locally; do not paste it into chat or version control.
 
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
-proxy before public distribution. This prototype uses OkHttp to call OpenRouter directly.
+proxy before public distribution. This prototype uses OkHttp to call the model-routing service directly.
 
-One full prescription image is resized to a maximum 1280-pixel edge without upscaling and JPEG-compressed at quality 78, then sent to OpenRouter. The primary is `google/gemma-4-31b-it:free`; after failure, the app waits a cancellable 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. This does not guarantee rate-limit recovery; model availability and image support require live verification. The original local capture remains unchanged. The image can contain patient identifiers even though the requested output is masked. Provider error messages are logged with the API key redacted, but may contain sensitive information: handle logs carefully.
+One full prescription image is resized to a maximum 1280-pixel edge without upscaling and JPEG-compressed at quality 78, then sent through MedLenX VL. The primary is `google/gemma-4-31b-it:free`; after failure, the app waits a cancellable 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. This does not guarantee rate-limit recovery; model availability and image support require live verification. The original local capture remains unchanged. The image can contain patient identifiers even though the requested output is masked. Provider error messages are logged with the API key redacted, but may contain sensitive information: handle logs carefully.
 
 Queued scans, including older rows with line-selection data, reopen for explicit full-image extraction when online; they are not silently submitted. Prescription dates and MedEx IDs are included in new cloud
 uploads. ISO dates also get a UTC-midnight timestamp; the original date text is
@@ -203,9 +203,15 @@ turn on **Authentication → Sign-in method → Email/Password**. Download the a
 `client[0].client_info.mobilesdk_app_id`, and `client[0].api_key[0].current_key`
 into `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, and `FIREBASE_API_KEY` respectively
 in `android/local.properties`. The Firebase API key is a project identifier, not
-the OpenRouter API key. Restrict it appropriately and never paste the
-OpenRouter key into Firebase settings. Rebuild after changing the values.
+the MedLenX VL API key. Restrict it appropriately and never paste the
+MedLenX VL key into Firebase settings. Rebuild after changing the values.
 
 Scans and settings are scoped by signed-in account; sign-out retains local data.
 Only eligible structured scan results are synced, not prescription photographs.
 Review the current defense guide and Firestore rules for isolation and recovery limitations.
+
+### Automatic location
+
+On entering the scan workspace the app requests fine/coarse permission once per screen session; capture still works when denied. After a capture or gallery pick, photo EXIF GPS is preferred, then a recent cached device location (at most five minutes old), then a cancellable fresh fix with a bounded wait. Manual refresh requests a fresh fix. A nearest bundled district centroid is only an estimate, not a district boundary. When online, Android Geocoder provides possible locality names; unsupported, conflicting, or unavailable results must be reviewed manually. The bundled geo file has no upazila or territory coordinates, and the officer profile has no upazila field, so offline upazila remains blank unless manually entered; an assigned profile territory is used only when listed for the estimated district. Manually edited fields are preserved by automatic updates; explicit refresh can overwrite them. Geocoding may disclose coordinates to the system provider. Test permission denial, approximate location, indoors, offline, photo EXIF, competing manual edits, and both old and new Android versions on device.
+
+`MEDLENX_VL_API_KEY` is the preferred configuration name; the legacy `OPENROUTER_API_KEY` remains a silent fallback. The actual routing endpoint remains OpenRouter.

@@ -9,6 +9,9 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+/** Empty fields mean that the evidence did not identify a supported place. */
+data class ResolvedLocation(val district: String = "", val upazila: String = "", val territory: String = "", val warning: String = "")
+
 /**
  * Off-territory geofence.
  *
@@ -66,6 +69,40 @@ object Geofence {
             }
         }
         return if (bestDistance != null && bestDistance <= maxKm) best else ""
+    }
+
+    /** Match entire normalized names, not arbitrary substrings such as "Kachua" in another word. */
+    private fun bestName(options: List<String>, hints: List<String>, territory: Boolean = false): String {
+        fun norm(value: String) = if (territory) territoryBase(value) else normalize(value)
+        val normalizedHints = hints.map(::norm).filter { it.isNotBlank() }
+        return options.mapNotNull { option ->
+            val candidate = norm(option)
+            if (candidate.isBlank()) return@mapNotNull null
+            val score = normalizedHints.maxOfOrNull { hint ->
+                when {
+                    hint == candidate -> 1000 + candidate.length
+                    " $hint ".contains(" $candidate ") -> candidate.length
+                    else -> 0
+                }
+            } ?: 0
+            if (score > 0) option to score else null
+        }.maxByOrNull { it.second }?.first.orEmpty()
+    }
+
+    fun resolveHierarchy(centroidDistrict: String, locations: BdLocations, assignedTerritory: String,
+                         districtHints: List<String>, localityHints: List<String>): ResolvedLocation {
+        val district = locations.districts.keys.firstOrNull { normalize(it) == normalize(centroidDistrict) }.orEmpty()
+        if (district.isBlank()) return ResolvedLocation(warning = "GPS could not resolve a nearby district; enter location manually.")
+        val info = locations.districts.getValue(district)
+        val geocoderDistrict = bestName(locations.districts.keys.toList(), districtHints)
+        val conflict = geocoderDistrict.isNotBlank() && geocoderDistrict != district
+        // Do not borrow a locality from an address known to belong to a different district.
+        val hints = if (conflict) emptyList() else localityHints
+        val upazila = bestName(info.upazilas, hints)
+        val assigned = info.territories.firstOrNull { territoryBase(it) == territoryBase(assignedTerritory) && territoryBase(it).isNotBlank() }.orEmpty()
+        val territory = assigned.ifBlank { bestName(info.territories, hints + upazila, territory = true) }
+        val warning = if (conflict) "GPS nearest district differs from reverse geocoding; verify location manually." else ""
+        return ResolvedLocation(district, upazila, territory, warning)
     }
 
     /**

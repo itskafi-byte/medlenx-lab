@@ -5,24 +5,25 @@ MedLenX Lab is an Android prescription-audit prototype for reviewing medicine li
 ## Features
 
 - CameraX capture or image import, single-image extraction and human verification.
-- OpenRouter-assisted extraction with editable doctor, medicine and location review before saving.
+- MedLenX VL-assisted extraction with editable doctor, medicine and location review before saving.
+- Automatic location permission and GPS/EXIF detection with district and best-effort upazila/territory fill; manual edits remain available.
 - Room-based local records, bundled medicine catalogue, offline capture queue and background synchronization of verified results.
 - Analytics, prescription audit, drug information, team activity, profile settings and exports.
 
-The app sends one resized full prescription image to OpenRouter and its selected model provider. Structured results may be shared with approved members of the same company; prescription photos are not uploaded by the scan sync worker. AI output must be reviewed by a person and is not a clinical diagnosis.
+The app sends one resized full prescription image through MedLenX VL to its routing service (OpenRouter) and selected model provider. Structured results may be shared with approved members of the same company; prescription photos are not uploaded by the scan sync worker. AI output must be reviewed by a person and is not a clinical diagnosis.
 
 ## Getting started
 
 1. Open `android/` in Android Studio and install the Android SDK required by the Gradle configuration (currently compile SDK 37).
-2. Configure `android/local.properties` or environment variables: `OPENROUTER_API_KEY` for scanning, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, and `FIREBASE_PROJECT_ID` for Firebase. `MAPBOX_ACCESS_TOKEN` is optional. Android Studio normally configures `sdk.dir`.
-3. Configure Firebase Authentication and Firestore, deploy [`android/firebase/firestore.rules`](android/firebase/firestore.rules), and arrange administrator-approved company membership before testing team sync. See [`android/README.md`](android/README.md) for project-specific setup; its sample properties still refer to an older OpenRouter integration, so use the names in the build script.
+2. Configure `android/local.properties` or environment variables: `MEDLENX_VL_API_KEY` for scanning (the legacy `OPENROUTER_API_KEY` is also accepted), `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, and `FIREBASE_PROJECT_ID` for Firebase. `MAPBOX_ACCESS_TOKEN` is optional. Android Studio normally configures `sdk.dir`.
+3. Configure Firebase Authentication and Firestore, deploy [`android/firebase/firestore.rules`](android/firebase/firestore.rules), and arrange administrator-approved company membership before testing team sync. See [`android/README.md`](android/README.md) for project-specific setup.
 4. Build and run from Android Studio or, from `android/`, run `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`). The app's Gradle task checks for required bundled datasets.
 
-The current source requests `google/gemma-4-31b-it:free` through OpenRouter; on failure it waits 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. The delay does not guarantee rate-limit recovery. Availability, multimodal support and account access for either model have not been verified. The same prescription image is sent again on fallback. The key is embedded in the APK and can be extracted: use an expendable restricted key for local prototypes, and a secure backend before public distribution. Review privacy and provider data policies, since masking the output does not remove patient details from the image sent to the provider. Redact sensitive information before sharing logs.
+The current source requests `google/gemma-4-31b-it:free` through MedLenX VL; on failure it waits 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. The delay does not guarantee rate-limit recovery. Availability, multimodal support and account access for either model have not been verified. The same prescription image is sent again on fallback. The key is embedded in the APK and can be extracted: use an expendable restricted key for local prototypes, and a secure backend before public distribution. Review privacy and provider data policies, since masking the output does not remove patient details from the image sent to the provider. Redact sensitive information before sharing logs.
 
 ## Architecture and storage
 
-Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Room and private image files. Before OpenRouter requests, a validated default-network gate parks offline captures for later review; verified local scans are separately queued for network-constrained WorkManager upload. Network validation cannot guarantee OpenRouter is reachable. A server-confirmed membership and Firestore rules govern company-scoped sharing. History restore cannot recover local-only images or records never uploaded.
+Compose screens and ViewModels use a manually wired `AppGraph`, repositories, Room and private image files. Before MedLenX VL requests, a validated default-network gate parks offline captures for later review; verified local scans are separately queued for network-constrained WorkManager upload. Network validation cannot guarantee the service is reachable. A server-confirmed membership and Firestore rules govern company-scoped sharing. History restore cannot recover local-only images or records never uploaded.
 
 The bundled medicine catalogue is imported into Room. Search uses a Room-managed FTS4 external-content index over brand, generic, company and type, with Porter tokenization and token-prefix `MATCH`. Migration 16→17 builds the index and 17→18 adds 2/3/4-character prefix indexes by rebuilding it; enrichment uses a separate in-memory matcher. Prefix search differs from arbitrary substring search, and performance has not been benchmarked. See the [defense guide](PROJECT_DEFENSE_AND_README.md) for the full flow, code index, exact core imports, known limitations, technical Q&A and step-by-step development guide.
 
@@ -32,4 +33,8 @@ The proposed roadmap includes content-addressable IDs with an explicit conflict 
 
 ## Validation status
 
-Documentation was prepared from source without compiling, running device tests or calling OpenRouter. In particular, the current endpoint and Firestore deployment require verification. The FTS migration and Room-generated triggers still require local compilation and device testing. A host-only SQLite check is available with `python3 android/checks/medexftscheck.py`; it does not validate generated Room code. Do not uninstall the app or clear its data to troubleshoot if local-only records must be retained.
+Documentation was prepared from source without compiling, running device tests or calling the model service. In particular, the current endpoint and Firestore deployment require verification. The FTS migration and Room-generated triggers still require local compilation and device testing. A host-only SQLite check is available with `python3 android/checks/medexftscheck.py`; it does not validate generated Room code. Do not uninstall the app or clear its data to troubleshoot if local-only records must be retained.
+
+## Location and privacy
+
+The scan screen asks for approximate or precise location once per screen session; denying it does not block capture. Automatic detection prefers photo EXIF coordinates, otherwise a cached device fix no older than five minutes, then a time-limited fresh fix. Manual refresh requests a fresh fix and may replace the three location fields. The bundled `bd_geo.json` contains **district centroids only**, not upazila or territory coordinates; offline the app can estimate the nearest district and use a matching assigned profile territory, but cannot infer an upazila. Online Android Geocoder may supply matching locality names; when it disagrees with the centroid, review the warning and enter details manually. The officer profile has no upazila field. These are estimates, not administrative-boundary proof. Reverse geocoding may transmit coordinates to the system geocoding provider; location permission and privacy policies matter.

@@ -98,10 +98,12 @@ data class GpsVerification(
     val district: String = "",
     val territory: String = "",
     val hasFix: Boolean = false,
+    val pinSource: com.medlenx.lab.data.model.GpsSource? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
     val offTerritory: Boolean = false,
     val reason: String = "",
+    val resolutionWarning: String = "",
 )
 
 /** The saved-receipt line shown after a successful write. */
@@ -747,6 +749,10 @@ fun VerifyGpsSection(
             }
         }
 
+        if (gps.resolutionWarning.isNotBlank()) {
+            Text(gps.resolutionWarning, style = MlxType.Footnote)
+        }
+
         val coords = gps.latitude?.let { lat ->
             gps.longitude?.let { lng -> PyMath.fixedCoords(lat, lng) }
         }
@@ -768,10 +774,12 @@ fun VerifyGpsSection(
                 Icon(Icons.Filled.Check, contentDescription = null, tint = Mlx.Ok600, modifier = Modifier.size(12.dp))
                 Text(
                     text = buildString {
-                        append("GPS pinned")
-                        if (coords != null) append(" · ").append(coords)
-                        if (gps.territory.isNotBlank()) append(" · ").append(gps.territory)
-                        append(" (in territory)")
+                        if (!gps.hasFix) append("GPS unavailable; enter or verify location manually")
+                        else {
+                            append(gps.pinSource?.let { "Pinned from ${it.label}" } ?: "GPS pinned")
+                            if (coords != null) append(" · ").append(coords)
+                            if (gps.reason.isNotBlank()) append(" · ").append(gps.reason)
+                        }
                     },
                     style = MlxType.MicroPill.copy(fontWeight = FontWeight.Normal),
                     color = Mlx.Ok600,
