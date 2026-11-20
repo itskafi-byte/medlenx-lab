@@ -5,33 +5,25 @@ import json, re, sqlite3
 root = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/medlenx/lab'
 read = lambda x: (root/x).read_text()
 client = read('data/remote/MedLenXVlClient.kt')
-for needle in ('google/gemma-4-31b-it:free', 'https://openrouter.ai/api/v1/chat/completions',
-               'ImagePrep.bitmapUploadJpeg(bitmap)', 'ImagePrep.cropUploadJpeg(bitmap, box)', 'patient_info', 'prescription_date',
-               'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)',
-               'Base64.NO_WRAP', 'OpenRouterScanProtocol.assistantText(json, response.body)'):
+for needle in ('google/gemma-4-31b-it:free', 'nvidia/nemotron-3.5-super-vl:free',
+               'https://openrouter.ai/api/v1/chat/completions', 'ImagePrep.bitmapUploadJpeg(bitmap)',
+               'patient_info', 'prescription_date', 'data:image/jpeg;base64,$fullImage',
+               'GeminiScanParser.parse(json, text)', 'Base64.NO_WRAP', 'delay(2500)',
+               'put("temperature", 0.1)', 'put("max_tokens", 4096)', 'OpenRouterErrors.providerMessage'):
     assert needle in client, needle
-assert 'BuildConfig.OPENROUTER_API_KEY' in client
-assert 'BitmapFactory.decodeByteArray' not in client
-assert 'Log.e("OpenRouterScan", "API Error", e)' in client
-assert 'VlOutcome.Failure(e.localizedMessage ?: e.toString())' in client
-assert 'meta-llama/llama-3.2-11b-vision-instruct:free' in client
-assert 'delay(4000)' in client
-assert 'if (!response.isSuccessful || problem != null)' in client
+assert 'BuildConfig.OPENROUTER_API_KEY' in client and 'response_format' not in client
+assert client.count('put("type", "image_url")') == 1
 assert 'JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))' in client
-assert 'Log.e("OpenRouterScan", "Response parsing error", e)' in client
 parser = read('data/remote/GeminiScanParser.kt')
-assert 'medicines.size == expectedLines' in parser and 'score in 0.0..1.0' in parser
+assert 'expectedLines' not in parser and 'score in 0.0..1.0' in parser
 assert 'parseToJsonElement(clean(text))' in parser
 prep = read('data/remote/ImagePrep.kt')
-assert 'private const val MAX_EDGE = 800' in prep
-assert 'private const val JPEG_QUALITY = 70' in prep and 'if (upload !== source) upload.recycle()' in prep
-assert 'Canvas(upload).drawBitmap(source, box' in prep and 'uploadDimensions(box.right - box.left, box.bottom - box.top)' in prep
-locator = read('data/remote/DocumentLocator.kt')
-for needle in ('TextRecognition.getClient', 'InputImage.fromBitmap(bitmap, 0)', '.flatMap { it.lines }', 'line.boundingBox'):
-    assert needle in locator, needle
-selector = read('ui/screens/scan/LineSelector.kt')
-for needle in ('Canvas(', 'detectTapGestures', 'ContentScale.Fit', 'bitmap.width, height / bitmap.height', 'onToggle'):
-    assert needle in selector, needle
+assert 'private const val MAX_EDGE = 1280' in prep and 'private const val JPEG_QUALITY = 78' in prep
+assert 'if (upload !== source) upload.recycle()' in prep and 'cropUploadJpeg' not in prep
+vm = read('ui/screens/scan/ScanViewModel.kt')
+assert 'DocumentLocator' not in vm and 'lines-v1:' not in vm
+assert 'queueForLater(currentUid, file.absolutePath, "")' in vm
+assert 'LineSelector(' not in read('ui/screens/scan/ScanScreen.kt')
 migrations = read('data/local/Migrations.kt')
 stmt = re.search(r'val MIGRATION_13_14.*?db.execSQL\("([^\"]+)"\)', migrations, re.S).group(1)
 db = sqlite3.connect(':memory:')
@@ -57,7 +49,7 @@ screen = read('ui/screens/scan/ScanScreen.kt')
 assert 'CameraViewfinder(' in screen and 'ActivityResultContracts.TakePicture()' not in screen
 assert 'ActivityResultContracts.PickVisualMedia()' in screen and 'vm.onCameraCaptured(bitmap, uid)' in screen
 assert 'FirebaseAuth.getInstance().currentUser?.uid != expectedUid' in vm
-assert 'scanRepository.scan(bitmap, boxes)' in vm
+assert 'scanRepository.scan(bitmap)' in vm
 assert 'parkForReplay(file, outcome.message)' in vm and 'error = outcome.message' in vm
 
 stmt15 = re.search(r'val MIGRATION_14_15.*?db.execSQL\("([^\"]+)"\)', migrations, re.S).group(1)
@@ -67,6 +59,6 @@ db.execute(stmt15)
 assert db.execute('SELECT doctor_name, prescription_date FROM prescriptions').fetchone() == ('Original doctor', None)
 assert 'Migrations.MIGRATION_14_15' in read('data/local/MedLenXDatabase.kt')
 assert 'prescriptionDate = doctor.prescriptionDate' in vm
-assert 'return false // keep queue row' in vm and 'lines-v1:' in vm
+assert 'return false // keep queue row' in vm and 'lines-v1:' not in vm
 
 print('scanarchitecturecheck: schema, migration, IDs and CameraX wiring PASS (static/SQLite only)')

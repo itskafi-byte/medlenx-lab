@@ -31,14 +31,14 @@ deliberately not ported, and the open questions carried out of Step 5.
 ### Scan flow (Step 3)
 
 - Empty state: dashed hero, 80dp gradient tile, **Choose File** (photo picker) and
-  **Open Camera** (`TakePicture` via the declared FileProvider)
+  **Open Camera** (CameraX preview and capture)
 - Image viewer: pinch-zoom, drag-pan, rotate ±90°, contrast cycling (1.0 → 1.35 → 1.6
   → reset), fit, and a live zoom readout. Contrast uses a classic RGB-about-128
   `ColorMatrix` so faint cursive separates from the paper without clipping.
 - Dual-glow radar scan: 3px laser bar with the cyan gradient and glow, plus the
   full-panel cyan wash, both on the web's 2.2s `alternate` cycle
 - Shimmer skeletons with the 4dp cyan left edge, resolving as the read returns
-- Bounding-box highlight mapped from the VL line index onto a vertical band
+- Illustrative scan highlights; they are not detected medicine bounding boxes
 - GPS strip: Upazila / District / Territory with cascade invalidation, plus the pin
   button and the off-territory verdict
 - `Geofence` is a direct port of `haversine_km`, `resolve_geo_district` (90 km radius),
@@ -170,17 +170,9 @@ API key and configure it locally; do not paste it into chat or version control.
 **The key is extractable from the APK.** Restrict and rate-limit it; use a backend
 proxy before public distribution. This prototype uses OkHttp to call OpenRouter directly.
 
-The full prescription photograph and the selected line crops are sent to OpenRouter and its configured Gemma model. If the primary request fails, after a cancellable four-second delay the same payload is sent once more to the configured free Llama vision fallback. The delay does not guarantee rate-limit recovery. Model availability and image support require live verification. The full image and each selected crop are resized to at most 800 pixels on their
-longest edge and JPEG-compressed at quality 70 for
-upload. Original local captures and crop coordinates
-remain unchanged. The output requests masked patient information, but identifiers
-may still be visible in locally stored and transmitted photographs. Obtain appropriate permission
-and review OpenRouter and model-provider data policies. The bundled Latin-script ML Kit recognizer can
-miss handwriting or Bengali text; inspect the selected regions and verify all
-results. Use “Draw missing line” to add boxes that ML Kit missed.
+One full prescription image is resized to a maximum 1280-pixel edge without upscaling and JPEG-compressed at quality 78, then sent to OpenRouter. The primary is `google/gemma-4-31b-it:free`; after failure, the app waits a cancellable 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. This does not guarantee rate-limit recovery; model availability and image support require live verification. The original local capture remains unchanged. The image can contain patient identifiers even though the requested output is masked. Provider error messages are logged with the API key redacted, but may contain sensitive information: handle logs carefully.
 
-Queued scans are reopened for line confirmation when online, rather than submitted
-without selection. Prescription dates and MedEx IDs are included in new cloud
+Queued scans, including older rows with line-selection data, reopen for explicit full-image extraction when online; they are not silently submitted. Prescription dates and MedEx IDs are included in new cloud
 uploads. ISO dates also get a UTC-midnight timestamp; the original date text is
 retained even when it cannot be parsed. An owner-only background backfill adds
 missing metadata for previously uploaded scans that still have local details.

@@ -267,19 +267,10 @@ fun ScanScreen(
                 online = vm.online,
                 parked = state.parked,
             )
-            if (state.phase == ScanPhase.Ready && state.capturedBitmap != null) {
-                Text("Select medicine lines; tap to exclude headers and notes. Detection can miss handwriting. The full photo and selected lines will be sent to OpenRouter.", style = MlxType.Meta)
-                LineSelector(state.capturedBitmap, state.detectedLines, state.selectedLines, vm::toggleDetectedLine, vm::addManualLine, !state.locating)
-                if (state.locating) Text("Finding text lines on this device…", style = MlxType.Meta)
-                if (state.selectedLines.size > 100) Text("Select no more than 100 lines.", style = MlxType.Meta, color = Mlx.Danger)
+            ViewerCard(state = state, transform = transform, onClear = vm::clear)
+            if (state.phase == ScanPhase.Ready) {
+                Text("The full prescription image will be sent to OpenRouter. Review all extracted details before saving.", style = MlxType.Meta)
                 state.error?.let { Text(it, style = MlxType.Meta, color = Mlx.Danger) }
-                state.locatorError?.let { message ->
-                    Text(message, style = MlxType.Meta)
-                    MlxButton(text = "Retry detection", onClick = vm::retryLocator)
-                }
-                MlxButton(text = "Retake or choose another image", onClick = vm::clear)
-            } else {
-                ViewerCard(state = state, transform = transform, onClear = vm::clear)
             }
             GeoStrip(
                 state = state.geo,
@@ -415,7 +406,7 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
                 else -> "Confirm & Extract"
             },
             onClick = onAnalyze,
-            enabled = state.phase == ScanPhase.Ready && !state.locating && state.selectedLines.isNotEmpty() && state.selectedLines.size <= 100,
+            enabled = state.phase == ScanPhase.Ready && state.capturedBitmap != null,
             modifier = Modifier.weight(1f),
         )
     }
@@ -431,7 +422,7 @@ private fun ActionRow(state: ScanUiState, onAnalyze: () -> Unit) {
                     }
                 }
             }
-            val illustrativeStages = listOf("Uploading image...", "Detecting text regions...", "Decoding handwriting...")
+            val illustrativeStages = listOf("Uploading image...", "Reading the prescription...", "Decoding handwriting...")
             Text(if (waiting) illustrativeStages[stage] else state.progressText, style = MlxType.Meta)
             if (waiting) Text("Illustrative stages and highlights; waiting for the AI response.", style = MlxType.Footnote)
             if (state.progressIndeterminate) {

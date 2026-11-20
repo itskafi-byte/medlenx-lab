@@ -23,7 +23,7 @@ class OpenRouterErrorsTest {
         assertTrue(OpenRouterErrors.fromResponse(json, body, 200)!!.retryable)
     }
 
-    @Test fun authenticationDoesNotFallback() {
+    @Test fun authenticationIsNotMarkedRetryable() {
         val problem = OpenRouterErrors.fromResponse(json, "{}", 401)!!
         assertFalse(problem.retryable)
         assertTrue(problem.message.contains("key"))
@@ -38,6 +38,12 @@ class OpenRouterErrorsTest {
         val problem = OpenRouterErrors.fromResponse(json, """{"error":{"code":429}}""", 200)!!
         assertTrue(problem.retryable)
         assertTrue(problem.message.contains("rate limit"))
+    }
+
+    @Test fun readsProviderMessageWithoutReturningWholeBody() {
+        assertEquals("provider detail", OpenRouterErrors.providerMessage(json, """{"error":{"message":"provider detail"}}"""))
+        assertEquals("nested detail", OpenRouterErrors.providerMessage(json, """{"choices":[{"error":{"message":"nested detail"}}]}"""))
+        assertNull(OpenRouterErrors.providerMessage(json, "not json"))
     }
 
     @Test fun malformedErrorBodyUsesHttpStatus() {

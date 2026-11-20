@@ -2,9 +2,6 @@ package com.medlenx.lab.data.remote
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.Matrix
 import android.media.ExifInterface
 import java.io.ByteArrayInputStream
@@ -13,8 +10,8 @@ import java.io.ByteArrayOutputStream
 /** Prepare temporary, bounded JPEG uploads without changing the saved source image. */
 object ImagePrep {
 
-    private const val MAX_EDGE = 800
-    private const val JPEG_QUALITY = 70
+    private const val MAX_EDGE = 1280
+    private const val JPEG_QUALITY = 78
 
     /** Dimensions for either a full image or a crop; never enlarge. */
     internal fun uploadDimensions(width: Int, height: Int): Pair<Int, Int> {
@@ -34,19 +31,6 @@ object ImagePrep {
             return jpegBytes(upload)
         } finally {
             if (upload !== source) upload.recycle()
-        }
-    }
-
-    /** Draw a selected region directly into a bounded bitmap, avoiding a full-sized crop. */
-    fun cropUploadJpeg(source: Bitmap, box: Rect): ByteArray {
-        require(box.left >= 0 && box.top >= 0 && box.right <= source.width && box.bottom <= source.height && !box.isEmpty)
-        val (width, height) = uploadDimensions(box.right - box.left, box.bottom - box.top)
-        val upload = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        try {
-            Canvas(upload).drawBitmap(source, box, Rect(0, 0, width, height), Paint(Paint.FILTER_BITMAP_FLAG))
-            return jpegBytes(upload)
-        } finally {
-            upload.recycle()
         }
     }
 

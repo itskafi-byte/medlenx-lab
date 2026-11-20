@@ -16,15 +16,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OpenRouterScanProtocolTest {
-    @Test fun multimodalPayloadKeepsFullImageThenOrderedCrops() {
-        assertEquals("meta-llama/llama-3.2-11b-vision-instruct:free", OpenRouterScanProtocol.FALLBACK_MODEL)
-        val body = OpenRouterScanProtocol.requestBody("FULL", listOf("FIRST", "SECOND"))
+    @Test fun payloadContainsOneFullImage() {
+        assertEquals("nvidia/nemotron-3.5-super-vl:free", OpenRouterScanProtocol.FALLBACK_MODEL)
+        val body = OpenRouterScanProtocol.requestBody("FULL")
         assertEquals("google/gemma-4-31b-it:free", body.getValue("model").jsonPrimitive.content)
         val message = body.getValue("messages").jsonArray.single().jsonObject
         assertEquals("user", message.getValue("role").jsonPrimitive.content)
         val parts = message.getValue("content").jsonArray
-        assertEquals(4, parts.size)
-        assertEquals(setOf("model", "messages"), body.keys)
+        assertEquals(2, parts.size)
+        assertEquals(setOf("model", "messages", "temperature", "max_tokens"), body.keys)
+        assertEquals("0.1", body.getValue("temperature").jsonPrimitive.content)
+        assertEquals("4096", body.getValue("max_tokens").jsonPrimitive.content)
         assertEquals(setOf("role", "content"), message.keys)
         assertEquals(setOf("type", "text"), parts[0].jsonObject.keys)
         assertEquals("text", parts[0].jsonObject.getValue("type").jsonPrimitive.content)
@@ -35,12 +37,12 @@ class OpenRouterScanProtocolTest {
         }
         val urls = parts.filter { it.jsonObject.getValue("type").jsonPrimitive.content == "image_url" }
             .map { it.jsonObject.getValue("image_url").jsonObject.getValue("url").jsonPrimitive.content }
-        assertEquals(listOf("data:image/jpeg;base64,FULL", "data:image/jpeg;base64,FIRST", "data:image/jpeg;base64,SECOND"), urls)
+        assertEquals(listOf("data:image/jpeg;base64,FULL"), urls)
     }
 
     @Test fun primaryFailureRetriesIdenticalContentWithFallback() = runBlocking {
         for (code in listOf(422, 429, 503)) {
-            val payload = OpenRouterScanProtocol.requestBody("FULL", listOf("CROP"))
+            val payload = OpenRouterScanProtocol.requestBody("FULL")
             val calls = mutableListOf<kotlinx.serialization.json.JsonObject>()
             var logged = false
             val success = VlOutcome.Success(VlScanResult(), "{}")
@@ -58,7 +60,7 @@ class OpenRouterScanProtocolTest {
     }
 
     @Test fun successDoesNotRetryAndExceptionsDo() = runBlocking {
-        val payload = OpenRouterScanProtocol.requestBody("FULL", listOf("CROP"))
+        val payload = OpenRouterScanProtocol.requestBody("FULL")
         val success = VlOutcome.Success(VlScanResult(), "{}")
         var calls = 0
         assertEquals(success, requestWithFallback(payload, {}) { calls++; success })
@@ -74,7 +76,7 @@ class OpenRouterScanProtocolTest {
     }
 
     @Test fun cancellationNeverStartsFallback() = runBlocking {
-        val payload = OpenRouterScanProtocol.requestBody("FULL", listOf("CROP"))
+        val payload = OpenRouterScanProtocol.requestBody("FULL")
         var calls = 0
         try {
             requestWithFallback(payload, {}) { calls++; throw CancellationException("cancelled") }
@@ -85,7 +87,7 @@ class OpenRouterScanProtocolTest {
     }
 
     @Test fun cancellationDuringFallbackDelayNeverStartsFallback() = runBlocking {
-        val payload = OpenRouterScanProtocol.requestBody("FULL", listOf("CROP"))
+        val payload = OpenRouterScanProtocol.requestBody("FULL")
         val primaryFailed = CompletableDeferred<Unit>()
         var calls = 0
         val job = launch {
@@ -107,10 +109,10 @@ class OpenRouterScanProtocolTest {
 
     @Test fun passesExtractedFencedResponseToExistingParser() {
         val content = """```json
-{"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"masked"},"prescription_date":"","medicines":[{"brand_name":"Napa","confidence":0.9}]}
+{"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"masked"},"prescription_date":"","medicines":[{"brand_name":"Napa","form":"","strength":"","frequency":"","duration":"","confidence":0.9}]}
 ```"""
         val body = """{"choices":[{"finish_reason":"stop","message":{"content":${JsonPrimitive(content)}}}]}"""
-        val parsed = GeminiScanParser.parse(Json, OpenRouterScanProtocol.assistantText(Json, body), expectedLines = 1)
+        val parsed = GeminiScanParser.parse(Json, OpenRouterScanProtocol.assistantText(Json, body))
         assertEquals("Napa", parsed.medicines.single().brandName)
     }
 

@@ -6,9 +6,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.graphics.Rect
 import android.media.ExifInterface
-import com.medlenx.lab.data.remote.DocumentLocator
 import android.net.Uri
 import android.widget.Toast
 import androidx.room.withTransaction
@@ -97,11 +95,7 @@ data class ScanUiState(
     val receipt: SavedReceipt? = null,
     val savedPrescriptionId: Long? = null,
     val capturedBitmap: Bitmap? = null,
-    val detectedLines: List<Rect> = emptyList(),
-    val selectedLines: Set<Int> = emptySet(),
     val queuedId: Long? = null,
-    val locating: Boolean = false,
-    val locatorError: String? = null,
 
     /** True when the current capture is parked in the offline queue awaiting a replay. */
     val parked: Boolean = false,
@@ -116,8 +110,6 @@ data class ScanUiState(
  */
 class ScanViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val locator = DocumentLocator()
-    private var locateJob: Job? = null
     private val app = application as MedLenXApp
     private val scanRepository = app.graph.scanRepository
     private val locationRepository = app.graph.locationRepository
@@ -379,7 +371,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                 progress = 0f,
                 progressText = "",
             )
-            locateLines(bitmap)
         }
     }
 
@@ -401,7 +392,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
                     error = null, result = null, capturedBitmap = bitmap, progress = 0f, progressText = "")
-                locateLines(bitmap)
             }
         }
     }
@@ -424,45 +414,11 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             .also { if (it !== bitmap) bitmap.recycle() }
     }.getOrNull()
 
-    private fun locateLines(bitmap: Bitmap) {
-        locateJob?.cancel()
-        state = state.copy(locating = true, locatorError = null, detectedLines = emptyList(), selectedLines = emptySet())
-        locateJob = viewModelScope.launch {
-            try {
-                val boxes = locator.locate(bitmap)
-                if (state.capturedBitmap !== bitmap || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return@launch
-                state = state.copy(locating = false, detectedLines = boxes, selectedLines = boxes.indices.toSet(),
-                    locatorError = if (boxes.isEmpty()) "No lines detected. Draw a box around a medicine line." else null)
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
-                if (state.capturedBitmap === bitmap) state = state.copy(locating = false, locatorError = "Could not detect lines. Try again.")
-            }
-        }
-    }
-
-    fun toggleDetectedLine(index: Int) {
-        if (index !in state.detectedLines.indices) return
-        state = state.copy(selectedLines = if (index in state.selectedLines) state.selectedLines - index else state.selectedLines + index)
-    }
-
-    fun addManualLine(rect: Rect) {
-        val bitmap = state.capturedBitmap ?: return
-        if (state.phase != ScanPhase.Ready || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
-        val clipped = Rect(rect)
-        if (!clipped.intersect(0, 0, bitmap.width, bitmap.height) || clipped.isEmpty) return
-        val index = state.detectedLines.size
-        state = state.copy(detectedLines = state.detectedLines + clipped,
-            selectedLines = state.selectedLines + index, locatorError = null)
-    }
-
-    fun retryLocator() { state.capturedBitmap?.let(::locateLines) }
-
-    /** Send the full image and confirmed medicine-line crops to OpenRouter. */
+    /** Send one full prescription image to OpenRouter. */
     fun analyze() {
         val file = state.imageFile ?: return
         val bitmap = state.capturedBitmap ?: return
-        val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }.map { Rect(it) }
-        if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || boxes.isEmpty() || boxes.size > 100 || state.locating || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
+        if (state.phase != ScanPhase.Ready || scanJob?.isActive == true || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return
 
         scanJob = viewModelScope.launch {
             val outcome: ScanProgress = if (!networkObserver.isConnected()) {
@@ -480,7 +436,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
                     parked = false,
                 )
                 state = state.copy(progressText = "Waiting for AI response…")
-                scanRepository.scan(bitmap, boxes)
+                scanRepository.scan(bitmap)
             }
             if (FirebaseAuth.getInstance().currentUser?.uid != currentUid || state.phase != ScanPhase.Scanning && outcome !is ScanProgress.QueuedOffline) return@launch
             when (outcome) {
@@ -516,16 +472,10 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
      */
     private suspend fun parkForReplay(file: File, failureMessage: String? = null) {
         val parked = try {
-            val boxes = state.detectedLines.filterIndexed { index, _ -> index in state.selectedLines }
-            val payload = "lines-v1:" + org.json.JSONArray().apply { boxes.forEach { box ->
-                put(org.json.JSONArray().put(box.left).put(box.top).put(box.right).put(box.bottom))
-            } }.toString()
             val queuedId = state.queuedId
             if (queuedId == null) {
-                val id = scanRepository.queueForLater(currentUid, file.absolutePath, payload)
+                val id = scanRepository.queueForLater(currentUid, file.absolutePath, "")
                 state = state.copy(queuedId = id)
-            } else {
-                scanRepository.updateQueuedSelection(currentUid, queuedId, payload)
             }
             true
         } catch (e: CancellationException) {
@@ -544,7 +494,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Opens the oldest parked capture for line confirmation after reconnecting.
+     * Opens the oldest parked capture for confirmation after reconnecting.
      *
      * Only ever runs from [ScanPhase.Empty] - genuinely idle, with no capture in hand.
      * `Ready` is deliberately excluded even when nothing is parked: at that point the
@@ -567,13 +517,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         if (state.phase != ScanPhase.Empty || FirebaseAuth.getInstance().currentUser?.uid != currentUid) return false
         state = state.copy(phase = ScanPhase.Ready, imageUri = Uri.fromFile(file).toString(), imageFile = file,
             capturedBitmap = bitmap, queuedId = row.id, parked = true, error = null)
-        val restored = runCatching {
-            if (!row.payload.startsWith("lines-v1:")) return@runCatching emptyList<Rect>()
-            val array = org.json.JSONArray(row.payload.removePrefix("lines-v1:"))
-            (0 until array.length()).map { i -> array.getJSONArray(i).let { Rect(it.getInt(0), it.getInt(1), it.getInt(2), it.getInt(3)) } }
-                .filter { it.left >= 0 && it.top >= 0 && it.right <= bitmap.width && it.bottom <= bitmap.height && !it.isEmpty }
-        }.getOrDefault(emptyList())
-        if (restored.isEmpty()) locateLines(bitmap) else state = state.copy(detectedLines = restored, selectedLines = restored.indices.toSet())
         return false // keep queue row until a verified save succeeds
     }
 
@@ -1332,15 +1275,12 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        locateJob?.cancel()
-        locator.close()
         targetPrefs.unregisterOnSharedPreferenceChangeListener(targetListener)
         super.onCleared()
     }
 
     fun clear() {
         scanJob?.cancel()
-        locateJob?.cancel()
         scanJob = null
         substitutionJobs.values.forEach { it.cancel() }
         substitutionJobs.clear()

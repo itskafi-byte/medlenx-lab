@@ -4,12 +4,12 @@ MedLenX Lab is an Android prescription-audit prototype for reviewing medicine li
 
 ## Features
 
-- CameraX capture or image import, on-device ML Kit line selection, and manually drawn missing lines.
+- CameraX capture or image import, single-image extraction and human verification.
 - OpenRouter-assisted extraction with editable doctor, medicine and location review before saving.
 - Room-based local records, bundled medicine catalogue, offline capture queue and background synchronization of verified results.
 - Analytics, prescription audit, drug information, team activity, profile settings and exports.
 
-The app sends the full prescription image and selected crops to OpenRouter and its selected model provider. Structured results may be shared with approved members of the same company; prescription photos are not uploaded by the scan sync worker. AI output must be reviewed by a person and is not a clinical diagnosis.
+The app sends one resized full prescription image to OpenRouter and its selected model provider. Structured results may be shared with approved members of the same company; prescription photos are not uploaded by the scan sync worker. AI output must be reviewed by a person and is not a clinical diagnosis.
 
 ## Getting started
 
@@ -18,7 +18,7 @@ The app sends the full prescription image and selected crops to OpenRouter and i
 3. Configure Firebase Authentication and Firestore, deploy [`android/firebase/firestore.rules`](android/firebase/firestore.rules), and arrange administrator-approved company membership before testing team sync. See [`android/README.md`](android/README.md) for project-specific setup; its sample properties still refer to an older OpenRouter integration, so use the names in the build script.
 4. Build and run from Android Studio or, from `android/`, run `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`). The app's Gradle task checks for required bundled datasets.
 
-The current source requests `google/gemma-4-31b-it:free` through OpenRouter; on failure it waits four seconds and retries once with `meta-llama/llama-3.2-11b-vision-instruct:free`. The delay does not guarantee rate-limit recovery. Availability, multimodal support and account access for either model have not been verified. The same prescription images are sent again on fallback. The key is embedded in the APK and can be extracted: use an expendable restricted key for local prototypes, and a secure backend before public distribution. Review privacy and provider data policies, since masking the output does not remove patient details from the image sent to the provider. Redact sensitive information before sharing logs.
+The current source requests `google/gemma-4-31b-it:free` through OpenRouter; on failure it waits 2.5 seconds and retries once with `nvidia/nemotron-3.5-super-vl:free`. The delay does not guarantee rate-limit recovery. Availability, multimodal support and account access for either model have not been verified. The same prescription image is sent again on fallback. The key is embedded in the APK and can be extracted: use an expendable restricted key for local prototypes, and a secure backend before public distribution. Review privacy and provider data policies, since masking the output does not remove patient details from the image sent to the provider. Redact sensitive information before sharing logs.
 
 ## Architecture and storage
 

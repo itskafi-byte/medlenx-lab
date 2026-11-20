@@ -34,17 +34,13 @@ assert [r[0] for r in rows] == [1]
 assert db.execute(query('markMetadataSynced'),dict(currentUid='bob',company='co',id=1,scanId='orig')).rowcount == 0
 assert db.execute(query('markMetadataSynced'),dict(currentUid='alice',company='co',id=1,scanId='orig')).rowcount == 1
 assert not db.execute(query('metadataBackfillCandidates'),dict(currentUid='alice',company='co',afterId=0)).fetchall()
-selector = read('ui/screens/scan/LineSelector.kt')
 vm = read('ui/screens/scan/ScanViewModel.kt')
-for s in ['detectDragGestures', 'inImage', 'coerceIn', 'floor(', 'ceil(', 'onAdd(rect)', 'detectTapGestures']:
-    assert s in selector
-for s in ['fun addManualLine', 'state.detectedLines + clipped', 'state.selectedLines + index', 'scanRepository.scan(bitmap, boxes)', 'lines-v1:']:
-    assert s in vm
+assert 'scanRepository.scan(bitmap)' in vm and 'DocumentLocator' not in vm and 'lines-v1:' not in vm
 client = read('data/remote/MedLenXVlClient.kt')
 build = (root/'app/build.gradle.kts').read_text()
 assert 'com.google.genai:google-genai-kotlin' not in build and 'com.google.ai.client.generativeai:generativeai' not in build
 assert 'implementation(libs.okhttp)' in build and 'OPENROUTER_API_KEY' in build
-for s in ['https://openrouter.ai/api/v1/chat/completions', 'google/gemma-4-31b-it:free', 'ImagePrep.bitmapUploadJpeg(bitmap)', 'ImagePrep.cropUploadJpeg(bitmap, box)', 'data:image/jpeg;base64,$data', 'GeminiScanParser.parse(json, text, expectedLines = expectedLines)']:
+for s in ['https://openrouter.ai/api/v1/chat/completions', 'google/gemma-4-31b-it:free', 'ImagePrep.bitmapUploadJpeg(bitmap)', 'data:image/jpeg;base64,$fullImage', 'GeminiScanParser.parse(json, text)']:
     assert s in client
 cloud = read('data/sync/ScanCloudFields.kt')
 upload = read('data/sync/UploadScanWorker.kt')

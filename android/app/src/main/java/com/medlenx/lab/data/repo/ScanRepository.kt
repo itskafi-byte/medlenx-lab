@@ -3,7 +3,6 @@ package com.medlenx.lab.data.repo
 import com.google.firebase.auth.FirebaseAuth
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Rect
 import com.medlenx.lab.data.sync.TrustedMembership
 import com.medlenx.lab.data.sync.UploadScheduling
 import androidx.room.withTransaction
@@ -60,9 +59,9 @@ class ScanRepository(
     private val catalogue: AssetCatalogue,
 ) {
 
-    suspend fun scan(bitmap: Bitmap, selectedLines: List<Rect>): ScanProgress {
+    suspend fun scan(bitmap: Bitmap): ScanProgress {
         if (!vlClient.hasKey) return ScanProgress.NeedsApiKey
-        return when (val outcome = vlClient.scanPrescription(bitmap, selectedLines)) {
+        return when (val outcome = vlClient.scanPrescription(bitmap)) {
             is VlOutcome.Success -> ScanProgress.Done(outcome.result, outcome.rawContent)
             is VlOutcome.Failure -> ScanProgress.Failed(outcome.message)
             VlOutcome.NoKey -> ScanProgress.NeedsApiKey
@@ -73,11 +72,6 @@ class ScanRepository(
         check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
         queueDao.remove(currentUid, id)
     }
-    suspend fun updateQueuedSelection(currentUid: String, id: Long, payload: String) {
-        check(FirebaseAuth.getInstance().currentUser?.uid == currentUid)
-        queueDao.updatePayload(currentUid, id, payload)
-    }
-
     /** Parks a capture for replay when connectivity returns. */
     suspend fun queueForLater(currentUid: String, imagePath: String, payload: String): Long {
         check(currentUid.isNotBlank() && FirebaseAuth.getInstance().currentUser?.uid == currentUid) {

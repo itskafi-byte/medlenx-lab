@@ -1,7 +1,6 @@
 package com.medlenx.lab.data.remote
 
 import android.graphics.Bitmap
-import android.graphics.Rect
 import android.util.Base64
 import android.util.Log
 import com.medlenx.lab.BuildConfig
@@ -43,34 +42,32 @@ class MedLenXVlClient(
     private val json: Json,
     private val apiKey: String = BuildConfig.OPENROUTER_API_KEY,
 ) {
+    private fun redact(value: String): String = if (apiKey.isBlank()) value else value.replace(apiKey, "[REDACTED]")
     val hasKey get() = apiKey.isNotBlank()
-    val displayName get() = "Gemma 4 31B / Llama 3.2 11B Vision"
+    val displayName get() = "Gemma 4 31B / Nemotron 3.5 Super VL"
 
-    suspend fun scanPrescription(bitmap: Bitmap, boxes: List<Rect>): VlOutcome = withContext(Dispatchers.IO) {
+    suspend fun scanPrescription(bitmap: Bitmap): VlOutcome = withContext(Dispatchers.IO) {
         if (!hasKey) return@withContext VlOutcome.NoKey
-        if (boxes.isEmpty()) return@withContext VlOutcome.Failure("Select at least one medicine line.")
         try {
             val fullImage = Base64.encodeToString(ImagePrep.bitmapUploadJpeg(bitmap), Base64.NO_WRAP)
-            val lineImages = boxes.map { box ->
-                Base64.encodeToString(ImagePrep.cropUploadJpeg(bitmap, box), Base64.NO_WRAP)
-            }
-            val payload = OpenRouterScanProtocol.requestBody(fullImage, lineImages)
+            val payload = OpenRouterScanProtocol.requestBody(fullImage)
             requestWithFallback(payload, onPrimaryFailure = { _ ->
                 // Do not log request images or raw provider response bodies.
                 Log.e("OpenRouterScan", "Primary model failed; trying free fallback")
-            }) { modelPayload -> requestModel(modelPayload, expectedLines = boxes.size) }
+            }) { modelPayload -> requestModel(modelPayload) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: OutOfMemoryError) {
             Log.e("OpenRouterScan", "Image preparation error", e)
             VlOutcome.Failure("Not enough memory to prepare this image. Try a smaller photo.")
         } catch (e: Exception) {
-            Log.e("OpenRouterScan", "API Error", e)
-            VlOutcome.Failure(e.localizedMessage ?: e.toString())
+            val message = redact(e.localizedMessage ?: e.toString())
+            Log.e("OpenRouterScan", "Image preparation error: $message")
+            VlOutcome.Failure(message)
         }
     }
 
-    internal suspend fun requestModel(payload: JsonObject, expectedLines: Int): VlOutcome {
+    internal suspend fun requestModel(payload: JsonObject): VlOutcome {
         try {
             val request = Request.Builder()
                 .url("https://openrouter.ai/api/v1/chat/completions")
@@ -82,21 +79,24 @@ class MedLenXVlClient(
             val response = httpClient.newCall(request).awaitBody()
             val problem = OpenRouterErrors.fromResponse(json, response.body, response.code)
             if (!response.isSuccessful || problem != null) {
+                val providerMessage = OpenRouterErrors.providerMessage(json, response.body)
+                val redacted = providerMessage?.let(::redact)
+                Log.e("OpenRouterScan", "HTTP ${response.code}; OpenRouter error.message: ${redacted ?: "(not provided)"}")
                 return VlOutcome.Failure(problem?.message ?: "OpenRouter request failed (HTTP ${response.code})", problem?.retryable ?: false)
             }
-            val text = OpenRouterScanProtocol.assistantText(json, response.body)
-            val result = try {
-                GeminiScanParser.parse(json, text, expectedLines = expectedLines)
+            return try {
+                val text = OpenRouterScanProtocol.assistantText(json, response.body)
+                VlOutcome.Success(result = GeminiScanParser.parse(json, text), rawContent = text)
             } catch (e: Exception) {
-                Log.e("OpenRouterScan", "Response parsing error", e)
-                return VlOutcome.Failure("OpenRouter response parsing error: ${e.localizedMessage ?: e.toString()}")
+                Log.e("OpenRouterScan", "HTTP ${response.code}; invalid scan response")
+                VlOutcome.Failure("OpenRouter returned an invalid scan response (HTTP ${response.code}).")
             }
-            return VlOutcome.Success(result = result, rawContent = text)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e("OpenRouterScan", "API Error", e)
-            return VlOutcome.Failure(e.localizedMessage ?: e.toString())
+            val message = redact(e.localizedMessage ?: e.toString())
+            Log.e("OpenRouterScan", "API Error: $message")
+            return VlOutcome.Failure(message)
         }
     }
 
@@ -110,24 +110,25 @@ class MedLenXVlClient(
 /** JSON contract for the OpenAI-compatible multimodal chat endpoint. */
 internal object OpenRouterScanProtocol {
     const val PRIMARY_MODEL = "google/gemma-4-31b-it:free"
-    const val FALLBACK_MODEL = "meta-llama/llama-3.2-11b-vision-instruct:free"
-    private const val PROMPT = """You are an expert medical transcriptionist. The first image is the full original prescription. Extract doctor details and prescription date from that image only. Do not extract patient identifiers: patient_info must be masked and contain no identifying details. The remaining images are selected cropped lines from that prescription, in order. Read handwritten medicine names from the crops only, not from the full image. Return exactly one medicine object per crop, in the same order, with brand_name and confidence between 0 and 1. If illegible use an empty brand and confidence 0. Return all fields, empty strings where unknown. Never infer a manufacturer. Output only a JSON object with this exact structure: {"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"Patient identifiers masked"},"prescription_date":"","medicines":[{"brand_name":"","confidence":0}]}"""
+    const val FALLBACK_MODEL = "nvidia/nemotron-3.5-super-vl:free"
+    private const val PROMPT = """Read this full prescription page. Extract all prescribed medicine lines under Rx in top-to-bottom order; ignore clinic headers, patient labels and doctor letterhead. Never output patient identifiers and never infer a manufacturer. Use empty strings for unknown text and 0 confidence for illegible names. Return only a JSON object with every field shown, and a medicines array of any length: {"doctor":{"name":"","bmdc_no":"","qualifications":"","hospital":"","department":"","specialty":"","chamber":"","district":"","upazila":"","territory":""},"patient_info":{"masked":true,"note":"Patient identifiers masked"},"prescription_date":"","medicines":[{"brand_name":"","form":"","strength":"","frequency":"","duration":"","confidence":0.0}]}. Confidence must be between 0.0 and 1.0. Read only what is visible."""
 
-    fun requestBody(fullImage: String, lineImages: List<String>): JsonObject {
-        fun textPart(text: String) = buildJsonObject { put("type", "text"); put("text", text) }
-        fun imagePart(data: String) = buildJsonObject {
-            put("type", "image_url")
-            put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,$data") })
-        }
-        val content = buildJsonArray {
-            add(textPart(PROMPT))
-            add(imagePart(fullImage))
-            lineImages.forEach { image -> add(imagePart(image)) }
-        }
-        return buildJsonObject {
-            put("model", PRIMARY_MODEL)
-            put("messages", buildJsonArray { add(buildJsonObject { put("role", "user"); put("content", content) }) })
-        }
+    fun requestBody(fullImage: String): JsonObject = buildJsonObject {
+        put("model", PRIMARY_MODEL)
+        put("temperature", 0.1)
+        put("max_tokens", 4096)
+        put("messages", buildJsonArray {
+            add(buildJsonObject {
+                put("role", "user")
+                put("content", buildJsonArray {
+                    add(buildJsonObject { put("type", "text"); put("text", PROMPT) })
+                    add(buildJsonObject {
+                        put("type", "image_url")
+                        put("image_url", buildJsonObject { put("url", "data:image/jpeg;base64,$fullImage") })
+                    })
+                })
+            })
+        })
     }
 
     fun assistantText(json: Json, body: String): String {
@@ -159,7 +160,7 @@ internal suspend fun requestWithFallback(
     val primary = safeAttempt(payload)
     if (primary !is VlOutcome.Failure) return primary
     onPrimaryFailure(primary)
-    delay(4000) // Cancellable pause; a rate limit may still apply afterwards.
+    delay(2500) // Cancellable pause; a rate limit may still apply afterwards.
     val fallbackPayload = JsonObject(payload + ("model" to JsonPrimitive(OpenRouterScanProtocol.FALLBACK_MODEL)))
     val fallback = safeAttempt(fallbackPayload)
     return if (fallback is VlOutcome.Failure) {

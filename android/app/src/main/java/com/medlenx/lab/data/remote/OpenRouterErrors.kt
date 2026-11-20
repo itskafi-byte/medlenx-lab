@@ -38,6 +38,14 @@ internal object OpenRouterErrors {
         return Problem("$label: $hint", code != null && code in RETRYABLE_CODES)
     }
 
+    /** Provider text can contain sensitive information; never log the response body. */
+    fun providerMessage(json: Json, body: String): String? {
+        val root = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+        val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
+        val error = (root["error"] as? JsonObject) ?: (choice?.get("error") as? JsonObject)
+        return (error?.get("message") as? JsonPrimitive)?.contentOrNull
+    }
+
     private val RETRYABLE_CODES = setOf(404, 408, 429, 500, 502, 503, 504, 524)
     private val SAFE_TYPES = setOf(
         "rate_limit_exceeded", "provider_error", "provider_timeout", "server",
